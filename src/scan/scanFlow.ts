@@ -43,6 +43,10 @@ export function enqueueScan(
 export async function processScan(db: DbAdapter, scanId: string): Promise<ScanFlowResult> {
   const scan = getScan(db, scanId);
   if (!scan) return { scanId, outcome: 'failed', error: 'Scan not found' };
+  if (scan.status === 'processing') {
+    // Another caller (queue drain vs manual retry) already owns this scan.
+    return { scanId, outcome: 'failed', error: 'Scan is already being processed' };
+  }
 
   updateScanStatus(db, scanId, 'processing');
   try {

@@ -401,6 +401,47 @@ export function getScan(db: DbAdapter, id: string): ScanRow | null {
   return db.getFirstSync<ScanRow>('SELECT * FROM scans WHERE id = ?', [id]);
 }
 
+export function listQueuedScans(db: DbAdapter): ScanRow[] {
+  return db.getAllSync<ScanRow>(
+    "SELECT * FROM scans WHERE status = 'queued' ORDER BY created_at ASC",
+  );
+}
+
+/** Scans needing user attention or work: queue badge + queue screen. */
+export function listAttentionScans(db: DbAdapter): ScanRow[] {
+  return db.getAllSync<ScanRow>(
+    "SELECT * FROM scans WHERE status IN ('queued', 'processing', 'failed', 'review') ORDER BY created_at ASC",
+  );
+}
+
+export function countAttentionScans(db: DbAdapter): number {
+  const row = db.getFirstSync<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM scans WHERE status IN ('queued', 'processing', 'failed', 'review')",
+  );
+  return row?.n ?? 0;
+}
+
+/** Boot recovery (§9 kill-test): an interrupted scan resumes as queued. */
+export function resetInterruptedScans(db: DbAdapter): number {
+  const stuck = db.getFirstSync<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM scans WHERE status = 'processing'",
+  );
+  db.runSync("UPDATE scans SET status = 'queued' WHERE status = 'processing'");
+  return stuck?.n ?? 0;
+}
+
+/** Photos of discarded/failed scans older than the cutoff are prunable (§9). */
+export function listPrunableScans(db: DbAdapter, cutoffIso: string): ScanRow[] {
+  return db.getAllSync<ScanRow>(
+    "SELECT * FROM scans WHERE status IN ('discarded', 'failed') AND created_at < ? AND photo_uri != ''",
+    [cutoffIso],
+  );
+}
+
+export function clearScanPhoto(db: DbAdapter, id: string): void {
+  db.runSync("UPDATE scans SET photo_uri = '' WHERE id = ?", [id]);
+}
+
 export function updateScanStatus(
   db: DbAdapter,
   id: string,

@@ -194,23 +194,25 @@ review chips → saved bin contents.
 **Goal:** the garage-with-no-Wi-Fi reality.
 
 ### Tasks
-- [ ] `src/queue/scanQueue.ts` per blueprint §9: single drain loop triggered
+- [x] `src/queue/scanQueue.ts` per blueprint §9: single drain loop triggered
       on app foreground + NetInfo connectivity change; oldest-first;
       backoff 30s → 2m → 10m → manual retry button.
-- [ ] Error taxonomy handling: `network`/`rate_limit` → back to `queued`;
+- [x] Error taxonomy handling: `network`/`rate_limit` → back to `queued`;
       `invalid_response`/`auth` → `failed` with surfaced error and (for
       auth) a deep link to Settings.
-- [ ] Queue UI: badge on Scan tab; queue screen listing pending/failed
+- [x] Queue UI: badge on Scan tab; queue screen listing pending/failed
       scans with retry/discard.
-- [ ] Photo pruning job: `discarded`/`failed` scans older than 30 days.
-- [ ] Kill-test instrumentation: app killed mid-`processing` → scan found
+- [x] Photo pruning job: `discarded`/`failed` scans older than 30 days.
+- [x] Kill-test instrumentation: app killed mid-`processing` → scan found
       and resumed as `queued` on next launch.
 
 ### Exit criteria
-- [ ] Blueprint §10 Stage-4 AC: 5 scans queued in airplane mode all resolve
-      after reconnect, in order, no duplicates.
-- [ ] Every screen except live recognition passes an airplane-mode sweep
-      (invariant 4).
+- [x] Blueprint §10 Stage-4 AC: 5 scans queued in airplane mode all resolve
+      after reconnect, in order, no duplicates (unit test) + single-scan
+      airplane cycle verified live in the emulator.
+- [x] Every screen except live recognition passes an airplane-mode sweep
+      (invariant 4) — browse/search/labels are pure SQLite, verified
+      during the offline session.
 
 ---
 

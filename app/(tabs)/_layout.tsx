@@ -1,7 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Link, Tabs } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable } from 'react-native';
 
+import { useDb } from '@/db/DbProvider';
+import { countAttentionScans } from '@/db/queries';
 import { colors, navTheme } from '@/theme';
 
 function SettingsGear() {
@@ -15,6 +18,16 @@ function SettingsGear() {
 }
 
 export default function TabsLayout() {
+  const db = useDb();
+  const [pending, setPending] = useState(0);
+
+  useEffect(() => {
+    const read = () => setPending(countAttentionScans(db));
+    read();
+    const interval = setInterval(read, 3000);
+    return () => clearInterval(interval);
+  }, [db]);
+
   return (
     <Tabs
       screenOptions={{
@@ -41,6 +54,8 @@ export default function TabsLayout() {
         options={{
           title: 'Scan',
           tabBarIcon: ({ color, size }) => <Ionicons name="camera" size={size} color={color} />,
+          tabBarBadge: pending > 0 ? pending : undefined,
+          tabBarBadgeStyle: { backgroundColor: colors.amber, color: colors.amberInkOn },
         }}
       />
       <Tabs.Screen

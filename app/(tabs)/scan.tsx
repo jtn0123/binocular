@@ -5,7 +5,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CodeTag } from '@/components/CodeTag';
 import { useDb } from '@/db/DbProvider';
-import { listRecentBins } from '@/db/queries';
+import { countAttentionScans, listRecentBins } from '@/db/queries';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { colors, radius, sp, type } from '@/theme';
 
@@ -54,8 +54,19 @@ export default function ScanScreen() {
     );
   }
 
+  const pending = countAttentionScans(db);
+
   return (
     <View style={styles.container}>
+      {pending > 0 && (
+        <Pressable style={styles.queueBanner} onPress={() => router.push('/queue')}>
+          <Ionicons name="albums" size={16} color={colors.amber} />
+          <Text style={styles.queueLabel}>
+            {pending} scan{pending === 1 ? '' : 's'} in the queue
+          </Text>
+          <Ionicons name="chevron-forward" size={15} color={colors.textFaint} />
+        </Pressable>
+      )}
       <Text style={styles.title}>What do you want to do?</Text>
       <Pressable style={styles.mode} onPress={() => setPicking(true)}>
         <View style={styles.modeIcon}>
@@ -109,6 +120,18 @@ export default function ScanScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg, padding: sp(4), gap: sp(3) },
+  queueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(2),
+    backgroundColor: colors.chipSelectedBg,
+    borderWidth: 1,
+    borderColor: colors.chipSelectedBorder,
+    borderRadius: radius.md,
+    paddingHorizontal: sp(3),
+    paddingVertical: sp(2.5),
+  },
+  queueLabel: { color: colors.text, fontWeight: '600', fontSize: 13, flex: 1 },
   title: { ...type.h2, marginBottom: sp(1) },
   mode: {
     flexDirection: 'row',

@@ -2,11 +2,13 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { DbProvider } from '@/db/DbProvider';
+import { QueueRunner } from '@/queue/QueueRunner';
 import { navTheme } from '@/theme';
 
 export default function RootLayout() {
   return (
     <DbProvider>
+      <QueueRunner />
       <Stack screenOptions={navTheme}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="bin/[id]" options={{ title: 'Bin' }} />
@@ -14,6 +16,7 @@ export default function RootLayout() {
         <Stack.Screen name="capture" options={{ headerShown: false }} />
         <Stack.Screen name="scan-code" options={{ headerShown: false }} />
         <Stack.Screen name="move/[binId]" options={{ title: 'Move bin' }} />
+        <Stack.Screen name="queue" options={{ title: 'Scan queue' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
       </Stack>
       <StatusBar style="light" />
