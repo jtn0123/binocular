@@ -583,7 +583,11 @@ Before declaring any task done, verify:
 - **Q3 (before Stage 6):** photo retention budget — full-res audit history
   can eat storage; keep originals or store 1080p re-encodes? Default
   assumption: re-encodes.
-- **Q4 (before Stage 5):** local engine tech — ML Kit generic image labeling
-  (easy to integrate, coarse results) or a bundled TF Lite model (heavier,
-  tunable)? Default assumption: ML Kit image labeling first; measure it
-  against the same ≥70% bar before considering TF Lite.
+- **Q4 (decided 2026-07-22):** local engine tech — **ML Kit image labeling
+  with the bundled base model** (`@react-native-ml-kit/image-labeling`).
+  Easiest native integration, works offline with no Play-services model
+  download, and the D10 capability note already sets expectations (generic
+  names, no brands/labels, confidence capped at `medium`). Revisit a
+  bundled TF Lite model only if this fails the ≥70% bar in real use. The
+  native module is loaded lazily so Expo Go keeps working for every other
+  engine; the local engine activates in the dev build.
