@@ -47,6 +47,10 @@ blueprint edits instead.
 | D7 | Barcode/label OCR | On-device via Expo/ML Kit where trivial (QR, barcodes); text-on-labels is read by the vision LLM as part of the scan | Avoid maintaining a second recognition pipeline in v1 |
 | D8 | Navigation | `expo-router` (file-based) | Convention over configuration; matches Expo defaults |
 | D9 | Validation | `zod` at every trust boundary (AI responses, QR payloads, imports) | Malformed AI JSON must fail loudly at the boundary, not deep in the UI |
+| D10 | Local recognition engine | On-device image labeling (ML Kit / TF Lite, see Q4) ships in v1 as `localProvider`, selectable alongside Claude | Offline recognition at zero marginal cost; D2's rationale stands for the hard stuff — local returns generic names only (capability note in §5) |
+| D11 | Photos per scan | Exactly one still image in v1; `VisionProvider.recognize` takes a photo *array* so multi-photo/video is additive later | Start small; the array type costs nothing now, while an interface change later would churn every provider |
+| D12 | Export | CSV export of all items (Excel-compatible) ships in v1 | The whole inventory belongs in a spreadsheet too; one row per item with location/shelf/bin breadcrumb columns |
+| D13 | QR payload | Typed: `binoc:v1:<type>:<uuid>`, type ∈ `bin \| shelf \| location` | Shelf/location labels enable move mode (§8.5); typing the payload costs nothing before any label is printed |
 
 ---
 
@@ -68,6 +72,7 @@ src/
     types.ts            # RecognitionResult, zod schemas
     provider.ts         # VisionProvider interface
     claudeProvider.ts   # the ONLY file that imports/knows the Anthropic API
+    localProvider.ts    # on-device labeling (ML Kit / TF Lite); offline engine
     fixtureProvider.ts  # returns canned JSON; used in dev & tests
   queue/
     scanQueue.ts        # offline photo queue (backed by the scans table)
@@ -81,7 +86,8 @@ src/
 **Hard boundary rules**
 
 - Nothing outside `src/vision/claudeProvider.ts` may import the Anthropic
-  SDK or reference its API shapes.
+  SDK or reference its API shapes. Likewise, on-device ML imports live only
+  in `src/vision/localProvider.ts`.
 - Nothing outside `src/db/` writes raw SQL.
 - Screens never call the vision provider directly — they enqueue a scan and
   navigate to the review screen when it resolves.
@@ -170,8 +176,12 @@ export interface ScanContext {
 }
 
 export interface VisionProvider {
-  /** Resolves with a validated RecognitionResult or throws VisionError. */
-  recognize(photoBase64: string, ctx: ScanContext): Promise<RecognitionResult>;
+  /**
+   * Resolves with a validated RecognitionResult or throws VisionError.
+   * v1 always sends exactly one photo (D11); the array type keeps
+   * multi-photo/video additive later.
+   */
+  recognize(photosBase64: string[], ctx: ScanContext): Promise<RecognitionResult>;
 }
 
 export class VisionError extends Error {
@@ -182,13 +192,21 @@ export class VisionError extends Error {
 }
 ```
 
-Two implementations ship in v1:
+Three implementations ship in v1:
 
 - **`fixtureProvider`** — returns canned fixture JSON keyed by mode, with an
   artificial delay. This is the default in development and the only provider
   used in automated tests. The entire app must be demo-able with it.
-- **`claudeProvider`** — the real thing. Selected when
-  `EXPO_PUBLIC_VISION_PROVIDER=claude` and an API key is configured.
+- **`localProvider`** — on-device image labeling (ML Kit / TF Lite; decide Q4
+  first). Works fully offline at zero marginal cost. **Capability note:** it
+  cannot read labels or brands — `brand` and `label_text` are always null,
+  names are generic, and confidence follows the same §6.3 rubric (in practice
+  `medium`/`low`). Same contract, same review screen, no special-casing.
+- **`claudeProvider`** — the cloud engine. Needs an API key configured.
+
+Engine selection: a Settings picker (fixture / local / claude);
+`EXPO_PUBLIC_VISION_PROVIDER` sets the build-time default. Switching engines
+must not require an app restart.
 
 ---
 
@@ -305,7 +323,7 @@ import { buildVisionPrompt } from './prompt';
 
 const client = new Anthropic({ apiKey: getApiKey() });
 
-export async function recognize(photoBase64: string, ctx: ScanContext) {
+export async function recognize(photosBase64: string[], ctx: ScanContext) {
   const msg = await client.messages.create({
     model: VISION_MODEL,        // single constant; check docs for the
                                 // current recommended vision-capable model
@@ -313,8 +331,11 @@ export async function recognize(photoBase64: string, ctx: ScanContext) {
     messages: [{
       role: 'user',
       content: [
-        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg',
-                                   data: photoBase64 } },
+        ...photosBase64.map((data) => ({
+          type: 'image' as const,
+          source: { type: 'base64' as const, media_type: 'image/jpeg' as const,
+                    data },
+        })),
         { type: 'text', text: buildVisionPrompt(ctx) },
       ],
     }],
@@ -322,6 +343,12 @@ export async function recognize(photoBase64: string, ctx: ScanContext) {
   return parseAndValidate(msg); // safeParse + one repair retry, per §6.1
 }
 ```
+
+JSON reliability: prefer forcing the response through Claude's tool-use /
+structured-output mechanism so the reply is schema-shaped by construction
+instead of relying on "respond with ONLY JSON" prose. The §6.2 prompt text
+remains the contract either way, and the §6.1 safeParse + one-retry rule
+still applies.
 
 Image handling: resize/compress to max 1568px long edge, JPEG ~q80 before
 upload (smaller is faster and cheaper; beyond that resolution the model gains
@@ -331,12 +358,16 @@ nothing). Use `expo-image-manipulator`.
 
 ## 7. QR label spec
 
-- Payload: `binoc:v1:<bin-uuid>` — versioned, dumb, offline-parseable.
-  Zod-validate on scan; reject anything else with a friendly error.
+- Payload: `binoc:v1:<type>:<uuid>` with type ∈ `bin | shelf | location`
+  (D13) — versioned, dumb, offline-parseable. Zod-validate on scan; reject
+  anything else with a friendly error.
 - `short_code` ("B-012") is printed **human-readable** next to the QR so bins
-  are findable even without the app.
+  are findable even without the app. The QR + text combo is deliberate:
+  either alone must be enough to identify the bin.
 - Label sheet: generate a PDF (via `expo-print`) laid out for Avery 5163-ish
   2"x4" sticker sheets, QR left, short code + bin name right, 10 per page.
+- Shelf/location labels are optional and print through the same PDF flow
+  (QR left, name right — no short code).
 - Bulk flow: "Create N bins" -> auto-assigns short codes -> one PDF.
 
 ---
@@ -357,7 +388,11 @@ done only when every AC passes on an Android device/emulator.
 5. Review screen: detected items as editable chips per §6.3. User can edit
    name/quantity/category inline, delete, or add-manually.
 6. User picks **Replace contents** or **Merge with existing** (default:
-   merge if bin has items, replace if empty).
+   merge if bin has items, replace if empty). In Merge mode on a non-empty
+   bin, chips are grouped **new / still here / not seen in this photo**; the
+   "not seen" group defaults to *keep* — removing one of those items
+   requires an explicit tap. Every audit doubles as a "what wandered off?"
+   check without ever deleting silently.
 7. Save -> items written, scan `confirmed`, bin's `last_scanned_at` and cover
    photo updated.
 
@@ -367,6 +402,9 @@ done only when every AC passes on an Android device/emulator.
 - [ ] Killing the app mid-processing leaves a resumable `queued`/`processing`
       scan, not a lost photo.
 - [ ] A `low` confidence item saved without user interaction is impossible.
+- [ ] Merge on a non-empty bin shows the new / still-here / not-seen
+      grouping, and an existing item is never removed without an explicit
+      tap — a scan can never silently delete inventory.
 - [ ] Discard leaves inventory tables untouched (scan `discarded`).
 - [ ] Whole flow ≤ 4 taps between shutter and saved (excluding chip edits).
 
@@ -399,10 +437,22 @@ done only when every AC passes on an Android device/emulator.
 - [ ] Photo path degrades gracefully offline: "search needs a connection for
       photo lookup — try text search."
 
-### 8.4 Checkout / return (stage 5)
+### 8.4 Checkout / return (stage 6)
 
 Long-press an item -> "Check out to…" (free-text name). Item shows a badge
 and surfaces in a "Checked out" list. Return = one tap.
+
+### 8.5 Move mode ("this bin lives there now")
+
+1. Scan the bin's QR (or open bin detail) -> **Move**.
+2. Scan the destination shelf's QR (or pick a shelf from the browse list —
+   QR is never the only path).
+3. Confirm -> bin's `shelf_id` updates; breadcrumbs everywhere reflect it.
+
+**AC**
+- [ ] Two scans + one confirm, start to finish.
+- [ ] Fully offline (no recognition involved).
+- [ ] Scanning a *location* QR in step 2 prompts to pick a shelf within it.
 
 ---
 
@@ -441,17 +491,19 @@ SQLite migrations from §4 running on boot; fixture provider wired;
 ### Stage 1 — Bin audit vertical slice
 Workflow §8.1 end-to-end with the **fixture provider**, then flip on the real
 Claude provider behind the env flag. Review-chips screen fully implemented
-per §6.3.
+per §6.3, including the merge diff grouping (§8.1 step 6).
 - **AC:** all §8.1 checkboxes, with both providers.
 - **Manual test script:** create bin "Test" -> photograph a real bin ->
   verify ≥70% of visible items appear -> edit one chip, delete one, add one
   -> save -> reopen bin, contents match the confirmed list exactly.
 
 ### Stage 2 — Locations, shelves, QR labels
-Browse tree CRUD; QR payload + scanner integration; bulk bin creation; PDF
-label sheet (§7).
+Browse tree CRUD; typed QR payloads (§7, all three types) + scanner
+integration; bulk bin creation; PDF label sheet including optional
+shelf/location labels; move mode (§8.5).
 - **AC:** print a sheet, stick a label, cold-start the app, scan the QR ->
   bin detail opens in <2s.
+- **AC:** move mode: bin re-homed with two scans + one confirm.
 
 ### Stage 3 — Search & check-in
 FTS5 indexing (triggers keep `item_search` in sync); home search UI;
@@ -464,13 +516,25 @@ workflow; backoff + manual retry UI.
 - **AC:** the §8.1 airplane-mode AC plus: 5 scans queued offline all resolve
   correctly after reconnect, in order, no duplicates.
 
-### Stage 5 — Daily-driver extras
+### Stage 5 — Local recognition engine
+`localProvider` per D10 (decide Q4 first); Settings engine picker
+(fixture / local / claude); capability messaging in the UI ("local can't
+read labels — use cloud for packaged goods"). Requires switching to an
+`expo-dev-client` / EAS dev build (native ML module — no longer Expo Go).
+- **AC:** airplane mode: a full bin audit completes end-to-end on the local
+  engine; switching engines requires no restart; review screen behavior is
+  identical across all three providers.
+
+### Stage 6 — Daily-driver extras
 Checkout/return (§8.4); low-stock flags for consumables; bin photo history
 (every confirmed audit keeps its photo, viewable as a timeline); JSON+photos
-export/backup to a zip via the share sheet.
+export/backup to a zip via the share sheet; CSV export of all items (D12 —
+one row per item, location/shelf/bin breadcrumb columns, share sheet).
 - **AC:** export -> wipe app -> import restores an identical database.
+- **AC:** CSV opens cleanly in Excel/Sheets with correct columns despite
+  commas/quotes/newlines in item names.
 
-### Stage 6 — iOS pass & polish
+### Stage 7 — iOS pass & polish
 Run the full manual test suite on iOS; fix platform issues; haptics; empty
 states; app icon.
 - **AC:** every prior stage's manual test script passes on both platforms.
@@ -486,7 +550,8 @@ Before declaring any task done, verify:
 2. **No percentages** — confidence appears only as the enum and its UI
    mapping. Grep for `%` near confidence code if unsure.
 3. **Provider isolation** — Anthropic imports exist only in
-   `claudeProvider.ts`; the app runs fully on the fixture provider.
+   `claudeProvider.ts`, on-device ML imports only in `localProvider.ts`;
+   the app runs fully on the fixture provider.
 4. **Offline-first** — every screen except live recognition works in
    airplane mode.
 5. **Boundary validation** — every AI response and QR payload passes through
@@ -506,6 +571,10 @@ Before declaring any task done, verify:
 - **Q2 (before Stage 3):** how serious is quantity tracking for consumables —
   full counts ("23 deck screws left") or coarse ("plenty / low / out")?
   Affects check-in friction. Default assumption: coarse.
-- **Q3 (before Stage 5):** photo retention budget — full-res audit history
+- **Q3 (before Stage 6):** photo retention budget — full-res audit history
   can eat storage; keep originals or store 1080p re-encodes? Default
   assumption: re-encodes.
+- **Q4 (before Stage 5):** local engine tech — ML Kit generic image labeling
+  (easy to integrate, coarse results) or a bundled TF Lite model (heavier,
+  tunable)? Default assumption: ML Kit image labeling first; measure it
+  against the same ≥70% bar before considering TF Lite.
