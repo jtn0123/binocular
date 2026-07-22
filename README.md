@@ -15,10 +15,16 @@ taps.
 
 ## Status
 
-Planning. The build is staged and spec-driven — see
-[`docs/BLUEPRINT.md`](docs/BLUEPRINT.md), the source-of-truth document that
-all work is validated against: data model, AI vision contract, workflows with
-acceptance criteria, and the Stage 0–6 roadmap.
+Planning — no code yet. The build is staged and spec-driven.
+
+## Documentation
+
+| Doc | Role |
+|---|---|
+| [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) | **Source of truth.** Vision, decision log, data model, AI vision contract, workflows with acceptance criteria, Stage 0–6 roadmap, invariants |
+| [`docs/PLAN.md`](docs/PLAN.md) | Execution plan: file-level task checklists per stage, exit criteria, dependencies, testing strategy, risk register |
+| [`docs/BACKLOG.md`](docs/BACKLOG.md) | Parked post-v1 ideas |
+| [`CLAUDE.md`](CLAUDE.md) | Standing orders for AI coding agents: blueprint is law, work in plan order |
 
 ## Development
 
