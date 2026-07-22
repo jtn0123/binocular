@@ -8,10 +8,15 @@ bin → shelf → location, and later answers *"where is my 10mm socket?"* in tw
 taps.
 
 - **React Native + Expo** (TypeScript, Android-first, iOS-ready)
-- **Cloud AI vision** (Anthropic Claude) behind a swappable provider abstraction
-- **QR-labeled bins** — print sticker sheets from the app
+- **AI vision, cloud or on-device** — Anthropic Claude for the hard stuff,
+  a local engine for offline scans, selectable behind one provider
+  abstraction
+- **QR-labeled bins** (and optionally shelves) — print sticker sheets from
+  the app; QR plus human-readable text on every label
 - **Offline-first** — SQLite + FTS5 search; photos queue for recognition when
   connectivity returns
+- **CSV export** — the whole inventory, one row per item, ready for
+  Excel/Sheets
 
 ## Status
 
@@ -21,7 +26,7 @@ Planning — no code yet. The build is staged and spec-driven.
 
 | Doc | Role |
 |---|---|
-| [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) | **Source of truth.** Vision, decision log, data model, AI vision contract, workflows with acceptance criteria, Stage 0–6 roadmap, invariants |
+| [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) | **Source of truth.** Vision, decision log, data model, AI vision contract, workflows with acceptance criteria, Stage 0–7 roadmap, invariants |
 | [`docs/PLAN.md`](docs/PLAN.md) | Execution plan: file-level task checklists per stage, exit criteria, dependencies, testing strategy, risk register |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Parked post-v1 ideas |
 | [`CLAUDE.md`](CLAUDE.md) | Standing orders for AI coding agents: blueprint is law, work in plan order |

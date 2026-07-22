@@ -31,9 +31,11 @@ edits into feature commits.
   auto-catalog contents, search "where is my X?").
 - Stack: React Native + Expo (managed), TypeScript strict, expo-router,
   expo-sqlite (FTS5), zod at all trust boundaries.
-- Vision: Anthropic Claude behind `src/vision/provider.ts`; the Anthropic SDK
-  may only be imported in `src/vision/claudeProvider.ts`. The app must be
-  fully demo-able on `fixtureProvider`.
+- Vision: cloud (Anthropic Claude) and on-device engines behind
+  `src/vision/provider.ts`; the Anthropic SDK may only be imported in
+  `src/vision/claudeProvider.ts`, on-device ML only in
+  `src/vision/localProvider.ts`. The app must be fully demo-able on
+  `fixtureProvider`.
 - Confidence is the enum `high | medium | low` per the rubric in blueprint
   §6.3 — never numeric percentages, anywhere.
 - AI output never writes to inventory tables without user confirmation.

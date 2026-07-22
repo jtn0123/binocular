@@ -29,8 +29,12 @@ match the Expo SDK.
 | `react-native-qrcode-svg` (or equiv.) | QR rendering for labels | Stage 2 |
 | `expo-print` | PDF label sheets | Stage 2 |
 | `@react-native-community/netinfo` | connectivity for queue drain | Stage 4 |
-| `expo-sharing` | export zip via share sheet | Stage 5 |
+| `expo-dev-client` | EAS dev build (native ML module) | Stage 5 |
+| `@react-native-ml-kit/image-labeling` (or equiv. per blueprint Q4) | local recognition engine | Stage 5 |
+| `expo-sharing` | export zip / CSV via share sheet | Stage 6 |
 | Dev: `jest-expo`, `@testing-library/react-native`, `eslint`, `prettier` | tests & lint | Stage 0 |
+
+CSV export needs no dependency — escaping is hand-rolled (and unit-tested).
 
 ---
 
@@ -92,20 +96,26 @@ review chips → saved bin contents.
       (`network`/`auth`/`invalid_response`/`rate_limit`). Selected only when
       `EXPO_PUBLIC_VISION_PROVIDER=claude`.
 - [ ] **Settings screen**: API key entry stored in `expo-secure-store`;
-      provider picker (fixture/claude); "test connection" button.
+      provider picker (fixture/claude — local joins in Stage 5); "test
+      connection" button.
       *(Resolves blueprint Q1 with its default: on-device key, personal use.)*
 - [ ] **Review screen** (`review/[scanId]`): editable chips with the exact
       confidence mapping from blueprint §6.3 (high = pre-selected;
       medium = pre-selected + amber dot; low = de-selected until tapped).
       Inline edit of name/quantity/category; delete; add-manually;
       `scene_notes` banner when present.
+- [ ] **Merge diff grouping**: auditing a non-empty bin in Merge mode groups
+      chips into new / still here / not seen in this photo; "not seen"
+      defaults to *keep* — removal requires an explicit tap (blueprint §8.1
+      step 6).
 - [ ] **Save action**: Replace vs Merge choice (default per blueprint §8.1);
       writes items with `source_scan_id`, sets scan `confirmed`, updates
       bin `last_scanned_at` + cover photo. Discard path sets `discarded`.
 - [ ] **Bin detail** (`bin/[id]`): cover photo, item list, last-scanned.
 - [ ] Component test: review screen renders a fixture response; a `low`
       item is not selected by default; save persists exactly the selected
-      chips.
+      chips; in a merge audit a "not seen" existing item survives save
+      unless explicitly tapped for removal.
 
 ### Exit criteria
 - [ ] All blueprint §8.1 acceptance boxes pass **on both providers**
@@ -124,19 +134,27 @@ review chips → saved bin contents.
 - [ ] Browse tree CRUD: locations → shelves → bins (create/rename/delete
       with orphan handling: deleting a shelf unassigns its bins, never
       deletes them).
-- [ ] `src/qr/payload.ts`: encode/parse `binoc:v1:<uuid>` with zod; friendly
-      error toast on foreign QR codes.
-- [ ] Scanner integration: Scan tab auto-detects a QR in frame → opens that
-      bin's detail (or starts an audit of it, one tap either way).
+- [ ] `src/qr/payload.ts`: encode/parse typed payloads
+      `binoc:v1:<type>:<uuid>` (bin | shelf | location, blueprint D13) with
+      zod; friendly error toast on foreign QR codes.
+- [ ] Scanner integration: Scan tab auto-detects a QR in frame → bin QR
+      opens that bin's detail (or starts an audit, one tap either way);
+      shelf/location QR opens its browse node.
 - [ ] Bulk creation: "Create N bins" → sequential `short_code`s (B-001…).
 - [ ] `src/qr/labels.ts`: PDF sheet via `expo-print` — 2"×4" labels, 10/page
-      (Avery 5163 geometry), QR left, short code + bin name right.
-- [ ] Unit tests: payload round-trip; short-code sequencing; foreign-QR
-      rejection.
+      (Avery 5163 geometry), QR left, short code + bin name right; optional
+      shelf/location labels through the same flow (QR + name, no short
+      code).
+- [ ] Move mode (blueprint §8.5): bin detail → Move → scan shelf QR or pick
+      from list → confirm; location QR at the destination step prompts for
+      a shelf within it.
+- [ ] Unit tests: payload round-trip for all three types; short-code
+      sequencing; foreign-QR rejection.
 
 ### Exit criteria
 - [ ] Blueprint §10 Stage-2 AC: print → stick → cold start → scan → bin
       detail in <2s.
+- [ ] Blueprint §8.5 AC: bin re-homed with two scans + one confirm, offline.
 - [ ] Manual-pick path still fully usable with zero QR labels printed.
 
 ---
@@ -189,7 +207,33 @@ review chips → saved bin contents.
 
 ---
 
-## Stage 5 — Daily-driver extras
+## Stage 5 — Local recognition engine
+
+**Goal:** recognition that works in a no-signal garage, selectable next to
+the cloud engine.
+
+### Tasks
+- [ ] Decide blueprint Q4 (ML Kit image labeling vs bundled TF Lite);
+      record the decision as a `blueprint:` commit.
+- [ ] Switch to an EAS dev build (`expo-dev-client`) — the ML module is
+      native; document the new run workflow in the README.
+- [ ] `src/vision/localProvider.ts`: map on-device labels →
+      `RecognitionResult` (generic names; `brand`/`label_text` always null;
+      confidence per the §6.3 rubric — in practice medium/low). On-device
+      ML imports live only in this file (blueprint §3).
+- [ ] Settings: engine picker becomes fixture / local / claude; switching
+      requires no restart; capability messaging ("local can't read labels —
+      use cloud for packaged goods").
+- [ ] Contract tests: localProvider output passes the same zod schema and
+      review-screen component tests as the fixture provider.
+
+### Exit criteria
+- [ ] Blueprint §10 Stage-5 AC: airplane-mode bin audit end-to-end on the
+      local engine; identical review behavior across all three providers.
+
+---
+
+## Stage 6 — Daily-driver extras
 
 ### Tasks
 - [ ] Checkout/return (blueprint §8.4): long-press → check out to free-text
@@ -201,14 +245,19 @@ review chips → saved bin contents.
       re-encodes, not originals.)*
 - [ ] Export/import: zip of JSON dump + photos via share sheet; import
       restores into an empty database (refuse non-empty).
+- [ ] CSV export (blueprint D12): all items, one row per item with
+      location/shelf/bin breadcrumb columns, via share sheet; hand-rolled
+      escaping. Unit test: commas, quotes, and newlines in item names
+      round-trip correctly.
 
 ### Exit criteria
-- [ ] Blueprint §10 Stage-5 AC: export → wipe → import → identical database
+- [ ] Blueprint §10 Stage-6 AC: export → wipe → import → identical database
       (verified by row counts + spot checks).
+- [ ] CSV opens cleanly in Excel/Google Sheets with correct columns.
 
 ---
 
-## Stage 6 — iOS pass & polish
+## Stage 7 — iOS pass & polish
 
 ### Tasks
 - [ ] Run every prior stage's manual test script on iOS; log and fix
@@ -225,13 +274,16 @@ review chips → saved bin contents.
 
 ## Testing strategy (cross-stage)
 
-- **Unit (Jest):** migrations, zod schemas, prompt builder, QR payload,
-  short-code sequencing, queue state transitions (with a mocked provider).
+- **Unit (Jest):** migrations, zod schemas, prompt builder, QR payload
+  (all three types), short-code sequencing, CSV escaping, queue state
+  transitions (with a mocked provider).
 - **Component (Testing Library):** review-chips behavior — this is where the
   confidence-mapping and no-silent-writes invariants are enforceable in
   code, so it gets the densest coverage.
 - **Fixture-first:** automated tests never call the real API; the fixture
-  provider is the test double *and* the demo mode.
+  provider is the test double *and* the demo mode. Every provider
+  (fixture, local, claude-mocked) must pass the same contract tests —
+  the review screen cannot tell them apart.
 - **Manual scripts:** each stage's script lives in the blueprint §10 and is
   run on-device before `stage-N-complete`.
 
@@ -242,5 +294,6 @@ review chips → saved bin contents.
 | Recognition quality disappoints on cluttered bins | The Stage-1 manual test sets an explicit ≥70% bar; capture hints (framing, bench layout for check-in); prompt iteration is cheap and isolated in `prompt.ts` |
 | API cost creep | One call per scan by design; image downscaled before upload; per-scan cost logged in Settings later if needed |
 | Expo module churn between SDK versions | Pin via `npx expo install`; upgrade SDK only between stages, never mid-stage |
+| Local-engine labels too generic to be useful | localProvider maps honestly to medium/low confidence; UI messaging steers packaged goods to the cloud engine; blueprint Q4 revisits the model choice against the same ≥70% bar |
 | SQLite FTS5 availability differences on iOS | Verified in Stage 0 tests on both platforms (jest-expo runs both configs); fallback is a LIKE-based search behind the same `fts.ts` interface |
 | Scope creep past v1 | Blueprint non-goals list + this plan's stage gates; new ideas get parked in a `docs/BACKLOG.md`, not built |
