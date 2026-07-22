@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { colors, radius, sp, type } from '../theme';
+
 /**
  * Cross-platform text prompt (Alert.prompt is iOS-only). Controlled by a
  * `request` object so one instance serves a whole screen.
@@ -39,6 +41,7 @@ export function PromptModal({
             value={value}
             onChangeText={setValue}
             placeholder={request?.placeholder}
+            placeholderTextColor={colors.textFaint}
             keyboardType={request?.keyboardType ?? 'default'}
             autoFocus
             testID="prompt-input"
@@ -67,14 +70,29 @@ export function PromptModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
-    padding: 32,
+    padding: sp(8),
   },
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 18, gap: 12 },
-  title: { fontSize: 16, fontWeight: '700' },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 10, padding: 10, fontSize: 15 },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 22, alignItems: 'center' },
-  cancel: { color: '#888' },
-  submit: { color: '#208AEF', fontWeight: '700' },
+  card: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.xl,
+    padding: sp(4.5),
+    gap: sp(3),
+  },
+  title: { ...type.h2 },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceSunken,
+    color: colors.text,
+    borderRadius: radius.md,
+    padding: sp(2.5),
+    fontSize: 15,
+  },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: sp(5.5), alignItems: 'center' },
+  cancel: { color: colors.textDim },
+  submit: { color: colors.amber, fontWeight: '800' },
 });

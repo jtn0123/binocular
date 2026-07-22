@@ -3,14 +3,16 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { CodeTag } from '@/components/CodeTag';
 import { useDb } from '@/db/DbProvider';
 import { listRecentBins } from '@/db/queries';
 import { useFocusTick } from '@/lib/useFocusTick';
+import { colors, radius, sp, type } from '@/theme';
 
 /**
  * Scan entry point: mode picker (only bin audit in Stage 1 — check-in and
- * find-it arrive in Stage 3), then a manual bin picker. QR is Stage 2 and
- * must never be the only path anyway.
+ * find-it arrive in Stage 3), then a manual bin picker. QR is never the
+ * only path.
  */
 export default function ScanScreen() {
   const db = useDb();
@@ -26,8 +28,9 @@ export default function ScanScreen() {
         <FlatList
           data={bins}
           keyExtractor={(bin) => bin.id}
+          contentContainerStyle={{ gap: 2 }}
           ListEmptyComponent={
-            <Text style={styles.hint}>No bins yet — create one in Browse (Stage 2).</Text>
+            <Text style={styles.hint}>No bins yet — create one in Browse.</Text>
           }
           renderItem={({ item: bin }) => (
             <Pressable
@@ -37,8 +40,10 @@ export default function ScanScreen() {
                 router.push({ pathname: '/capture', params: { binId: bin.id } });
               }}
             >
-              <Text style={styles.binCode}>{bin.short_code}</Text>
-              <Text style={styles.binName}>{bin.name}</Text>
+              <CodeTag code={bin.short_code} small />
+              <Text style={styles.binName} numberOfLines={1}>
+                {bin.name}
+              </Text>
             </Pressable>
           )}
         />
@@ -53,64 +58,83 @@ export default function ScanScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>What do you want to do?</Text>
       <Pressable style={styles.mode} onPress={() => setPicking(true)}>
-        <Ionicons name="file-tray" size={28} color="#208AEF" />
+        <View style={styles.modeIcon}>
+          <Ionicons name="file-tray" size={24} color={colors.amber} />
+        </View>
         <View style={styles.modeMain}>
           <Text style={styles.modeTitle}>Audit bin</Text>
           <Text style={styles.modeBody}>Photograph an open bin and catalog its contents</Text>
         </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+      </Pressable>
+      <Pressable style={styles.mode} onPress={() => router.push('/scan-code')}>
+        <View style={styles.modeIcon}>
+          <Ionicons name="qr-code" size={22} color={colors.amber} />
+        </View>
+        <View style={styles.modeMain}>
+          <Text style={styles.modeTitle}>Scan a label</Text>
+          <Text style={styles.modeBody}>Point at a bin or shelf label to jump to it</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
       </Pressable>
       <View style={[styles.mode, styles.modeDisabled]}>
-        <Ionicons name="download" size={28} color="#999" />
+        <View style={styles.modeIcon}>
+          <Ionicons name="download" size={24} color={colors.textFaint} />
+        </View>
         <View style={styles.modeMain}>
           <Text style={styles.modeTitleDisabled}>Check in items</Text>
           <Text style={styles.modeBody}>Arrives in Stage 3</Text>
         </View>
       </View>
       <View style={[styles.mode, styles.modeDisabled]}>
-        <Ionicons name="search" size={28} color="#999" />
+        <View style={styles.modeIcon}>
+          <Ionicons name="search" size={24} color={colors.textFaint} />
+        </View>
         <View style={styles.modeMain}>
           <Text style={styles.modeTitleDisabled}>Find an item</Text>
           <Text style={styles.modeBody}>Arrives in Stage 3</Text>
         </View>
       </View>
-      <Pressable style={styles.mode} onPress={() => router.push('/scan-code')}>
-        <Ionicons name="qr-code" size={28} color="#208AEF" />
-        <View style={styles.modeMain}>
-          <Text style={styles.modeTitle}>Scan a label</Text>
-          <Text style={styles.modeBody}>Point at a bin or shelf label to jump to it</Text>
-        </View>
-      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
-  title: { fontSize: 18, fontWeight: '700', marginBottom: 4 },
+  container: { flex: 1, backgroundColor: colors.bg, padding: sp(4), gap: sp(3) },
+  title: { ...type.h2, marginBottom: sp(1) },
   mode: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    padding: 16,
-    borderRadius: 14,
-    backgroundColor: '#f2f7fd',
+    gap: sp(3.5),
+    padding: sp(4),
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  modeDisabled: { backgroundColor: '#f4f4f4' },
+  modeDisabled: { opacity: 0.55 },
+  modeIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSunken,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   modeMain: { flex: 1 },
-  modeTitle: { fontSize: 17, fontWeight: '600' },
-  modeTitleDisabled: { fontSize: 17, fontWeight: '600', color: '#999' },
-  modeBody: { color: '#777', marginTop: 2 },
+  modeTitle: { ...type.h2 },
+  modeTitleDisabled: { ...type.h2, color: colors.textDim },
+  modeBody: { ...type.dim, marginTop: 2 },
   binRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
+    gap: sp(2.5),
+    paddingVertical: sp(2.5),
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ddd',
+    borderBottomColor: colors.border,
   },
-  binCode: { fontVariant: ['tabular-nums'], fontWeight: '600', color: '#208AEF' },
-  binName: { fontSize: 16, flexShrink: 1 },
-  hint: { color: '#888', paddingVertical: 24, textAlign: 'center' },
-  secondaryButton: { alignItems: 'center', padding: 12 },
-  secondaryLabel: { color: '#208AEF', fontWeight: '600' },
+  binName: { ...type.body, flex: 1 },
+  hint: { ...type.dim, paddingVertical: sp(6), textAlign: 'center' },
+  secondaryButton: { alignItems: 'center', padding: sp(3) },
+  secondaryLabel: { color: colors.steel, fontWeight: '600' },
 });

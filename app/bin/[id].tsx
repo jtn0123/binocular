@@ -9,6 +9,7 @@ import { useDb } from '@/db/DbProvider';
 import { deleteBinIfEmpty, getBin, getShelf, itemsForBin, renameBin } from '@/db/queries';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { printLabelSheet } from '@/qr/print';
+import { colors, mono, radius, sp, type } from '@/theme';
 
 function ActionChip({
   icon,
@@ -23,7 +24,7 @@ function ActionChip({
 }) {
   return (
     <Pressable style={[styles.action, danger && styles.actionDanger]} onPress={onPress}>
-      <Ionicons name={icon} size={15} color={danger ? '#d33' : '#208AEF'} />
+      <Ionicons name={icon} size={15} color={danger ? colors.danger : colors.steel} />
       <Text style={[styles.actionLabel, danger && styles.actionLabelDanger]}>{label}</Text>
     </Pressable>
   );
@@ -145,38 +146,50 @@ export default function BinDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { gap: 10, marginBottom: 8 },
-  cover: { width: '100%', height: 180, borderRadius: 12, backgroundColor: '#eee' },
-  meta: { color: '#666' },
-  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  container: { flex: 1, backgroundColor: colors.bg, padding: sp(4) },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bg,
+  },
+  header: { gap: sp(2.5), marginBottom: sp(2) },
+  cover: {
+    width: '100%',
+    height: 190,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSunken,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  meta: { ...type.dim },
+  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: sp(2) },
   action: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     borderWidth: 1,
-    borderColor: '#bcdcf7',
-    backgroundColor: '#f2f7fd',
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 16,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+    paddingHorizontal: sp(2.75),
+    paddingVertical: sp(1.75),
+    borderRadius: radius.pill,
   },
-  actionDanger: { borderColor: '#f3c1c1', backgroundColor: '#fdf4f4' },
-  actionLabel: { color: '#1668b4', fontWeight: '600', fontSize: 13 },
-  actionLabelDanger: { color: '#d33' },
+  actionDanger: { borderColor: '#5A2F2A', backgroundColor: colors.dangerDim },
+  actionLabel: { color: colors.steel, fontWeight: '600', fontSize: 13 },
+  actionLabelDanger: { color: colors.danger },
   itemRow: {
     flexDirection: 'row',
-    gap: 10,
-    paddingVertical: 10,
+    gap: sp(2.5),
+    paddingVertical: sp(2.5),
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ddd',
+    borderBottomColor: colors.border,
     alignItems: 'center',
   },
-  itemQty: { fontVariant: ['tabular-nums'], color: '#666', minWidth: 32 },
+  itemQty: { fontFamily: mono, color: colors.textDim, minWidth: 34, fontSize: 13 },
   itemMain: { flex: 1 },
-  itemName: { fontSize: 16 },
-  itemLabel: { fontSize: 12, color: '#888' },
-  itemCategory: { fontSize: 11, color: '#999' },
-  empty: { color: '#888', paddingVertical: 24, textAlign: 'center' },
+  itemName: { ...type.body, fontSize: 16 },
+  itemLabel: { fontSize: 12, color: colors.textFaint, fontFamily: mono },
+  itemCategory: { fontSize: 11, color: colors.textFaint },
+  empty: { ...type.dim, paddingVertical: sp(6), textAlign: 'center' },
 });

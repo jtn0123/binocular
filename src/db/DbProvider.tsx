@@ -1,5 +1,7 @@
 import { openDatabaseSync } from 'expo-sqlite';
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+
+import { applyDemoCovers } from '../lib/demoCovers';
 
 import type { DbAdapter } from './adapter';
 import { createExpoAdapter } from './expoAdapter';
@@ -21,6 +23,16 @@ export function DbProvider({ children, adapter }: { children: ReactNode; adapter
     if (__DEV__) seedIfEmpty(opened);
     return opened;
   });
+
+  // Dev demo covers for seeded bins — async (asset download), post-boot.
+  useEffect(() => {
+    if (!adapter && __DEV__) {
+      applyDemoCovers(db).catch(() => {
+        // demo sugar only — never let it break boot
+      });
+    }
+  }, [adapter, db]);
+
   return <DbContext.Provider value={db}>{children}</DbContext.Provider>;
 }
 

@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useDb } from '@/db/DbProvider';
 import { getBin, listLocations, listShelves, moveBinToShelf } from '@/db/queries';
+import { colors, radius, sp, type } from '@/theme';
 
 /**
  * Move mode destination picker (blueprint §8.5): pick a shelf from the
@@ -43,7 +44,7 @@ export default function MoveBinScreen() {
         style={styles.scanButton}
         onPress={() => router.replace({ pathname: '/scan-code', params: { binId: bin.id } })}
       >
-        <Ionicons name="qr-code" size={18} color="#fff" />
+        <Ionicons name="qr-code" size={18} color={colors.amberInkOn} />
         <Text style={styles.scanLabel}>Scan a shelf label</Text>
       </Pressable>
 
@@ -72,35 +73,42 @@ export default function MoveBinScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, gap: 14, paddingBottom: 40 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  subtitle: { fontSize: 15, color: '#555' },
+  container: { padding: sp(4), gap: sp(3.5), paddingBottom: sp(10), backgroundColor: colors.bg, flexGrow: 1 },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bg,
+  },
+  subtitle: { ...type.dim, fontSize: 15 },
   scanButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#208AEF',
-    padding: 13,
-    borderRadius: 12,
+    gap: sp(2),
+    backgroundColor: colors.amber,
+    padding: sp(3.25),
+    borderRadius: radius.lg,
   },
-  scanLabel: { color: '#fff', fontWeight: '700' },
-  location: { gap: 4 },
-  locationName: { fontSize: 17, fontWeight: '700', marginBottom: 2 },
+  scanLabel: { color: colors.amberInkOn, fontWeight: '800' },
+  location: { gap: sp(1) },
+  locationName: { ...type.h2, marginBottom: 2 },
   shelfRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 13,
-    borderRadius: 10,
-    backgroundColor: '#f2f7fd',
-    marginLeft: 8,
-    marginBottom: 6,
+    padding: sp(3.25),
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginLeft: sp(2),
+    marginBottom: sp(1.5),
   },
-  shelfCurrent: { backgroundColor: '#e8e8e8' },
-  shelfName: { fontSize: 15, fontWeight: '500' },
-  currentTag: { fontSize: 11, color: '#888' },
-  unassign: { alignItems: 'center', padding: 10 },
-  unassignLabel: { color: '#888' },
-  dim: { color: '#888' },
+  shelfCurrent: { opacity: 0.55, borderStyle: 'dashed' },
+  shelfName: { ...type.body, fontWeight: '600' },
+  currentTag: { fontSize: 11, color: colors.textFaint },
+  unassign: { alignItems: 'center', padding: sp(2.5) },
+  unassignLabel: { color: colors.textFaint },
+  dim: { ...type.dim },
 });

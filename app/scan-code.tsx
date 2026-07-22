@@ -6,6 +6,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useDb } from '@/db/DbProvider';
 import { getBin, getLocation, getShelf, moveBinToShelf } from '@/db/queries';
 import { parseQrPayload } from '@/qr/payload';
+import { colors } from '@/theme';
 
 /**
  * Label scanner (blueprint Stage 2). Two modes:
@@ -135,7 +136,7 @@ export default function ScanCodeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, backgroundColor: colors.bg },
   camera: { flex: 1 },
   overlayTop: { position: 'absolute', top: 60, left: 0, right: 0, alignItems: 'center' },
   hint: {
@@ -152,12 +153,12 @@ const styles = StyleSheet.create({
   overlayBottom: { position: 'absolute', bottom: 48, left: 0, right: 0, alignItems: 'center' },
   cancel: { padding: 10 },
   cancelLabel: { color: '#fff', fontSize: 16 },
-  permissionText: { fontSize: 16, textAlign: 'center', color: '#444' },
+  permissionText: { fontSize: 16, textAlign: 'center', color: colors.textDim },
   grantButton: {
-    backgroundColor: '#208AEF',
+    backgroundColor: colors.amber,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,
   },
-  grantLabel: { color: '#fff', fontWeight: '600' },
+  grantLabel: { color: colors.amberInkOn, fontWeight: '700' },
 });

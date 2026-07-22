@@ -2,11 +2,13 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Link, Tabs } from 'expo-router';
 import { Pressable } from 'react-native';
 
+import { colors, navTheme } from '@/theme';
+
 function SettingsGear() {
   return (
     <Link href="/settings" asChild>
       <Pressable style={{ paddingHorizontal: 16 }} accessibilityLabel="Settings">
-        <Ionicons name="settings-outline" size={22} color="#444" />
+        <Ionicons name="settings-outline" size={22} color={colors.textDim} />
       </Pressable>
     </Link>
   );
@@ -14,7 +16,19 @@ function SettingsGear() {
 
 export default function TabsLayout() {
   return (
-    <Tabs screenOptions={{ headerRight: () => <SettingsGear /> }}>
+    <Tabs
+      screenOptions={{
+        ...navTheme,
+        headerRight: () => <SettingsGear />,
+        sceneStyle: { backgroundColor: colors.bg },
+        tabBarStyle: {
+          backgroundColor: colors.surfaceSunken,
+          borderTopColor: colors.border,
+        },
+        tabBarActiveTintColor: colors.amber,
+        tabBarInactiveTintColor: colors.textFaint,
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{

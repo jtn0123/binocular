@@ -270,6 +270,10 @@ export function createBinsBulk(
   return created;
 }
 
+export function setBinCoverPhoto(db: DbAdapter, binId: string, uri: string): void {
+  db.runSync('UPDATE bins SET cover_photo_uri = ? WHERE id = ?', [uri, binId]);
+}
+
 export function updateBinAfterScan(
   db: DbAdapter,
   binId: string,

@@ -34,7 +34,8 @@
         }
       ],
       "expo-sqlite",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

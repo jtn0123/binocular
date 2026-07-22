@@ -3,6 +3,7 @@ import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { CodeTag } from '@/components/CodeTag';
 import { PromptModal, type PromptRequest } from '@/components/PromptModal';
 import { useDb } from '@/db/DbProvider';
 import {
@@ -24,13 +25,17 @@ import {
 } from '@/db/queries';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { printLabelSheet } from '@/qr/print';
+import { colors, radius, sp, type } from '@/theme';
 
 function BinRowLink({ bin }: { bin: BinRow }) {
   return (
     <Link href={{ pathname: '/bin/[id]', params: { id: bin.id } }} asChild>
       <Pressable style={styles.binRow}>
-        <Text style={styles.binCode}>{bin.short_code}</Text>
-        <Text style={styles.binName}>{bin.name}</Text>
+        <CodeTag code={bin.short_code} small />
+        <Text style={styles.binName} numberOfLines={1}>
+          {bin.name}
+        </Text>
+        <Ionicons name="chevron-forward" size={15} color={colors.textFaint} />
       </Pressable>
     </Link>
   );
@@ -49,7 +54,7 @@ function IconButton({
 }) {
   return (
     <Pressable style={styles.iconButton} onPress={onPress} accessibilityLabel={label}>
-      <Ionicons name={icon} size={17} color={danger ? '#d33' : '#208AEF'} />
+      <Ionicons name={icon} size={17} color={danger ? colors.danger : colors.steel} />
     </Pressable>
   );
 }
@@ -155,11 +160,11 @@ export default function BrowseScreen() {
               })
             }
           >
-            <Ionicons name="add" size={16} color="#fff" />
+            <Ionicons name="add" size={16} color={colors.amberInkOn} />
             <Text style={styles.toolbarLabel}>Location</Text>
           </Pressable>
           <Pressable style={styles.toolbarButtonAlt} onPress={printAllLabels}>
-            <Ionicons name="print" size={16} color="#208AEF" />
+            <Ionicons name="print" size={16} color={colors.steel} />
             <Text style={styles.toolbarLabelAlt}>Print bin labels</Text>
           </Pressable>
         </View>
@@ -171,7 +176,7 @@ export default function BrowseScreen() {
         {locations.map((location) => {
           const shelves = listShelves(db, location.id);
           return (
-            <View key={location.id} style={styles.location}>
+            <View key={location.id} style={styles.locationCard}>
               <View style={styles.headerRow}>
                 <Text style={styles.locationName}>{location.name}</Text>
                 <View style={styles.headerActions}>
@@ -270,7 +275,7 @@ export default function BrowseScreen() {
         })}
 
         {unassigned.length > 0 && (
-          <View style={styles.location}>
+          <View style={styles.locationCard}>
             <Text style={styles.locationName}>Unassigned bins</Text>
             {unassigned.map((bin) => (
               <BinRowLink key={bin.id} bin={bin} />
@@ -284,47 +289,53 @@ export default function BrowseScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  container: { padding: 16, gap: 16, paddingBottom: 40 },
-  toolbar: { flexDirection: 'row', gap: 10 },
+  root: { flex: 1, backgroundColor: colors.bg },
+  container: { padding: sp(4), gap: sp(4), paddingBottom: sp(10) },
+  toolbar: { flexDirection: 'row', gap: sp(2.5) },
   toolbarButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#208AEF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    backgroundColor: colors.amber,
+    paddingHorizontal: sp(3),
+    paddingVertical: sp(2),
+    borderRadius: radius.md,
   },
-  toolbarLabel: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  toolbarLabel: { color: colors.amberInkOn, fontWeight: '700', fontSize: 13 },
   toolbarButtonAlt: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     borderWidth: 1,
-    borderColor: '#208AEF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    borderColor: colors.borderStrong,
+    paddingHorizontal: sp(3),
+    paddingVertical: sp(2),
+    borderRadius: radius.md,
   },
-  toolbarLabelAlt: { color: '#208AEF', fontWeight: '600', fontSize: 13 },
-  location: { gap: 4 },
+  toolbarLabelAlt: { color: colors.steel, fontWeight: '600', fontSize: 13 },
+  locationCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: sp(3.5),
+    gap: sp(1),
+  },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerActions: { flexDirection: 'row', gap: 2 },
-  iconButton: { padding: 6 },
-  locationName: { fontSize: 20, fontWeight: '700' },
-  shelf: { marginLeft: 8, marginTop: 8, gap: 2 },
-  shelfName: { fontSize: 13, fontWeight: '600', textTransform: 'uppercase', color: '#666' },
+  iconButton: { padding: sp(1.5) },
+  locationName: { ...type.title, fontSize: 19 },
+  shelf: { marginTop: sp(2), gap: 2 },
+  shelfName: { ...type.stamp },
   binRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-    marginLeft: 8,
+    gap: sp(2.5),
+    paddingVertical: sp(2.25),
+    paddingLeft: sp(1),
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ddd',
+    borderBottomColor: colors.border,
   },
-  binCode: { fontVariant: ['tabular-nums'], fontWeight: '600', color: '#208AEF' },
-  binName: { fontSize: 16, flexShrink: 1 },
-  empty: { color: '#888', paddingVertical: 24, textAlign: 'center' },
+  binName: { ...type.body, flex: 1 },
+  empty: { ...type.dim, paddingVertical: sp(6), textAlign: 'center' },
 });

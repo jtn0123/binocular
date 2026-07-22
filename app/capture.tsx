@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'rea
 import { useDb } from '@/db/DbProvider';
 import { getBin } from '@/db/queries';
 import { enqueueBinAuditScan, processScan } from '@/scan/scanFlow';
+import { colors } from '@/theme';
 
 export default function CaptureScreen() {
   const { binId } = useLocalSearchParams<{ binId: string }>();
@@ -100,7 +101,7 @@ export default function CaptureScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, backgroundColor: colors.bg },
   camera: { flex: 1 },
   overlayTop: {
     position: 'absolute',
@@ -120,8 +121,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   binLabel: {
-    color: '#fff',
-    backgroundColor: 'rgba(32,138,239,0.75)',
+    color: '#1A1500',
+    fontWeight: '700',
+    backgroundColor: 'rgba(255,196,0,0.85)',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 14,
@@ -149,12 +151,12 @@ const styles = StyleSheet.create({
   recognizingLabel: { color: '#fff', fontSize: 16 },
   cancel: { padding: 8 },
   cancelLabel: { color: '#fff', fontSize: 15 },
-  permissionText: { fontSize: 16, textAlign: 'center', color: '#444' },
+  permissionText: { fontSize: 16, textAlign: 'center', color: colors.textDim },
   shutterAlt: {
-    backgroundColor: '#208AEF',
+    backgroundColor: colors.amber,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,
   },
-  shutterAltLabel: { color: '#fff', fontWeight: '600' },
+  shutterAltLabel: { color: colors.amberInkOn, fontWeight: '700' },
 });

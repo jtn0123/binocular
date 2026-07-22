@@ -10,6 +10,7 @@ import {
   setProviderChoice,
   type ProviderChoice,
 } from '@/settings/settings';
+import { colors, radius, sp, type } from '@/theme';
 import { testClaudeConnection } from '@/vision/claudeProvider';
 import { testOpenAiConnection } from '@/vision/openaiProvider';
 
@@ -156,44 +157,46 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, gap: 12 },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    color: '#666',
-    marginTop: 8,
-  },
-  keySection: { gap: 10 },
-  providerRow: { flexDirection: 'row', gap: 8 },
+  container: { padding: sp(4), gap: sp(3), backgroundColor: colors.bg, flexGrow: 1 },
+  sectionTitle: { ...type.stamp, marginTop: sp(2) },
+  keySection: { gap: sp(2.5) },
+  providerRow: { flexDirection: 'row', gap: sp(2) },
   providerButton: {
     flex: 1,
-    padding: 12,
-    borderRadius: 10,
+    padding: sp(3),
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: colors.borderStrong,
     alignItems: 'center',
   },
-  providerActive: { backgroundColor: '#208AEF', borderColor: '#208AEF' },
-  providerLabel: { color: '#444', fontWeight: '500', fontSize: 13 },
-  providerLabelActive: { color: '#fff' },
-  hint: { color: '#777', fontSize: 13, lineHeight: 18 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 10, padding: 12, fontSize: 15 },
-  buttonRow: { flexDirection: 'row', gap: 10 },
-  primaryButton: {
-    backgroundColor: '#208AEF',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 10,
+  providerActive: { backgroundColor: colors.amber, borderColor: colors.amber },
+  providerLabel: { color: colors.textDim, fontWeight: '600', fontSize: 13 },
+  providerLabelActive: { color: colors.amberInkOn },
+  hint: { ...type.dim, lineHeight: 18 },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+    color: colors.text,
+    borderRadius: radius.md,
+    padding: sp(3),
+    fontSize: 15,
   },
-  primaryLabel: { color: '#fff', fontWeight: '600' },
+  buttonRow: { flexDirection: 'row', gap: sp(2.5) },
+  primaryButton: {
+    backgroundColor: colors.amber,
+    paddingHorizontal: sp(4.5),
+    paddingVertical: sp(3),
+    borderRadius: radius.md,
+  },
+  primaryLabel: { color: colors.amberInkOn, fontWeight: '700' },
   secondaryButton: {
     borderWidth: 1,
-    borderColor: '#208AEF',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 10,
+    borderColor: colors.borderStrong,
+    paddingHorizontal: sp(4.5),
+    paddingVertical: sp(3),
+    borderRadius: radius.md,
   },
-  secondaryLabel: { color: '#208AEF', fontWeight: '600' },
+  secondaryLabel: { color: colors.steel, fontWeight: '600' },
   disabled: { opacity: 0.5 },
 });
