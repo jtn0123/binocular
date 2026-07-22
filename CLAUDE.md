@@ -14,6 +14,11 @@ standard every change is validated against. Before starting ANY task:
 3. Before declaring a task done, run the invariants checklist in blueprint
    §11 and the acceptance criteria for the current stage in §10.
 
+`docs/PLAN.md` is the execution companion: file-level tasks per stage with
+checkboxes. Work in plan order, check off tasks in the same commit as the
+work, and close a stage with a `stage-N-complete` tag only when its Exit
+criteria pass. If plan and blueprint disagree, the blueprint wins.
+
 ## Changing the blueprint
 
 The blueprint may only change by deliberate, standalone commits prefixed
