@@ -17,7 +17,7 @@ import { colors } from '@/theme';
  * spam alerts while pointed at the same code.
  */
 export default function ScanCodeScreen() {
-  const { binId } = useLocalSearchParams<{ binId?: string }>();
+  const { binId, forScanId } = useLocalSearchParams<{ binId?: string; forScanId?: string }>();
   const db = useDb();
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
@@ -89,6 +89,14 @@ export default function ScanCodeScreen() {
         ]);
         return;
       }
+      if (forScanId) {
+        // Check-in destination pick: hand the bin back to the review screen.
+        router.replace({
+          pathname: '/review/[scanId]',
+          params: { scanId: forScanId, destBinId: bin.id },
+        });
+        return;
+      }
       router.replace({ pathname: '/bin/[id]', params: { id: bin.id } });
       return;
     }
@@ -122,7 +130,9 @@ export default function ScanCodeScreen() {
         <Text style={styles.hint}>
           {movingBin
             ? `Scan the destination shelf label for ${movingBin.short_code}`
-            : 'Point at a Binocular label'}
+            : forScanId
+              ? 'Scan the destination bin label'
+              : 'Point at a Binocular label'}
         </Text>
       </View>
       <View style={styles.overlayBottom}>

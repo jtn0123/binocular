@@ -62,7 +62,36 @@ CREATE VIRTUAL TABLE item_search USING fts5(
 );
 `;
 
-export const MIGRATIONS: readonly string[] = [MIGRATION_001_INITIAL_SCHEMA];
+/**
+ * Stage 3: triggers keep the external-content FTS index in step with the
+ * items table, plus a backfill for databases that already have items.
+ */
+const MIGRATION_002_FTS_TRIGGERS = `
+CREATE TRIGGER items_fts_insert AFTER INSERT ON items BEGIN
+  INSERT INTO item_search(rowid, name, brand, label_text, notes)
+  VALUES (new.rowid, new.name, new.brand, new.label_text, new.notes);
+END;
+
+CREATE TRIGGER items_fts_delete AFTER DELETE ON items BEGIN
+  INSERT INTO item_search(item_search, rowid, name, brand, label_text, notes)
+  VALUES ('delete', old.rowid, old.name, old.brand, old.label_text, old.notes);
+END;
+
+CREATE TRIGGER items_fts_update AFTER UPDATE ON items BEGIN
+  INSERT INTO item_search(item_search, rowid, name, brand, label_text, notes)
+  VALUES ('delete', old.rowid, old.name, old.brand, old.label_text, old.notes);
+  INSERT INTO item_search(rowid, name, brand, label_text, notes)
+  VALUES (new.rowid, new.name, new.brand, new.label_text, new.notes);
+END;
+
+INSERT INTO item_search(rowid, name, brand, label_text, notes)
+  SELECT rowid, name, brand, label_text, notes FROM items;
+`;
+
+export const MIGRATIONS: readonly string[] = [
+  MIGRATION_001_INITIAL_SCHEMA,
+  MIGRATION_002_FTS_TRIGGERS,
+];
 
 export function getSchemaVersion(db: DbAdapter): number {
   const row = db.getFirstSync<{ user_version: number }>('PRAGMA user_version');

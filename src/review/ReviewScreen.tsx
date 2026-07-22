@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 
+import { CodeTag } from '../components/CodeTag';
 import { useDb } from '../db/DbProvider';
 import {
   deleteItem,
@@ -18,6 +19,7 @@ import {
   getScan,
   insertItem,
   itemsForBin,
+  listRecentBins,
   updateBinAfterScan,
   updateScanStatus,
   type ItemRow,
@@ -49,6 +51,10 @@ interface DetectedChip {
 export interface ReviewScreenProps {
   scanId: string;
   onDone: (binId: string | null) => void;
+  /** Check-in: pre-selected destination (e.g. returned from a QR scan). */
+  initialDestBinId?: string | null;
+  /** Check-in: open the label scanner to pick the destination. */
+  onScanDestination?: () => void;
 }
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -74,7 +80,12 @@ function buildDetectedChips(result: RecognitionResult, existing: ItemRow[]): Det
   });
 }
 
-export function ReviewScreen({ scanId, onDone }: ReviewScreenProps) {
+export function ReviewScreen({
+  scanId,
+  onDone,
+  initialDestBinId,
+  onScanDestination,
+}: ReviewScreenProps) {
   const db = useDb();
   const scan = getScan(db, scanId);
   const bin = scan?.bin_id ? getBin(db, scan.bin_id) : null;
@@ -107,6 +118,7 @@ export function ReviewScreen({ scanId, onDone }: ReviewScreenProps) {
   );
   const [editingKey, setEditingKey] = useState<string | 'new' | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [destBinId, setDestBinId] = useState<string | null>(initialDestBinId ?? null);
 
   if (!scan) {
     return (
@@ -175,7 +187,8 @@ export function ReviewScreen({ scanId, onDone }: ReviewScreenProps) {
     );
   }
 
-  const isMergeDiff = mode === 'merge' && existingItems.length > 0;
+  const isCheckIn = scan.mode === 'check_in';
+  const isMergeDiff = !isCheckIn && mode === 'merge' && existingItems.length > 0;
   const newChips = chips.filter((c) => c.matchedExistingId === null);
   const stillHere = chips.filter((c) => c.matchedExistingId !== null);
   const matchedIds = new Set(stillHere.map((c) => c.matchedExistingId));
@@ -191,10 +204,15 @@ export function ReviewScreen({ scanId, onDone }: ReviewScreenProps) {
   }
 
   function save() {
-    if (!scan?.bin_id) return;
-    const binId = scan.bin_id;
+    const binId = isCheckIn ? destBinId : (scan?.bin_id ?? null);
+    if (!binId) return;
     db.withTransactionSync(() => {
-      if (mode === 'replace') {
+      if (isCheckIn) {
+        // §8.2: check-in appends the selected chips to the destination bin.
+        for (const chip of chips.filter((c) => c.selected)) {
+          insertChip(binId, chip);
+        }
+      } else if (mode === 'replace') {
         deleteItemsForBin(db, binId);
         for (const chip of chips.filter((c) => c.selected)) {
           insertChip(binId, chip);
@@ -211,10 +229,13 @@ export function ReviewScreen({ scanId, onDone }: ReviewScreenProps) {
         }
       }
       updateScanStatus(db, scanId, 'confirmed', { resolvedAt: nowIso() });
-      updateBinAfterScan(db, binId, {
-        lastScannedAt: nowIso(),
-        coverPhotoUri: scan.photo_uri,
-      });
+      if (!isCheckIn && scan) {
+        // Only a bin audit re-stamps the bin photo/timestamp (§8.1 step 7).
+        updateBinAfterScan(db, binId, {
+          lastScannedAt: nowIso(),
+          coverPhotoUri: scan.photo_uri,
+        });
+      }
     });
     onDone(binId);
   }
@@ -248,7 +269,7 @@ export function ReviewScreen({ scanId, onDone }: ReviewScreenProps) {
           </View>
         ) : null}
 
-        {existingItems.length > 0 && (
+        {!isCheckIn && existingItems.length > 0 && (
           <View style={styles.modeRow}>
             {(['merge', 'replace'] as const).map((m) => (
               <Pressable
@@ -316,14 +337,45 @@ export function ReviewScreen({ scanId, onDone }: ReviewScreenProps) {
         <Pressable style={styles.addButton} onPress={() => setEditingKey('new')} testID="add-item">
           <Text style={styles.addLabel}>+ Add item manually</Text>
         </Pressable>
+
+        {isCheckIn && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Save to which bin?</Text>
+            {listRecentBins(db, 8).map((candidate) => (
+              <Pressable
+                key={candidate.id}
+                testID={`dest-${candidate.id}`}
+                accessibilityState={{ selected: destBinId === candidate.id }}
+                style={[styles.destRow, destBinId === candidate.id && styles.destRowActive]}
+                onPress={() => setDestBinId(candidate.id)}
+              >
+                <CodeTag code={candidate.short_code} small />
+                <Text style={styles.destName} numberOfLines={1}>
+                  {candidate.name}
+                </Text>
+              </Pressable>
+            ))}
+            {onScanDestination && (
+              <Pressable style={styles.addButton} onPress={onScanDestination}>
+                <Text style={styles.addLabel}>Scan a bin label instead</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       <View style={styles.footer}>
         <Pressable style={styles.discardButton} onPress={discard} testID="discard">
           <Text style={styles.discardLabel}>Discard</Text>
         </Pressable>
-        <Pressable style={styles.saveButton} onPress={save} testID="save">
-          <Text style={styles.saveLabel}>Save to bin</Text>
+        <Pressable
+          style={[styles.saveButton, isCheckIn && !destBinId && styles.saveButtonDisabled]}
+          onPress={save}
+          testID="save"
+        >
+          <Text style={styles.saveLabel}>
+            {isCheckIn && !destBinId ? 'Pick a bin below' : 'Save to bin'}
+          </Text>
         </Pressable>
       </View>
 
@@ -596,7 +648,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 2,
   },
+  saveButtonDisabled: { opacity: 0.45 },
   saveLabel: { color: colors.amberInkOn, fontWeight: '800', fontSize: 15 },
+  destRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(2.5),
+    padding: sp(2.75),
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  destRowActive: { borderColor: colors.amber, backgroundColor: colors.chipSelectedBg },
+  destName: { ...type.body, flex: 1 },
   primaryButton: {
     backgroundColor: colors.amber,
     paddingHorizontal: sp(5),

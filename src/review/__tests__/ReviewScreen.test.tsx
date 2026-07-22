@@ -181,3 +181,79 @@ describe('ReviewScreen (blueprint §6.3 + §8.1)', () => {
     expect(items[0].quantity).toBe(50);
   });
 });
+
+describe('check-in mode (blueprint §8.2)', () => {
+  let db: NodeDbAdapter;
+  let destA: BinRow;
+  let destB: BinRow;
+
+  function makeCheckInScan(): string {
+    const scan = insertScan(db, { mode: 'check_in', photoUri: 'file:///c.jpg' });
+    updateScanStatus(db, scan.id, 'review', { rawResponse: JSON.stringify(FIXTURE) });
+    return scan.id;
+  }
+
+  beforeEach(() => {
+    db = createNodeAdapter(':memory:');
+    runMigrations(db);
+    destA = createBin(db, { name: 'Fasteners', shortCode: 'B-002' });
+    destB = createBin(db, { name: 'Adhesives', shortCode: 'B-004' });
+  });
+  afterEach(() => {
+    db.close();
+  });
+
+  async function renderCheckIn(scanId: string, onDone = jest.fn(), initialDestBinId?: string) {
+    const screen = await render(
+      <DbProvider adapter={db}>
+        <ReviewScreen scanId={scanId} onDone={onDone} initialDestBinId={initialDestBinId} />
+      </DbProvider>,
+    );
+    return { onDone, screen };
+  }
+
+  it('shows a destination picker and blocks save until a bin is chosen', async () => {
+    const scanId = makeCheckInScan();
+    const { screen, onDone } = await renderCheckIn(scanId);
+    expect(screen.getByTestId(`dest-${destA.id}`)).toBeTruthy();
+    expect(screen.getByTestId(`dest-${destB.id}`)).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('save'));
+    expect(itemsForBin(db, destA.id)).toHaveLength(0);
+    expect(itemsForBin(db, destB.id)).toHaveLength(0);
+    expect(getScan(db, scanId)?.status).toBe('review');
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it('destination can be chosen after recognition; save appends selected chips', async () => {
+    const scanId = makeCheckInScan();
+    const { screen, onDone } = await renderCheckIn(scanId);
+    await fireEvent.press(screen.getByTestId(`dest-${destB.id}`));
+    await fireEvent.press(screen.getByTestId('save'));
+
+    const names = itemsForBin(db, destB.id).map((i) => i.name).sort();
+    // high + medium chips selected by default; low excluded (§6.3)
+    expect(names).toEqual(['Phillips screwdriver', 'Tape measure']);
+    expect(itemsForBin(db, destA.id)).toHaveLength(0);
+    expect(getScan(db, scanId)?.status).toBe('confirmed');
+    expect(onDone).toHaveBeenCalledWith(destB.id);
+  });
+
+  it('appends without touching the destination bin cover or scan stamp', async () => {
+    const scanId = makeCheckInScan();
+    const { screen } = await renderCheckIn(scanId, jest.fn(), destA.id);
+    await fireEvent.press(screen.getByTestId('save'));
+    const bin = getBin(db, destA.id);
+    expect(bin?.cover_photo_uri).toBeNull();
+    expect(bin?.last_scanned_at).toBeNull();
+    expect(itemsForBin(db, destA.id).length).toBeGreaterThan(0);
+  });
+
+  it('does not render merge-diff sections for a check-in', async () => {
+    insertItem(db, { binId: destA.id, name: 'Hammer', category: 'hand_tool' });
+    const scanId = makeCheckInScan();
+    const { screen } = await renderCheckIn(scanId);
+    expect(screen.queryByText('Still here')).toBeNull();
+    expect(screen.queryByText('Not seen in this photo')).toBeNull();
+  });
+});

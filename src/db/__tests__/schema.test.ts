@@ -35,7 +35,7 @@ describe('migration runner', () => {
     expect(getSchemaVersion(db)).toBe(MIGRATIONS.length);
   });
 
-  it('supports FTS5 queries against item_search', () => {
+  it('supports FTS5 queries — the stage-3 triggers index new items automatically', () => {
     runMigrations(db);
     db.runSync(
       "INSERT INTO bins (id, short_code, name, created_at) VALUES ('b1', 'B-001', 'Hand tools', '2026-01-01T00:00:00Z')",
@@ -43,13 +43,29 @@ describe('migration runner', () => {
     db.runSync(
       "INSERT INTO items (id, bin_id, name, brand, category, quantity, created_at, updated_at) VALUES ('i1', 'b1', 'Phillips screwdriver', NULL, 'hand_tool', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
     );
-    db.runSync(
-      "INSERT INTO item_search (rowid, name, brand, label_text, notes) SELECT rowid, name, brand, label_text, notes FROM items WHERE id = 'i1'",
-    );
     const hits = db.getAllSync<{ name: string }>(
       "SELECT name FROM item_search WHERE item_search MATCH 'scre*'",
     );
     expect(hits).toHaveLength(1);
     expect(hits[0].name).toBe('Phillips screwdriver');
+  });
+
+  it('backfills the FTS index for items that predate migration 002', () => {
+    // Apply only migration 001, insert an item, then run the rest.
+    db.withTransactionSync(() => {
+      db.execSync(MIGRATIONS[0]);
+      db.execSync('PRAGMA user_version = 1');
+    });
+    db.runSync(
+      "INSERT INTO bins (id, short_code, name, created_at) VALUES ('b1', 'B-001', 'Bits', '2026-01-01T00:00:00Z')",
+    );
+    db.runSync(
+      "INSERT INTO items (id, bin_id, name, brand, category, quantity, created_at, updated_at) VALUES ('i1', 'b1', 'Torx bit set', NULL, 'bit_blade_accessory', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+    );
+    runMigrations(db);
+    const hits = db.getAllSync<{ name: string }>(
+      "SELECT name FROM item_search WHERE item_search MATCH 'torx*'",
+    );
+    expect(hits).toHaveLength(1);
   });
 });

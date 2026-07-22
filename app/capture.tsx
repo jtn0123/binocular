@@ -4,19 +4,27 @@ import { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useDb } from '@/db/DbProvider';
-import { getBin } from '@/db/queries';
-import { enqueueBinAuditScan, processScan } from '@/scan/scanFlow';
+import { getBin, type ScanMode } from '@/db/queries';
+import { enqueueScan, processScan } from '@/scan/scanFlow';
 import { colors } from '@/theme';
 
+const HINTS: Record<ScanMode, string> = {
+  bin_audit: 'Fill the frame with the open bin',
+  check_in: 'Lay items on the bench — a cleaner background gives better results',
+  find_it: 'Center the item you are looking for',
+};
+
 export default function CaptureScreen() {
-  const { binId } = useLocalSearchParams<{ binId: string }>();
+  const params = useLocalSearchParams<{ binId?: string; mode?: string }>();
+  const mode: ScanMode =
+    params.mode === 'check_in' || params.mode === 'find_it' ? params.mode : 'bin_audit';
   const db = useDb();
   const router = useRouter();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [busy, setBusy] = useState<'idle' | 'capturing' | 'recognizing'>('idle');
 
-  const bin = binId ? getBin(db, binId) : null;
+  const bin = params.binId ? getBin(db, params.binId) : null;
 
   if (!permission) return <View style={styles.container} />;
   if (!permission.granted) {
@@ -32,24 +40,41 @@ export default function CaptureScreen() {
   }
 
   async function capture() {
-    if (!cameraRef.current || !binId || busy !== 'idle') return;
+    if (!cameraRef.current || busy !== 'idle') return;
+    if (mode === 'bin_audit' && !params.binId) return;
     setBusy('capturing');
     try {
       const photo = await cameraRef.current.takePictureAsync();
       // Photo persisted + scan row queued first — a kill or network loss
       // after this point can never lose the capture (blueprint §8.1 AC).
-      const scanId = enqueueBinAuditScan(db, { binId, tempPhotoUri: photo.uri });
+      const scanId = enqueueScan(db, {
+        mode,
+        binId: params.binId ?? null,
+        tempPhotoUri: photo.uri,
+      });
       setBusy('recognizing');
       const result = await processScan(db, scanId);
+      const target =
+        mode === 'find_it'
+          ? ({ pathname: '/find/[scanId]', params: { scanId } } as const)
+          : ({ pathname: '/review/[scanId]', params: { scanId } } as const);
       if (result.outcome === 'review') {
-        router.replace({ pathname: '/review/[scanId]', params: { scanId } });
+        router.replace(target);
         return;
       }
       if (result.outcome === 'queued') {
+        if (mode === 'find_it') {
+          Alert.alert(
+            'Search needs a connection',
+            'Photo lookup requires the cloud engine — try text search instead.',
+            [{ text: 'OK', onPress: () => router.back() }],
+          );
+          return;
+        }
         Alert.alert(
           'Saved to queue',
-          'No connection right now — the photo is saved and will be recognized when you retry from the review screen.',
-          [{ text: 'OK', onPress: () => router.replace({ pathname: '/review/[scanId]', params: { scanId } }) }],
+          'No connection right now — the photo is saved and will be recognized when you are back online.',
+          [{ text: 'OK', onPress: () => router.replace(target) }],
         );
         return;
       }
@@ -71,7 +96,7 @@ export default function CaptureScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <CameraView ref={cameraRef} style={styles.camera} facing="back" />
       <View style={styles.overlayTop}>
-        <Text style={styles.hint}>Fill the frame with the open bin</Text>
+        <Text style={styles.hint}>{HINTS[mode]}</Text>
         {bin ? (
           <Text style={styles.binLabel}>
             {bin.short_code} · {bin.name}
@@ -101,7 +126,14 @@ export default function CaptureScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, backgroundColor: colors.bg },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    padding: 24,
+    backgroundColor: colors.bg,
+  },
   camera: { flex: 1 },
   overlayTop: {
     position: 'absolute',
@@ -119,6 +151,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     fontSize: 15,
+    textAlign: 'center',
+    marginHorizontal: 24,
   },
   binLabel: {
     color: '#1A1500',

@@ -77,24 +77,32 @@ export default function ScanScreen() {
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
       </Pressable>
-      <View style={[styles.mode, styles.modeDisabled]}>
+      <Pressable
+        style={styles.mode}
+        onPress={() => router.push({ pathname: '/capture', params: { mode: 'check_in' } })}
+      >
         <View style={styles.modeIcon}>
-          <Ionicons name="download" size={24} color={colors.textFaint} />
+          <Ionicons name="download" size={24} color={colors.amber} />
         </View>
         <View style={styles.modeMain}>
-          <Text style={styles.modeTitleDisabled}>Check in items</Text>
-          <Text style={styles.modeBody}>Arrives in Stage 3</Text>
+          <Text style={styles.modeTitle}>Check in items</Text>
+          <Text style={styles.modeBody}>Photograph new items, then pick their bin</Text>
         </View>
-      </View>
-      <View style={[styles.mode, styles.modeDisabled]}>
+        <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+      </Pressable>
+      <Pressable
+        style={styles.mode}
+        onPress={() => router.push({ pathname: '/capture', params: { mode: 'find_it' } })}
+      >
         <View style={styles.modeIcon}>
-          <Ionicons name="search" size={24} color={colors.textFaint} />
+          <Ionicons name="search" size={24} color={colors.amber} />
         </View>
         <View style={styles.modeMain}>
-          <Text style={styles.modeTitleDisabled}>Find an item</Text>
-          <Text style={styles.modeBody}>Arrives in Stage 3</Text>
+          <Text style={styles.modeTitle}>Find an item</Text>
+          <Text style={styles.modeBody}>Photograph it and see which bin it lives in</Text>
         </View>
-      </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+      </Pressable>
     </View>
   );
 }

@@ -1,5 +1,12 @@
 import type { DbAdapter } from '../db/adapter';
-import { getBin, getScan, insertScan, itemsForBin, updateScanStatus } from '../db/queries';
+import {
+  getBin,
+  getScan,
+  insertScan,
+  itemsForBin,
+  updateScanStatus,
+  type ScanMode,
+} from '../db/queries';
 import { newId } from '../lib/id';
 import { nowIso } from '../lib/time';
 import { resolveVisionProvider } from '../vision';
@@ -22,13 +29,13 @@ export interface ScanFlowResult {
 }
 
 /** Persists the photo and creates the queued scan row — never loses a capture. */
-export function enqueueBinAuditScan(
+export function enqueueScan(
   db: DbAdapter,
-  input: { binId: string; tempPhotoUri: string },
+  input: { mode: ScanMode; binId?: string | null; tempPhotoUri: string },
 ): string {
   const scanId = newId();
   const photoUri = persistPhoto(input.tempPhotoUri, scanId);
-  insertScan(db, { id: scanId, mode: 'bin_audit', binId: input.binId, photoUri });
+  insertScan(db, { id: scanId, mode: input.mode, binId: input.binId ?? null, photoUri });
   return scanId;
 }
 

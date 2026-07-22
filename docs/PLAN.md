@@ -169,21 +169,23 @@ review chips → saved bin contents.
 **Goal:** the daily-driver features.
 
 ### Tasks
-- [ ] FTS sync: SQLite triggers keeping `item_search` in step with `items`
+- [x] FTS sync: SQLite triggers keeping `item_search` in step with `items`
       (insert/update/delete) — added as a new migration.
-- [ ] `src/search/fts.ts`: prefix-query helper (`scre*`), result ranking
+- [x] `src/search/fts.ts`: prefix-query helper (`scre*`), result ranking
       (name hits above label_text hits).
-- [ ] Home screen: search box → results as item cards with
+- [x] Home screen: search box → results as item cards with
       location → shelf → bin breadcrumb + bin cover thumbnail.
-- [ ] Check-in flow (blueprint §8.2): capture → same review screen →
+- [x] Check-in flow (blueprint §8.2): capture → same review screen →
       destination picker (QR or list, recent bins first) → append items.
-- [ ] Find-it photo path (blueprint §8.3): single-item scan → provider →
+- [x] Find-it photo path (blueprint §8.3): single-item scan → provider →
       feed best identification into text search → show matching bins;
       offline shows the graceful "needs a connection" message.
-- [ ] Perf test: seed 1,000 items, assert search <100ms.
+- [x] Perf test: seed 1,000 items, assert search <100ms.
 
 ### Exit criteria
-- [ ] All blueprint §8.2 and §8.3 acceptance boxes pass.
+- [x] All blueprint §8.2 and §8.3 acceptance boxes pass (photo-path offline
+      message + multi-scan queueing re-verified end-to-end in Stage 4's
+      airplane sweep).
 
 ---
 

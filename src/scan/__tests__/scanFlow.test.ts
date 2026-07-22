@@ -3,7 +3,7 @@ import { createBin, getScan, insertItem, insertScan } from '../../db/queries';
 import { runMigrations } from '../../db/schema';
 import { resolveVisionProvider } from '../../vision';
 import { VisionError, type VisionProvider } from '../../vision/provider';
-import { enqueueBinAuditScan, processScan } from '../scanFlow';
+import { enqueueScan, processScan } from '../scanFlow';
 
 jest.mock('../photos', () => ({
   persistPhoto: jest.fn(() => 'file:///photos/stored.jpg'),
@@ -56,7 +56,7 @@ describe('scan lifecycle (blueprint §9 shape)', () => {
 
   it('enqueue persists the photo and writes a queued scan row', () => {
     const bin = createBin(db, { name: 'Adhesives', shortCode: 'B-004' });
-    const scanId = enqueueBinAuditScan(db, { binId: bin.id, tempPhotoUri: 'file:///tmp/x.jpg' });
+    const scanId = enqueueScan(db, { mode: 'bin_audit', binId: bin.id, tempPhotoUri: 'file:///tmp/x.jpg' });
     const scan = getScan(db, scanId);
     expect(scan?.status).toBe('queued');
     expect(scan?.photo_uri).toBe('file:///photos/stored.jpg');
@@ -66,7 +66,7 @@ describe('scan lifecycle (blueprint §9 shape)', () => {
 
   it('success path: processing -> review with raw_response stored verbatim', async () => {
     const bin = createBin(db, { name: 'Adhesives', shortCode: 'B-004' });
-    const scanId = enqueueBinAuditScan(db, { binId: bin.id, tempPhotoUri: 'file:///tmp/x.jpg' });
+    const scanId = enqueueScan(db, { mode: 'bin_audit', binId: bin.id, tempPhotoUri: 'file:///tmp/x.jpg' });
     mockResolve.mockResolvedValue(providerReturning(RESULT));
 
     const outcome = await processScan(db, scanId);
@@ -79,7 +79,7 @@ describe('scan lifecycle (blueprint §9 shape)', () => {
   it('passes bin name and existing item names as context hints', async () => {
     const bin = createBin(db, { name: 'Hand tools', shortCode: 'B-003' });
     insertItem(db, { binId: bin.id, name: 'Hammer', category: 'hand_tool' });
-    const scanId = enqueueBinAuditScan(db, { binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
+    const scanId = enqueueScan(db, { mode: 'bin_audit', binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
     const provider = providerReturning(RESULT);
     mockResolve.mockResolvedValue(provider);
 
@@ -93,7 +93,7 @@ describe('scan lifecycle (blueprint §9 shape)', () => {
 
   it('network errors drop the scan back to queued — the photo is never lost', async () => {
     const bin = createBin(db, { name: 'A', shortCode: 'B-001' });
-    const scanId = enqueueBinAuditScan(db, { binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
+    const scanId = enqueueScan(db, { mode: 'bin_audit', binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
     mockResolve.mockResolvedValue(providerThrowing(new VisionError('offline', 'network')));
 
     const outcome = await processScan(db, scanId);
@@ -109,7 +109,7 @@ describe('scan lifecycle (blueprint §9 shape)', () => {
       ['invalid_response', 'failed'],
     ];
     for (const [kind, expected] of cases) {
-      const scanId = enqueueBinAuditScan(db, { binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
+      const scanId = enqueueScan(db, { mode: 'bin_audit', binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
       mockResolve.mockResolvedValue(providerThrowing(new VisionError(kind, kind)));
       const outcome = await processScan(db, scanId);
       expect(outcome.outcome).toBe(expected);
@@ -119,7 +119,7 @@ describe('scan lifecycle (blueprint §9 shape)', () => {
 
   it('failed scans record the error and resolved_at', async () => {
     const bin = createBin(db, { name: 'A', shortCode: 'B-001' });
-    const scanId = enqueueBinAuditScan(db, { binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
+    const scanId = enqueueScan(db, { mode: 'bin_audit', binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
     mockResolve.mockResolvedValue(providerThrowing(new VisionError('bad key', 'auth')));
 
     await processScan(db, scanId);
@@ -135,7 +135,7 @@ describe('scan lifecycle (blueprint §9 shape)', () => {
 
   it('a queued scan can be re-processed later (manual retry path)', async () => {
     const bin = createBin(db, { name: 'A', shortCode: 'B-001' });
-    const scanId = enqueueBinAuditScan(db, { binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
+    const scanId = enqueueScan(db, { mode: 'bin_audit', binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
     mockResolve.mockResolvedValueOnce(providerThrowing(new VisionError('offline', 'network')));
     await processScan(db, scanId);
     expect(getScan(db, scanId)?.status).toBe('queued');
