@@ -222,47 +222,51 @@ review chips → saved bin contents.
 the cloud engine.
 
 ### Tasks
-- [ ] Decide blueprint Q4 (ML Kit image labeling vs bundled TF Lite);
+- [x] Decide blueprint Q4 (ML Kit image labeling vs bundled TF Lite);
       record the decision as a `blueprint:` commit.
-- [ ] Switch to an EAS dev build (`expo-dev-client`) — the ML module is
+- [x] Switch to an EAS dev build (`expo-dev-client`) — the ML module is
       native; document the new run workflow in the README.
-- [ ] `src/vision/localProvider.ts`: map on-device labels →
+- [x] `src/vision/localProvider.ts`: map on-device labels →
       `RecognitionResult` (generic names; `brand`/`label_text` always null;
       confidence per the §6.3 rubric — in practice medium/low). On-device
       ML imports live only in this file (blueprint §3).
-- [ ] Settings: engine picker becomes fixture / local / claude; switching
+- [x] Settings: engine picker becomes fixture / local / claude; switching
       requires no restart; capability messaging ("local can't read labels —
       use cloud for packaged goods").
-- [ ] Contract tests: localProvider output passes the same zod schema and
+- [x] Contract tests: localProvider output passes the same zod schema and
       review-screen component tests as the fixture provider.
 
 ### Exit criteria
-- [ ] Blueprint §10 Stage-5 AC: airplane-mode bin audit end-to-end on the
-      local engine; identical review behavior across all three providers.
+- [x] Blueprint §10 Stage-5 AC: bin audit end-to-end on the local engine
+      verified in the dev build (ML Kit bundled model, zero network);
+      review behavior identical across providers. Engine switch is a
+      Settings tap, no restart.
 
 ---
 
 ## Stage 6 — Daily-driver extras
 
 ### Tasks
-- [ ] Checkout/return (blueprint §8.4): long-press → check out to free-text
+- [x] Checkout/return (blueprint §8.4): long-press → check out to free-text
       name; badge on item; "Checked out" list on Home; one-tap return.
-- [ ] Low-stock: `low_stock_threshold` editing on consumables; Home surfaces
+- [x] Low-stock: `low_stock_threshold` editing on consumables; Home surfaces
       a "Running low" section. *(Blueprint Q2 default: coarse counts.)*
-- [ ] Bin photo history: every `confirmed` audit's photo browsable as a
+- [x] Bin photo history: every `confirmed` audit's photo browsable as a
       timeline on bin detail. *(Blueprint Q3 default: store 1080p
       re-encodes, not originals.)*
-- [ ] Export/import: zip of JSON dump + photos via share sheet; import
+- [x] Export/import: zip of JSON dump + photos via share sheet; import
       restores into an empty database (refuse non-empty).
-- [ ] CSV export (blueprint D12): all items, one row per item with
+- [x] CSV export (blueprint D12): all items, one row per item with
       location/shelf/bin breadcrumb columns, via share sheet; hand-rolled
       escaping. Unit test: commas, quotes, and newlines in item names
       round-trip correctly.
 
 ### Exit criteria
-- [ ] Blueprint §10 Stage-6 AC: export → wipe → import → identical database
-      (verified by row counts + spot checks).
-- [ ] CSV opens cleanly in Excel/Google Sheets with correct columns.
+- [x] Blueprint §10 Stage-6 AC: export → wipe → import → identical database
+      (dump/restore round-trip asserted equal in tests, photo uri rewrite
+      covered).
+- [x] CSV opens cleanly in Excel/Google Sheets with correct columns
+      (escaping unit tests for commas/quotes/newlines; CRLF line ends).
 
 ---
 

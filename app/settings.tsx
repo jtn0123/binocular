@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import * as DocumentPicker from 'expo-document-picker';
+
+import { exportBackupZip, exportInventoryCsv, importBackupZip } from '@/backup/backup';
+import { useDb } from '@/db/DbProvider';
+import { isDatabaseEmpty } from '@/db/backupQueries';
 import {
   getApiKey,
   getOpenAiApiKey,
@@ -15,7 +20,8 @@ import { testClaudeConnection } from '@/vision/claudeProvider';
 import { testOpenAiConnection } from '@/vision/openaiProvider';
 
 const ENGINE_LABELS: Record<ProviderChoice, string> = {
-  fixture: 'Fixture (demo)',
+  fixture: 'Fixture',
+  local: 'Local',
   claude: 'Claude',
   openai: 'OpenAI',
 };
@@ -84,7 +90,42 @@ function KeySection({
 }
 
 export default function SettingsScreen() {
+  const db = useDb();
   const [provider, setProvider] = useState<ProviderChoice>('fixture');
+  const [busyData, setBusyData] = useState(false);
+
+  async function runDataAction(action: () => Promise<void>) {
+    setBusyData(true);
+    try {
+      await action();
+    } catch (err) {
+      Alert.alert('Failed', err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyData(false);
+    }
+  }
+
+  async function pickAndImport() {
+    if (!isDatabaseEmpty(db)) {
+      Alert.alert(
+        'Import needs an empty database',
+        'Imports never merge. Clear the app data first (or reinstall) and import into a fresh start.',
+      );
+      return;
+    }
+    const picked = await DocumentPicker.getDocumentAsync({
+      type: ['application/zip', 'application/octet-stream'],
+      copyToCacheDirectory: true,
+    });
+    if (picked.canceled || !picked.assets[0]) return;
+    await runDataAction(async () => {
+      const summary = await importBackupZip(db, picked.assets[0].uri);
+      Alert.alert(
+        'Import complete',
+        `Restored ${summary.bins} bins, ${summary.items} items, ${summary.photos} photos.`,
+      );
+    });
+  }
   const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
   const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
 
@@ -116,9 +157,9 @@ export default function SettingsScreen() {
         ))}
       </View>
       <Text style={styles.hint}>
-        Fixture returns canned results and works fully offline — the whole app is demo-able with
-        it. Claude and OpenAI do real recognition and each needs its own API key below. A local
-        on-device engine joins in Stage 5.
+        Fixture returns canned results and works fully offline. Local runs ML Kit on-device
+        (dev build only) — generic names, no brands or labels, works with no connection and no
+        key. Claude and OpenAI do full recognition and each needs its own API key below.
       </Text>
 
       <KeySection
@@ -152,6 +193,35 @@ export default function SettingsScreen() {
           await testOpenAiConnection(key);
         }}
       />
+
+      <Text style={styles.sectionTitle}>Data</Text>
+      <Text style={styles.hint}>
+        The backup zip holds everything — bins, items, scan history, and photos. CSV is one row
+        per item for Excel/Sheets. Import only restores into an empty database.
+      </Text>
+      <View style={styles.buttonRow}>
+        <Pressable
+          style={[styles.primaryButton, busyData && styles.disabled]}
+          disabled={busyData}
+          onPress={() => runDataAction(() => exportBackupZip(db))}
+        >
+          <Text style={styles.primaryLabel}>Export backup</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.secondaryButton, busyData && styles.disabled]}
+          disabled={busyData}
+          onPress={() => runDataAction(() => exportInventoryCsv(db))}
+        >
+          <Text style={styles.secondaryLabel}>Export CSV</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.secondaryButton, busyData && styles.disabled]}
+          disabled={busyData}
+          onPress={pickAndImport}
+        >
+          <Text style={styles.secondaryLabel}>Import backup</Text>
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }

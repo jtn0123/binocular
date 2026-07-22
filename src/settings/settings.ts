@@ -9,9 +9,9 @@ const ANTHROPIC_KEY = 'binocular.anthropic_api_key';
 const OPENAI_KEY = 'binocular.openai_api_key';
 const PROVIDER = 'binocular.vision_provider';
 
-export type ProviderChoice = 'fixture' | 'claude' | 'openai';
+export type ProviderChoice = 'fixture' | 'local' | 'claude' | 'openai';
 
-const PROVIDER_CHOICES: readonly ProviderChoice[] = ['fixture', 'claude', 'openai'];
+const PROVIDER_CHOICES: readonly ProviderChoice[] = ['fixture', 'local', 'claude', 'openai'];
 
 function defaultProvider(): ProviderChoice {
   const env = process.env.EXPO_PUBLIC_VISION_PROVIDER;

@@ -6,7 +6,19 @@ import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native
 
 import { PromptModal, type PromptRequest } from '@/components/PromptModal';
 import { useDb } from '@/db/DbProvider';
-import { deleteBinIfEmpty, getBin, getShelf, itemsForBin, renameBin } from '@/db/queries';
+import {
+  checkOutItem,
+  deleteBinIfEmpty,
+  getBin,
+  getShelf,
+  itemsForBin,
+  listAuditHistory,
+  renameBin,
+  returnItem,
+  setItemQuantity,
+  setLowStockThreshold,
+  type ItemRow,
+} from '@/db/queries';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { printLabelSheet } from '@/qr/print';
 import { colors, mono, radius, sp, type } from '@/theme';
@@ -49,6 +61,63 @@ export default function BinDetailScreen() {
   }
   const items = itemsForBin(db, bin.id);
   const shelf = bin.shelf_id ? getShelf(db, bin.shelf_id) : null;
+  const history = listAuditHistory(db, bin.id);
+
+  function openItemMenu(item: ItemRow) {
+    const buttons = [
+      item.checked_out_to
+        ? {
+            text: `Return (out to ${item.checked_out_to})`,
+            onPress: () => {
+              returnItem(db, item.id);
+              setTick((t) => t + 1);
+            },
+          }
+        : {
+            text: 'Check out to…',
+            onPress: () =>
+              setPrompt({
+                title: `Check out ${item.name} to…`,
+                placeholder: 'e.g. Sam',
+                submitLabel: 'Check out',
+                onSubmit: (who) => {
+                  checkOutItem(db, item.id, who);
+                  setTick((t) => t + 1);
+                },
+              }),
+          },
+      {
+        text: 'Adjust quantity…',
+        onPress: () =>
+          setPrompt({
+            title: `Quantity of ${item.name}`,
+            initialValue: String(item.quantity),
+            keyboardType: 'number-pad' as const,
+            onSubmit: (value) => {
+              setItemQuantity(db, item.id, parseInt(value, 10) || 0);
+              setTick((t) => t + 1);
+            },
+          }),
+      },
+      {
+        text: item.low_stock_threshold === null ? 'Set low-stock alert…' : 'Change low-stock alert…',
+        onPress: () =>
+          setPrompt({
+            title: `Alert when ${item.name} is at or below…`,
+            initialValue: item.low_stock_threshold === null ? '' : String(item.low_stock_threshold),
+            placeholder: '10 (0 clears it)',
+            keyboardType: 'number-pad' as const,
+            onSubmit: (value) => {
+              const threshold = parseInt(value, 10) || 0;
+              setLowStockThreshold(db, item.id, threshold > 0 ? threshold : null);
+              setTick((t) => t + 1);
+            },
+          }),
+      },
+      { text: 'Cancel', style: 'cancel' as const },
+    ];
+    Alert.alert(item.name, undefined, buttons);
+  }
 
   async function printLabel() {
     if (!bin) return;
@@ -123,11 +192,33 @@ export default function BinDetailScreen() {
               <ActionChip icon="print" label="Label" onPress={printLabel} />
               <ActionChip icon="trash" label="Delete" danger onPress={confirmDelete} />
             </View>
+            {history.length > 1 && (
+              <View>
+                <Text style={styles.historyTitle}>Audit history</Text>
+                <FlatList
+                  horizontal
+                  data={history}
+                  keyExtractor={(scan) => scan.id}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 8 }}
+                  renderItem={({ item: scan }) => (
+                    <View style={styles.historyCell}>
+                      <Image
+                        source={{ uri: scan.photo_uri }}
+                        style={styles.historyThumb}
+                        contentFit="cover"
+                      />
+                      <Text style={styles.historyDate}>{scan.created_at.slice(0, 10)}</Text>
+                    </View>
+                  )}
+                />
+              </View>
+            )}
           </View>
         }
         ListEmptyComponent={<Text style={styles.empty}>Nothing recorded in this bin yet.</Text>}
         renderItem={({ item }) => (
-          <View style={styles.itemRow}>
+          <Pressable style={styles.itemRow} onLongPress={() => openItemMenu(item)} delayLongPress={300}>
             <Text style={styles.itemQty}>{item.quantity}×</Text>
             <View style={styles.itemMain}>
               <Text style={styles.itemName}>
@@ -135,9 +226,15 @@ export default function BinDetailScreen() {
                 {item.name}
               </Text>
               {item.label_text ? <Text style={styles.itemLabel}>{item.label_text}</Text> : null}
+              {item.checked_out_to ? (
+                <Text style={styles.itemOut}>checked out to {item.checked_out_to}</Text>
+              ) : null}
+              {item.low_stock_threshold !== null && item.quantity <= item.low_stock_threshold ? (
+                <Text style={styles.itemLow}>running low</Text>
+              ) : null}
             </View>
             <Text style={styles.itemCategory}>{item.category.replace(/_/g, ' ')}</Text>
-          </View>
+          </Pressable>
         )}
       />
       <PromptModal request={prompt} onClose={() => setPrompt(null)} />
@@ -191,5 +288,18 @@ const styles = StyleSheet.create({
   itemName: { ...type.body, fontSize: 16 },
   itemLabel: { fontSize: 12, color: colors.textFaint, fontFamily: mono },
   itemCategory: { fontSize: 11, color: colors.textFaint },
+  itemOut: { fontSize: 11, color: colors.warn },
+  itemLow: { fontSize: 11, color: colors.danger },
+  historyTitle: { ...type.stamp, marginBottom: sp(1.5), marginTop: sp(1) },
+  historyCell: { alignItems: 'center', gap: 2 },
+  historyThumb: {
+    width: 72,
+    height: 54,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceSunken,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  historyDate: { fontSize: 10, color: colors.textFaint, fontFamily: mono },
   empty: { ...type.dim, paddingVertical: sp(6), textAlign: 'center' },
 });

@@ -357,6 +357,78 @@ export function deleteItemsForBin(db: DbAdapter, binId: string): void {
   db.runSync('DELETE FROM items WHERE bin_id = ?', [binId]);
 }
 
+// ---------------------------------------------------- stage 6: daily driver
+
+export function checkOutItem(db: DbAdapter, itemId: string, toWhom: string): void {
+  db.runSync('UPDATE items SET checked_out_to = ?, updated_at = ? WHERE id = ?', [
+    toWhom,
+    nowIso(),
+    itemId,
+  ]);
+}
+
+export function returnItem(db: DbAdapter, itemId: string): void {
+  db.runSync('UPDATE items SET checked_out_to = NULL, updated_at = ? WHERE id = ?', [
+    nowIso(),
+    itemId,
+  ]);
+}
+
+export interface ItemWithBin extends ItemRow {
+  bin_code: string | null;
+  bin_name: string | null;
+}
+
+export function listCheckedOutItems(db: DbAdapter): ItemWithBin[] {
+  return db.getAllSync<ItemWithBin>(
+    `SELECT items.*, bins.short_code AS bin_code, bins.name AS bin_name
+     FROM items LEFT JOIN bins ON bins.id = items.bin_id
+     WHERE items.checked_out_to IS NOT NULL
+     ORDER BY items.updated_at DESC`,
+  );
+}
+
+export function setLowStockThreshold(
+  db: DbAdapter,
+  itemId: string,
+  threshold: number | null,
+): void {
+  db.runSync('UPDATE items SET low_stock_threshold = ?, updated_at = ? WHERE id = ?', [
+    threshold,
+    nowIso(),
+    itemId,
+  ]);
+}
+
+export function setItemQuantity(db: DbAdapter, itemId: string, quantity: number): void {
+  db.runSync('UPDATE items SET quantity = ?, updated_at = ? WHERE id = ?', [
+    Math.max(0, quantity),
+    nowIso(),
+    itemId,
+  ]);
+}
+
+/** Consumables at or below their low-stock threshold (blueprint Q2 coarse). */
+export function listLowStockItems(db: DbAdapter): ItemWithBin[] {
+  return db.getAllSync<ItemWithBin>(
+    `SELECT items.*, bins.short_code AS bin_code, bins.name AS bin_name
+     FROM items LEFT JOIN bins ON bins.id = items.bin_id
+     WHERE items.low_stock_threshold IS NOT NULL
+       AND items.quantity <= items.low_stock_threshold
+     ORDER BY items.name`,
+  );
+}
+
+/** Confirmed audit photos for the bin-detail history timeline (Q3). */
+export function listAuditHistory(db: DbAdapter, binId: string): ScanRow[] {
+  return db.getAllSync<ScanRow>(
+    `SELECT * FROM scans
+     WHERE bin_id = ? AND mode = 'bin_audit' AND status = 'confirmed' AND photo_uri != ''
+     ORDER BY created_at DESC`,
+    [binId],
+  );
+}
+
 export function countItems(db: DbAdapter): number {
   const row = db.getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM items');
   return row?.n ?? 0;

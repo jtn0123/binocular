@@ -6,7 +6,15 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 
 import { CodeTag } from '@/components/CodeTag';
 import { useDb } from '@/db/DbProvider';
-import { countItemsForBin, listRecentBins, type BinRow } from '@/db/queries';
+import {
+  countItemsForBin,
+  listCheckedOutItems,
+  listLowStockItems,
+  listRecentBins,
+  returnItem,
+  type BinRow,
+  type ItemWithBin,
+} from '@/db/queries';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { searchItems, type SearchResult } from '@/search/fts';
 import { colors, radius, sp, type } from '@/theme';
@@ -70,15 +78,52 @@ function ResultRow({ result, onPress }: { result: SearchResult; onPress: () => v
   );
 }
 
+function StatusRow({
+  item,
+  detail,
+  actionLabel,
+  onAction,
+  onOpen,
+}: {
+  item: ItemWithBin;
+  detail: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  onOpen: () => void;
+}) {
+  return (
+    <Pressable style={styles.statusRow} onPress={onOpen}>
+      {item.bin_code ? <CodeTag code={item.bin_code} small /> : null}
+      <View style={styles.statusMain}>
+        <Text style={styles.statusName} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <Text style={styles.statusDetail} numberOfLines={1}>
+          {detail}
+        </Text>
+      </View>
+      {actionLabel && onAction ? (
+        <Pressable style={styles.statusAction} onPress={onAction}>
+          <Text style={styles.statusActionLabel}>{actionLabel}</Text>
+        </Pressable>
+      ) : null}
+    </Pressable>
+  );
+}
+
 export default function HomeScreen() {
   const db = useDb();
   const router = useRouter();
   useFocusTick();
   const [query, setQuery] = useState('');
 
+  const [tick, setTick] = useState(0);
+  void tick;
   const trimmed = query.trim();
   const results = trimmed ? searchItems(db, trimmed, 50) : [];
   const recentBins = trimmed ? [] : listRecentBins(db, 12);
+  const checkedOut = trimmed ? [] : listCheckedOutItems(db);
+  const lowStock = trimmed ? [] : listLowStockItems(db);
 
   return (
     <View style={styles.container}>
@@ -126,6 +171,43 @@ export default function HomeScreen() {
         </>
       ) : (
         <>
+          {checkedOut.length > 0 && (
+            <View style={styles.statusBlock}>
+              <Text style={styles.stamp}>Checked out</Text>
+              {checkedOut.map((item) => (
+                <StatusRow
+                  key={item.id}
+                  item={item}
+                  detail={`with ${item.checked_out_to}`}
+                  actionLabel="Return"
+                  onAction={() => {
+                    returnItem(db, item.id);
+                    setTick((t) => t + 1);
+                  }}
+                  onOpen={() =>
+                    item.bin_id &&
+                    router.push({ pathname: '/bin/[id]', params: { id: item.bin_id } })
+                  }
+                />
+              ))}
+            </View>
+          )}
+          {lowStock.length > 0 && (
+            <View style={styles.statusBlock}>
+              <Text style={styles.stamp}>Running low</Text>
+              {lowStock.map((item) => (
+                <StatusRow
+                  key={item.id}
+                  item={item}
+                  detail={`${item.quantity} left (alert at ${item.low_stock_threshold})`}
+                  onOpen={() =>
+                    item.bin_id &&
+                    router.push({ pathname: '/bin/[id]', params: { id: item.bin_id } })
+                  }
+                />
+              ))}
+            </View>
+          )}
           <Text style={styles.stamp}>Recent bins</Text>
           <FlatList
             data={recentBins}
@@ -179,4 +261,25 @@ const styles = StyleSheet.create({
   crumbRow: { flexDirection: 'row', alignItems: 'center', gap: sp(2) },
   checkedOut: { fontSize: 11, color: colors.warn },
   empty: { ...type.dim, paddingVertical: sp(6), textAlign: 'center' },
+  statusBlock: { gap: sp(2) },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(2.5),
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: sp(2.5),
+  },
+  statusMain: { flex: 1 },
+  statusName: { ...type.body, fontWeight: '600', fontSize: 14 },
+  statusDetail: { ...type.dim, fontSize: 12 },
+  statusAction: {
+    backgroundColor: colors.amber,
+    paddingHorizontal: sp(2.75),
+    paddingVertical: sp(1.5),
+    borderRadius: radius.pill,
+  },
+  statusActionLabel: { color: colors.amberInkOn, fontWeight: '700', fontSize: 12 },
 });
