@@ -51,6 +51,7 @@ blueprint edits instead.
 | D11 | Photos per scan | Exactly one still image in v1; `VisionProvider.recognize` takes a photo *array* so multi-photo/video is additive later | Start small; the array type costs nothing now, while an interface change later would churn every provider |
 | D12 | Export | CSV export of all items (Excel-compatible) ships in v1 | The whole inventory belongs in a spreadsheet too; one row per item with location/shelf/bin breadcrumb columns |
 | D13 | QR payload | Typed: `binoc:v1:<type>:<uuid>`, type ∈ `bin \| shelf \| location` | Shelf/location labels enable move mode (§8.5); typing the payload costs nothing before any label is printed |
+| D14 | Cloud engines | Two cloud engines ship in v1 — Anthropic Claude and OpenAI — behind the same `VisionProvider` contract, each isolated in its own provider file with its own API key in Settings | User choice on cost/quality/account; the §6.1 schema and §6.2 prompt are engine-neutral, so a second cloud engine is pure provider code |
 
 ---
 
@@ -72,6 +73,7 @@ src/
     types.ts            # RecognitionResult, zod schemas
     provider.ts         # VisionProvider interface
     claudeProvider.ts   # the ONLY file that imports/knows the Anthropic API
+    openaiProvider.ts   # the ONLY file that knows the OpenAI API (raw fetch)
     localProvider.ts    # on-device labeling (ML Kit / TF Lite); offline engine
     fixtureProvider.ts  # returns canned JSON; used in dev & tests
   queue/
@@ -86,8 +88,9 @@ src/
 **Hard boundary rules**
 
 - Nothing outside `src/vision/claudeProvider.ts` may import the Anthropic
-  SDK or reference its API shapes. Likewise, on-device ML imports live only
-  in `src/vision/localProvider.ts`.
+  SDK or reference its API shapes. Likewise, the OpenAI API surface lives
+  only in `src/vision/openaiProvider.ts` and on-device ML imports only in
+  `src/vision/localProvider.ts`.
 - Nothing outside `src/db/` writes raw SQL.
 - Screens never call the vision provider directly — they enqueue a scan and
   navigate to the review screen when it resolves.
@@ -192,7 +195,7 @@ export class VisionError extends Error {
 }
 ```
 
-Three implementations ship in v1:
+Four implementations ship in v1:
 
 - **`fixtureProvider`** — returns canned fixture JSON keyed by mode, with an
   artificial delay. This is the default in development and the only provider
@@ -202,9 +205,14 @@ Three implementations ship in v1:
   cannot read labels or brands — `brand` and `label_text` are always null,
   names are generic, and confidence follows the same §6.3 rubric (in practice
   `medium`/`low`). Same contract, same review screen, no special-casing.
-- **`claudeProvider`** — the cloud engine. Needs an API key configured.
+- **`claudeProvider`** — cloud engine via the Anthropic API. Needs an
+  Anthropic API key configured.
+- **`openaiProvider`** — cloud engine via the OpenAI Responses API (D14),
+  implemented with raw fetch — no SDK dependency. Needs an OpenAI API key
+  configured. Same §6.2 prompt, same §6.1 schema enforced via strict
+  structured outputs, same parse + one-repair-retry rule.
 
-Engine selection: a Settings picker (fixture / local / claude);
+Engine selection: a Settings picker (fixture / local / claude / openai);
 `EXPO_PUBLIC_VISION_PROVIDER` sets the build-time default. Switching engines
 must not require an app restart.
 
@@ -550,8 +558,9 @@ Before declaring any task done, verify:
 2. **No percentages** — confidence appears only as the enum and its UI
    mapping. Grep for `%` near confidence code if unsure.
 3. **Provider isolation** — Anthropic imports exist only in
-   `claudeProvider.ts`, on-device ML imports only in `localProvider.ts`;
-   the app runs fully on the fixture provider.
+   `claudeProvider.ts`, the OpenAI API surface only in `openaiProvider.ts`,
+   on-device ML imports only in `localProvider.ts`; the app runs fully on
+   the fixture provider.
 4. **Offline-first** — every screen except live recognition works in
    airplane mode.
 5. **Boundary validation** — every AI response and QR payload passes through
