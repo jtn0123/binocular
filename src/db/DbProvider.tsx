@@ -10,14 +10,16 @@ const DbContext = createContext<DbAdapter | null>(null);
 
 /**
  * Opens the app database, applies migrations, and (dev only) seeds demo
- * data before rendering children.
+ * data before rendering children. Tests inject a Node adapter via the
+ * optional `adapter` prop instead of opening expo-sqlite.
  */
-export function DbProvider({ children }: { children: ReactNode }) {
+export function DbProvider({ children, adapter }: { children: ReactNode; adapter?: DbAdapter }) {
   const [db] = useState<DbAdapter>(() => {
-    const adapter = createExpoAdapter(openDatabaseSync('binocular.db'));
-    runMigrations(adapter);
-    if (__DEV__) seedIfEmpty(adapter);
-    return adapter;
+    if (adapter) return adapter;
+    const opened = createExpoAdapter(openDatabaseSync('binocular.db'));
+    runMigrations(opened);
+    if (__DEV__) seedIfEmpty(opened);
+    return opened;
   });
   return <DbContext.Provider value={db}>{children}</DbContext.Provider>;
 }

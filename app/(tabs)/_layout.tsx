@@ -1,9 +1,20 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Tabs } from 'expo-router';
+import { Link, Tabs } from 'expo-router';
+import { Pressable } from 'react-native';
+
+function SettingsGear() {
+  return (
+    <Link href="/settings" asChild>
+      <Pressable style={{ paddingHorizontal: 16 }} accessibilityLabel="Settings">
+        <Ionicons name="settings-outline" size={22} color="#444" />
+      </Pressable>
+    </Link>
+  );
+}
 
 export default function TabsLayout() {
   return (
-    <Tabs>
+    <Tabs screenOptions={{ headerRight: () => <SettingsGear /> }}>
       <Tabs.Screen
         name="index"
         options={{

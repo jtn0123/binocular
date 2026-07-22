@@ -78,41 +78,41 @@ CSV export needs no dependency — escaping is hand-rolled (and unit-tested).
 review chips → saved bin contents.
 
 ### Tasks
-- [ ] **Capture flow** (`app/(tabs)/scan.tsx` → camera screen): mode picker
+- [x] **Capture flow** (`app/(tabs)/scan.tsx` → camera screen): mode picker
       (only "Audit bin" enabled), manual bin picker (QR comes in Stage 2),
       capture with "fill the frame with the open bin" hint overlay.
-- [ ] **Photo pipeline**: save original to app storage; make an upload
+- [x] **Photo pipeline**: save original to app storage; make an upload
       variant via `expo-image-manipulator` (max 1568px long edge, JPEG q80).
-- [ ] **Scan lifecycle**: `insertScan(status='queued')` in the same
+- [x] **Scan lifecycle**: `insertScan(status='queued')` in the same
       transaction as photo bookkeeping → set `processing` → call provider →
       store `raw_response` → set `review` (or `failed`). Simple inline
       await for now; the real queue with backoff is Stage 4 — but statuses
       and the transaction shape must match blueprint §9 from the start.
-- [ ] **Prompt builder** `src/vision/prompt.ts`: template from blueprint
+- [x] **Prompt builder** `src/vision/prompt.ts`: template from blueprint
       §6.2 with `binName` / `existingItems` interpolation. Unit-test the
       interpolation.
-- [ ] **`claudeProvider.ts`**: per blueprint §6.4 — safeParse, one repair
+- [x] **`claudeProvider.ts`**: per blueprint §6.4 — safeParse, one repair
       retry with validation errors appended, `VisionError` taxonomy
       (`network`/`auth`/`invalid_response`/`rate_limit`). Selected only when
       `EXPO_PUBLIC_VISION_PROVIDER=claude`.
-- [ ] **Settings screen**: API key entry stored in `expo-secure-store`;
+- [x] **Settings screen**: API key entry stored in `expo-secure-store`;
       provider picker (fixture/claude — local joins in Stage 5); "test
       connection" button.
       *(Resolves blueprint Q1 with its default: on-device key, personal use.)*
-- [ ] **Review screen** (`review/[scanId]`): editable chips with the exact
+- [x] **Review screen** (`review/[scanId]`): editable chips with the exact
       confidence mapping from blueprint §6.3 (high = pre-selected;
       medium = pre-selected + amber dot; low = de-selected until tapped).
       Inline edit of name/quantity/category; delete; add-manually;
       `scene_notes` banner when present.
-- [ ] **Merge diff grouping**: auditing a non-empty bin in Merge mode groups
+- [x] **Merge diff grouping**: auditing a non-empty bin in Merge mode groups
       chips into new / still here / not seen in this photo; "not seen"
       defaults to *keep* — removal requires an explicit tap (blueprint §8.1
       step 6).
-- [ ] **Save action**: Replace vs Merge choice (default per blueprint §8.1);
+- [x] **Save action**: Replace vs Merge choice (default per blueprint §8.1);
       writes items with `source_scan_id`, sets scan `confirmed`, updates
       bin `last_scanned_at` + cover photo. Discard path sets `discarded`.
-- [ ] **Bin detail** (`bin/[id]`): cover photo, item list, last-scanned.
-- [ ] Component test: review screen renders a fixture response; a `low`
+- [x] **Bin detail** (`bin/[id]`): cover photo, item list, last-scanned.
+- [x] Component test: review screen renders a fixture response; a `low`
       item is not selected by default; save persists exactly the selected
       chips; in a merge audit a "not seen" existing item survives save
       unless explicitly tapped for removal.

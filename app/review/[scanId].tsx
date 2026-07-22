@@ -1,18 +1,23 @@
-import { useLocalSearchParams } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
-export default function ReviewScreen() {
+import { ReviewScreen } from '@/review/ReviewScreen';
+
+export default function ReviewRoute() {
   const { scanId } = useLocalSearchParams<{ scanId: string }>();
+  const router = useRouter();
+  if (!scanId) return null;
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Recognition review</Text>
-      <Text style={styles.body}>Review chips arrive in Stage 1. Scan: {scanId}</Text>
-    </View>
+    <ReviewScreen
+      scanId={scanId}
+      onDone={(binId) => {
+        if (binId) {
+          router.replace({ pathname: '/bin/[id]', params: { id: binId } });
+        } else if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/');
+        }
+      }}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 24 },
-  title: { fontSize: 22, fontWeight: '700' },
-  body: { color: '#666', textAlign: 'center' },
-});

@@ -10,6 +10,8 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="bin/[id]" options={{ title: 'Bin' }} />
         <Stack.Screen name="review/[scanId]" options={{ title: 'Review scan' }} />
+        <Stack.Screen name="capture" options={{ headerShown: false }} />
+        <Stack.Screen name="settings" options={{ title: 'Settings' }} />
       </Stack>
       <StatusBar style="auto" />
     </DbProvider>
