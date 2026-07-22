@@ -65,10 +65,10 @@ CSV export needs no dependency — escaping is hand-rolled (and unit-tested).
 - [x] GitHub Actions: `lint` + `typecheck` + `test` on push/PR.
 
 ### Exit criteria
-- [ ] App boots on an Android emulator; three tabs render; Browse shows
+- [x] App boots on an Android emulator; three tabs render; Browse shows
       seeded bins.
-- [ ] CI green.
-- [ ] Blueprint §11 invariants 3, 6, 7 spot-checked.
+- [x] CI green.
+- [x] Blueprint §11 invariants 3, 6, 7 spot-checked.
 
 ---
 
