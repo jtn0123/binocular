@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -199,6 +200,7 @@ export function ReviewScreen({
   }
 
   function discard() {
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     updateScanStatus(db, scanId, 'discarded', { resolvedAt: nowIso() });
     onDone(scan?.bin_id ?? null);
   }
@@ -237,6 +239,7 @@ export function ReviewScreen({
         });
       }
     });
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onDone(binId);
   }
 

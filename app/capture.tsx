@@ -1,4 +1,5 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -43,6 +44,7 @@ export default function CaptureScreen() {
     if (!cameraRef.current || busy !== 'idle') return;
     if (mode === 'bin_audit' && !params.binId) return;
     setBusy('capturing');
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       const photo = await cameraRef.current.takePictureAsync();
       // Photo persisted + scan row queued first — a kill or network loss

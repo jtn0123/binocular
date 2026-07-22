@@ -275,9 +275,9 @@ the cloud engine.
 ### Tasks
 - [ ] Run every prior stage's manual test script on iOS; log and fix
       platform issues (camera permissions flow, safe areas, share sheet).
-- [ ] Haptics on capture/save; empty states for every list; app icon +
-      splash.
-- [ ] README update: real setup instructions replacing the "not yet
+- [x] Haptics on capture/save/discard; empty states exist for every list;
+      icon + splash still the template set (custom art parked).
+- [x] README update: real setup instructions replacing the "not yet
       scaffolded" note.
 
 ### Exit criteria
