@@ -43,26 +43,26 @@ CSV export needs no dependency — escaping is hand-rolled (and unit-tested).
 **Goal:** boring, boot-able foundation. Everything after this is features.
 
 ### Tasks
-- [ ] `npx create-expo-app` with the TypeScript template; enable `strict`
+- [x] `npx create-expo-app` with the TypeScript template; enable `strict`
       in `tsconfig.json`; add ESLint + Prettier configs and npm scripts
       (`lint`, `typecheck`, `test`).
-- [ ] expo-router scaffold matching blueprint §3: `(tabs)/index` (Home),
+- [x] expo-router scaffold matching blueprint §3: `(tabs)/index` (Home),
       `(tabs)/scan`, `(tabs)/browse`, plus empty `bin/[id]` and
       `review/[scanId]` routes with placeholder screens.
-- [ ] `src/db/schema.ts`: migration runner (ordered array of SQL strings,
+- [x] `src/db/schema.ts`: migration runner (ordered array of SQL strings,
       `PRAGMA user_version` bookkeeping) + migration 001 containing the full
       schema from blueprint §4 including the FTS5 table.
-- [ ] `src/db/queries.ts`: typed helpers — `createBin`, `getBin`,
+- [x] `src/db/queries.ts`: typed helpers — `createBin`, `getBin`,
       `listBins`, `itemsForBin`, `insertScan`, `updateScanStatus`. No raw
       SQL outside `src/db/` from day one.
-- [ ] `src/vision/types.ts`: zod schemas verbatim from blueprint §6.1.
-- [ ] `src/vision/provider.ts` + `src/vision/fixtureProvider.ts` with two
+- [x] `src/vision/types.ts`: zod schemas verbatim from blueprint §6.1.
+- [x] `src/vision/provider.ts` + `src/vision/fixtureProvider.ts` with two
       fixtures (a bin-audit response, a check-in response) and a ~1.5s
       artificial delay.
-- [ ] Seed script (`npm run seed`): 1 location, 2 shelves, 4 bins, ~12 items.
-- [ ] Jest: unit tests for the migration runner (fresh DB → all tables
+- [x] Seed script (`npm run seed`): 1 location, 2 shelves, 4 bins, ~12 items.
+- [x] Jest: unit tests for the migration runner (fresh DB → all tables
       exist) and zod schema (valid fixture parses; malformed JSON rejects).
-- [ ] GitHub Actions: `lint` + `typecheck` + `test` on push/PR.
+- [x] GitHub Actions: `lint` + `typecheck` + `test` on push/PR.
 
 ### Exit criteria
 - [ ] App boots on an Android emulator; three tabs render; Browse shows
