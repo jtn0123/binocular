@@ -73,6 +73,13 @@ export default function ScanScreen() {
           <Text style={styles.modeBody}>Arrives in Stage 3</Text>
         </View>
       </View>
+      <Pressable style={styles.mode} onPress={() => router.push('/scan-code')}>
+        <Ionicons name="qr-code" size={28} color="#208AEF" />
+        <View style={styles.modeMain}>
+          <Text style={styles.modeTitle}>Scan a label</Text>
+          <Text style={styles.modeBody}>Point at a bin or shelf label to jump to it</Text>
+        </View>
+      </Pressable>
     </View>
   );
 }

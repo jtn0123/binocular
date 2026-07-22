@@ -1,33 +1,45 @@
 import * as SecureStore from 'expo-secure-store';
 
 /**
- * Blueprint Q1 default: personal-use app, API key entered in Settings and
+ * Blueprint Q1 default: personal-use app, API keys entered in Settings and
  * kept in the platform secure store — never in plain storage or the bundle.
+ * One key per cloud engine (D14).
  */
-const API_KEY = 'binocular.anthropic_api_key';
+const ANTHROPIC_KEY = 'binocular.anthropic_api_key';
+const OPENAI_KEY = 'binocular.openai_api_key';
 const PROVIDER = 'binocular.vision_provider';
 
-export type ProviderChoice = 'fixture' | 'claude';
+export type ProviderChoice = 'fixture' | 'claude' | 'openai';
+
+const PROVIDER_CHOICES: readonly ProviderChoice[] = ['fixture', 'claude', 'openai'];
 
 function defaultProvider(): ProviderChoice {
-  return process.env.EXPO_PUBLIC_VISION_PROVIDER === 'claude' ? 'claude' : 'fixture';
+  const env = process.env.EXPO_PUBLIC_VISION_PROVIDER;
+  return PROVIDER_CHOICES.includes(env as ProviderChoice) ? (env as ProviderChoice) : 'fixture';
 }
 
-export async function getApiKey(): Promise<string | null> {
-  return SecureStore.getItemAsync(API_KEY);
+async function getStoredKey(storageKey: string): Promise<string | null> {
+  return SecureStore.getItemAsync(storageKey);
 }
 
-export async function setApiKey(key: string | null): Promise<void> {
-  if (key && key.trim().length > 0) {
-    await SecureStore.setItemAsync(API_KEY, key.trim());
+async function setStoredKey(storageKey: string, value: string | null): Promise<void> {
+  if (value && value.trim().length > 0) {
+    await SecureStore.setItemAsync(storageKey, value.trim());
   } else {
-    await SecureStore.deleteItemAsync(API_KEY);
+    await SecureStore.deleteItemAsync(storageKey);
   }
 }
 
+export const getApiKey = () => getStoredKey(ANTHROPIC_KEY);
+export const setApiKey = (key: string | null) => setStoredKey(ANTHROPIC_KEY, key);
+export const getOpenAiApiKey = () => getStoredKey(OPENAI_KEY);
+export const setOpenAiApiKey = (key: string | null) => setStoredKey(OPENAI_KEY, key);
+
 export async function getProviderChoice(): Promise<ProviderChoice> {
   const stored = await SecureStore.getItemAsync(PROVIDER);
-  return stored === 'claude' || stored === 'fixture' ? stored : defaultProvider();
+  return PROVIDER_CHOICES.includes(stored as ProviderChoice)
+    ? (stored as ProviderChoice)
+    : defaultProvider();
 }
 
 export async function setProviderChoice(choice: ProviderChoice): Promise<void> {

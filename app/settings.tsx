@@ -3,84 +3,47 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 
 import {
   getApiKey,
+  getOpenAiApiKey,
   getProviderChoice,
   setApiKey,
+  setOpenAiApiKey,
   setProviderChoice,
   type ProviderChoice,
 } from '@/settings/settings';
 import { testClaudeConnection } from '@/vision/claudeProvider';
+import { testOpenAiConnection } from '@/vision/openaiProvider';
 
-export default function SettingsScreen() {
+const ENGINE_LABELS: Record<ProviderChoice, string> = {
+  fixture: 'Fixture (demo)',
+  claude: 'Claude',
+  openai: 'OpenAI',
+};
+
+function KeySection({
+  title,
+  placeholder,
+  hasStoredKey,
+  onSave,
+  onTest,
+}: {
+  title: string;
+  placeholder: string;
+  hasStoredKey: boolean;
+  onSave: (key: string) => Promise<void>;
+  onTest: (enteredKey: string) => Promise<void>;
+}) {
   const [keyInput, setKeyInput] = useState('');
-  const [hasStoredKey, setHasStoredKey] = useState(false);
-  const [provider, setProvider] = useState<ProviderChoice>('fixture');
   const [testing, setTesting] = useState(false);
 
-  useEffect(() => {
-    void (async () => {
-      setHasStoredKey((await getApiKey()) !== null);
-      setProvider(await getProviderChoice());
-    })();
-  }, []);
-
-  async function saveKey() {
-    await setApiKey(keyInput);
-    setHasStoredKey(keyInput.trim().length > 0);
-    setKeyInput('');
-    Alert.alert('Saved', 'API key stored in the device secure store.');
-  }
-
-  async function pickProvider(choice: ProviderChoice) {
-    setProvider(choice);
-    await setProviderChoice(choice);
-  }
-
-  async function testConnection() {
-    const key = keyInput.trim() || (await getApiKey());
-    if (!key) {
-      Alert.alert('No key', 'Enter or save an API key first.');
-      return;
-    }
-    setTesting(true);
-    try {
-      await testClaudeConnection(key);
-      Alert.alert('Success', 'The API key works.');
-    } catch (err) {
-      Alert.alert('Connection failed', err instanceof Error ? err.message : String(err));
-    } finally {
-      setTesting(false);
-    }
-  }
-
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.sectionTitle}>Recognition engine</Text>
-      <View style={styles.providerRow}>
-        {(['fixture', 'claude'] as const).map((choice) => (
-          <Pressable
-            key={choice}
-            style={[styles.providerButton, provider === choice && styles.providerActive]}
-            onPress={() => pickProvider(choice)}
-          >
-            <Text style={[styles.providerLabel, provider === choice && styles.providerLabelActive]}>
-              {choice === 'fixture' ? 'Fixture (demo)' : 'Claude (cloud)'}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      <Text style={styles.hint}>
-        Fixture returns canned results and works fully offline — the whole app is demo-able with
-        it. Claude does real recognition and needs an API key. A local on-device engine joins in
-        Stage 5.
-      </Text>
-
-      <Text style={styles.sectionTitle}>Anthropic API key</Text>
+    <View style={styles.keySection}>
+      <Text style={styles.sectionTitle}>{title}</Text>
       <Text style={styles.hint}>
         {hasStoredKey ? 'A key is stored in the secure store.' : 'No key stored yet.'}
       </Text>
       <TextInput
         style={styles.input}
-        placeholder={hasStoredKey ? 'Enter a new key to replace it' : 'sk-ant-…'}
+        placeholder={hasStoredKey ? 'Enter a new key to replace it' : placeholder}
         value={keyInput}
         onChangeText={setKeyInput}
         autoCapitalize="none"
@@ -88,17 +51,106 @@ export default function SettingsScreen() {
         secureTextEntry
       />
       <View style={styles.buttonRow}>
-        <Pressable style={styles.primaryButton} onPress={saveKey}>
+        <Pressable
+          style={styles.primaryButton}
+          onPress={async () => {
+            await onSave(keyInput);
+            setKeyInput('');
+          }}
+        >
           <Text style={styles.primaryLabel}>{keyInput.trim() ? 'Save key' : 'Clear key'}</Text>
         </Pressable>
         <Pressable
           style={[styles.secondaryButton, testing && styles.disabled]}
-          onPress={testConnection}
           disabled={testing}
+          onPress={async () => {
+            setTesting(true);
+            try {
+              await onTest(keyInput.trim());
+              Alert.alert('Success', 'The API key works.');
+            } catch (err) {
+              Alert.alert('Connection failed', err instanceof Error ? err.message : String(err));
+            } finally {
+              setTesting(false);
+            }
+          }}
         >
           <Text style={styles.secondaryLabel}>{testing ? 'Testing…' : 'Test connection'}</Text>
         </Pressable>
       </View>
+    </View>
+  );
+}
+
+export default function SettingsScreen() {
+  const [provider, setProvider] = useState<ProviderChoice>('fixture');
+  const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
+  const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      setProvider(await getProviderChoice());
+      setHasAnthropicKey((await getApiKey()) !== null);
+      setHasOpenAiKey((await getOpenAiApiKey()) !== null);
+    })();
+  }, []);
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.sectionTitle}>Recognition engine</Text>
+      <View style={styles.providerRow}>
+        {(Object.keys(ENGINE_LABELS) as ProviderChoice[]).map((choice) => (
+          <Pressable
+            key={choice}
+            style={[styles.providerButton, provider === choice && styles.providerActive]}
+            onPress={async () => {
+              setProvider(choice);
+              await setProviderChoice(choice);
+            }}
+          >
+            <Text style={[styles.providerLabel, provider === choice && styles.providerLabelActive]}>
+              {ENGINE_LABELS[choice]}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={styles.hint}>
+        Fixture returns canned results and works fully offline — the whole app is demo-able with
+        it. Claude and OpenAI do real recognition and each needs its own API key below. A local
+        on-device engine joins in Stage 5.
+      </Text>
+
+      <KeySection
+        title="Anthropic API key (Claude)"
+        placeholder="sk-ant-…"
+        hasStoredKey={hasAnthropicKey}
+        onSave={async (key) => {
+          await setApiKey(key);
+          setHasAnthropicKey(key.trim().length > 0);
+          Alert.alert('Saved', 'Anthropic key updated in the secure store.');
+        }}
+        onTest={async (entered) => {
+          const key = entered || (await getApiKey());
+          if (!key) throw new Error('Enter or save an Anthropic key first.');
+          await testClaudeConnection(key);
+        }}
+      />
+
+      <KeySection
+        title="OpenAI API key"
+        placeholder="sk-…"
+        hasStoredKey={hasOpenAiKey}
+        onSave={async (key) => {
+          await setOpenAiApiKey(key);
+          setHasOpenAiKey(key.trim().length > 0);
+          Alert.alert('Saved', 'OpenAI key updated in the secure store.');
+        }}
+        onTest={async (entered) => {
+          const key = entered || (await getOpenAiApiKey());
+          if (!key) throw new Error('Enter or save an OpenAI key first.');
+          await testOpenAiConnection(key);
+        }}
+      />
     </ScrollView>
   );
 }
@@ -112,6 +164,7 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 8,
   },
+  keySection: { gap: 10 },
   providerRow: { flexDirection: 'row', gap: 8 },
   providerButton: {
     flex: 1,
@@ -122,7 +175,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   providerActive: { backgroundColor: '#208AEF', borderColor: '#208AEF' },
-  providerLabel: { color: '#444', fontWeight: '500' },
+  providerLabel: { color: '#444', fontWeight: '500', fontSize: 13 },
   providerLabelActive: { color: '#fff' },
   hint: { color: '#777', fontSize: 13, lineHeight: 18 },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 10, padding: 12, fontSize: 15 },

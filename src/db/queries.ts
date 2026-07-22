@@ -89,6 +89,29 @@ export function listLocations(db: DbAdapter): LocationRow[] {
   return db.getAllSync<LocationRow>('SELECT * FROM locations ORDER BY name');
 }
 
+export function getLocation(db: DbAdapter, id: string): LocationRow | null {
+  return db.getFirstSync<LocationRow>('SELECT * FROM locations WHERE id = ?', [id]);
+}
+
+export function renameLocation(db: DbAdapter, id: string, name: string): void {
+  db.runSync('UPDATE locations SET name = ? WHERE id = ?', [name, id]);
+}
+
+/**
+ * Deletes a location and its shelves. Bins are unassigned, never deleted
+ * (blueprint Stage 2 orphan rule).
+ */
+export function deleteLocation(db: DbAdapter, id: string): void {
+  db.withTransactionSync(() => {
+    db.runSync(
+      'UPDATE bins SET shelf_id = NULL WHERE shelf_id IN (SELECT id FROM shelves WHERE location_id = ?)',
+      [id],
+    );
+    db.runSync('DELETE FROM shelves WHERE location_id = ?', [id]);
+    db.runSync('DELETE FROM locations WHERE id = ?', [id]);
+  });
+}
+
 // ------------------------------------------------------------------ shelves
 
 export function createShelf(
@@ -114,6 +137,26 @@ export function listShelves(db: DbAdapter, locationId: string): ShelfRow[] {
   return db.getAllSync<ShelfRow>('SELECT * FROM shelves WHERE location_id = ? ORDER BY name', [
     locationId,
   ]);
+}
+
+export function listAllShelves(db: DbAdapter): ShelfRow[] {
+  return db.getAllSync<ShelfRow>('SELECT * FROM shelves ORDER BY name');
+}
+
+export function getShelf(db: DbAdapter, id: string): ShelfRow | null {
+  return db.getFirstSync<ShelfRow>('SELECT * FROM shelves WHERE id = ?', [id]);
+}
+
+export function renameShelf(db: DbAdapter, id: string, name: string): void {
+  db.runSync('UPDATE shelves SET name = ? WHERE id = ?', [name, id]);
+}
+
+/** Deletes a shelf; its bins become unassigned, never deleted. */
+export function deleteShelf(db: DbAdapter, id: string): void {
+  db.withTransactionSync(() => {
+    db.runSync('UPDATE bins SET shelf_id = NULL WHERE shelf_id = ?', [id]);
+    db.runSync('DELETE FROM shelves WHERE id = ?', [id]);
+  });
 }
 
 // --------------------------------------------------------------------- bins
@@ -171,6 +214,60 @@ export function listRecentBins(db: DbAdapter, limit = 10): BinRow[] {
     'SELECT * FROM bins ORDER BY COALESCE(last_scanned_at, created_at) DESC LIMIT ?',
     [limit],
   );
+}
+
+export function renameBin(db: DbAdapter, id: string, name: string): void {
+  db.runSync('UPDATE bins SET name = ? WHERE id = ?', [name, id]);
+}
+
+/** Move mode (blueprint §8.5): re-home a bin; null unassigns it. */
+export function moveBinToShelf(db: DbAdapter, binId: string, shelfId: string | null): void {
+  db.runSync('UPDATE bins SET shelf_id = ? WHERE id = ?', [shelfId, binId]);
+}
+
+export function countItemsForBin(db: DbAdapter, binId: string): number {
+  const row = db.getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM items WHERE bin_id = ?', [
+    binId,
+  ]);
+  return row?.n ?? 0;
+}
+
+/** Refuses to delete a bin that still has items — inventory is never lost. */
+export function deleteBinIfEmpty(db: DbAdapter, binId: string): boolean {
+  if (countItemsForBin(db, binId) > 0) return false;
+  db.withTransactionSync(() => {
+    db.runSync('UPDATE scans SET bin_id = NULL WHERE bin_id = ?', [binId]);
+    db.runSync('DELETE FROM bins WHERE id = ?', [binId]);
+  });
+  return true;
+}
+
+/** Next sequential short code: B-001, B-002, … (gaps are not reused). */
+export function nextShortCode(db: DbAdapter): string {
+  const rows = db.getAllSync<{ short_code: string }>('SELECT short_code FROM bins');
+  let max = 0;
+  for (const row of rows) {
+    const match = /^B-(\d+)$/.exec(row.short_code);
+    if (match) max = Math.max(max, parseInt(match[1], 10));
+  }
+  return `B-${String(max + 1).padStart(3, '0')}`;
+}
+
+/** Bulk creation (blueprint §7): N bins with sequential codes, one txn. */
+export function createBinsBulk(
+  db: DbAdapter,
+  input: { count: number; shelfId?: string | null },
+): BinRow[] {
+  const created: BinRow[] = [];
+  db.withTransactionSync(() => {
+    for (let i = 0; i < input.count; i++) {
+      const shortCode = nextShortCode(db);
+      created.push(
+        createBin(db, { name: `Bin ${shortCode}`, shortCode, shelfId: input.shelfId ?? null }),
+      );
+    }
+  });
+  return created;
 }
 
 export function updateBinAfterScan(

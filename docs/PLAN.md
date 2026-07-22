@@ -24,9 +24,10 @@ match the Expo SDK.
 | `expo-camera` | capture + QR scanning | Stage 1 |
 | `expo-image-manipulator` | resize/compress before upload | Stage 1 |
 | `@anthropic-ai/sdk` | Claude vision provider only | Stage 1 |
+| OpenAI Responses API via raw fetch — no SDK dependency | second cloud engine (D14) | Stage 1 |
 | `expo-secure-store` | API key storage | Stage 1 |
 | `expo-file-system` | photo storage, export | Stage 1 |
-| `react-native-qrcode-svg` (or equiv.) | QR rendering for labels | Stage 2 |
+| `qrcode-generator` (pure JS, unit-testable) | QR rendering for labels | Stage 2 |
 | `expo-print` | PDF label sheets | Stage 2 |
 | `@react-native-community/netinfo` | connectivity for queue drain | Stage 4 |
 | `expo-dev-client` | EAS dev build (native ML module) | Stage 5 |
@@ -112,6 +113,10 @@ review chips → saved bin contents.
       writes items with `source_scan_id`, sets scan `confirmed`, updates
       bin `last_scanned_at` + cover photo. Discard path sets `discarded`.
 - [x] **Bin detail** (`bin/[id]`): cover photo, item list, last-scanned.
+- [x] **`openaiProvider.ts`** (D14): same contract via the OpenAI Responses
+      API — raw fetch, strict structured outputs, same VisionError taxonomy
+      and repair retry; engine picker becomes fixture/claude/openai with a
+      separate OpenAI key in `expo-secure-store`.
 - [x] Component test: review screen renders a fixture response; a `low`
       item is not selected by default; save persists exactly the selected
       chips; in a merge audit a "not seen" existing item survives save
@@ -131,24 +136,24 @@ review chips → saved bin contents.
 **Goal:** physical organization + instant bin identity.
 
 ### Tasks
-- [ ] Browse tree CRUD: locations → shelves → bins (create/rename/delete
+- [x] Browse tree CRUD: locations → shelves → bins (create/rename/delete
       with orphan handling: deleting a shelf unassigns its bins, never
       deletes them).
-- [ ] `src/qr/payload.ts`: encode/parse typed payloads
+- [x] `src/qr/payload.ts`: encode/parse typed payloads
       `binoc:v1:<type>:<uuid>` (bin | shelf | location, blueprint D13) with
       zod; friendly error toast on foreign QR codes.
-- [ ] Scanner integration: Scan tab auto-detects a QR in frame → bin QR
+- [x] Scanner integration: Scan tab auto-detects a QR in frame → bin QR
       opens that bin's detail (or starts an audit, one tap either way);
       shelf/location QR opens its browse node.
-- [ ] Bulk creation: "Create N bins" → sequential `short_code`s (B-001…).
-- [ ] `src/qr/labels.ts`: PDF sheet via `expo-print` — 2"×4" labels, 10/page
+- [x] Bulk creation: "Create N bins" → sequential `short_code`s (B-001…).
+- [x] `src/qr/labels.ts`: PDF sheet via `expo-print` — 2"×4" labels, 10/page
       (Avery 5163 geometry), QR left, short code + bin name right; optional
       shelf/location labels through the same flow (QR + name, no short
       code).
-- [ ] Move mode (blueprint §8.5): bin detail → Move → scan shelf QR or pick
+- [x] Move mode (blueprint §8.5): bin detail → Move → scan shelf QR or pick
       from list → confirm; location QR at the destination step prompts for
       a shelf within it.
-- [ ] Unit tests: payload round-trip for all three types; short-code
+- [x] Unit tests: payload round-trip for all three types; short-code
       sequencing; foreign-QR rejection.
 
 ### Exit criteria

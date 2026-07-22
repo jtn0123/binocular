@@ -9,10 +9,10 @@ module.exports = defineConfig([
     ignores: ['dist/*', '.expo/*', 'node_modules/*', 'android/*', 'ios/*'],
   },
   {
-    // Blueprint §6.1 contract idiom: each zod schema const shares its name
-    // with the inferred type (`const Confidence` + `type Confidence`), which
-    // this rule misreads as a redeclaration.
-    files: ['src/vision/types.ts'],
+    // zod contract idiom: each schema const shares its name with the
+    // inferred type (`const Confidence` + `type Confidence`), which this
+    // rule misreads as a redeclaration (blueprint §6.1 and §7 payloads).
+    files: ['src/vision/types.ts', 'src/qr/payload.ts'],
     rules: { '@typescript-eslint/no-redeclare': 'off' },
   },
 ]);

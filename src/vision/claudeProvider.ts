@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 
+import { RECOGNITION_JSON_SCHEMA } from './jsonSchema';
 import { buildVisionPrompt } from './prompt';
 import { VisionError, type ScanContext, type VisionProvider } from './provider';
 import { RecognitionResult } from './types';
@@ -10,52 +11,6 @@ import { RecognitionResult } from './types';
  */
 const VISION_MODEL = 'claude-opus-4-8';
 const MAX_TOKENS = 2048;
-
-/**
- * JSON Schema mirror of the zod contract in types.ts (blueprint §6.1),
- * enforced server-side via structured outputs so the reply is
- * schema-shaped by construction. zod remains the trust boundary.
- */
-const RECOGNITION_JSON_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['items', 'scene_notes'],
-  properties: {
-    items: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['name', 'brand', 'category', 'quantity', 'label_text', 'confidence'],
-        properties: {
-          name: { type: 'string' },
-          brand: { type: ['string', 'null'] },
-          category: {
-            type: 'string',
-            enum: [
-              'hand_tool',
-              'power_tool',
-              'fastener',
-              'electrical',
-              'plumbing',
-              'adhesive_finish',
-              'safety',
-              'measuring',
-              'bit_blade_accessory',
-              'hardware',
-              'material',
-              'other',
-            ],
-          },
-          quantity: { type: 'integer' },
-          label_text: { type: ['string', 'null'] },
-          confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-        },
-      },
-    },
-    scene_notes: { type: ['string', 'null'] },
-  },
-} as const;
 
 /** Extracts the text payload and runs it through the §6.1 trust boundary. */
 export function parseRecognitionText(text: string): RecognitionResult {
