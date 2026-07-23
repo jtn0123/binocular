@@ -51,8 +51,15 @@ not law.
     has no custom key handling, and it needs a hardware keyboard during the
     launcher window. Not an app bug; recorded for completeness. Monkey the
     app touch-only (`--pct-anyevent 0 --pct-syskeys 0`).
-- [ ] **2. UI/UX quality pass** — empty/loading states, keyboard behavior,
+- [~] **2. UI/UX quality pass** — empty/loading states, keyboard behavior,
   truncation, contrast, a11y labels, animation polish.
+  - Accessibility sweep (2026-07-22): audited every Pressable. Icon-only
+    controls already labeled (settings gear, browse edit/print/delete,
+    capture shutter, search clear). Added `accessibilityRole="button"` +
+    composed `accessibilityLabel`s to the navigation rows that previously
+    only read their text: Home bin cards, search result rows, checked-out
+    / low-stock status rows + their action button, bin-code search hits,
+    and the four Scan mode cards. Amber-on-graphite already clears WCAG AA.
 - [ ] **3. Visual identity** — Binocular icon + splash candidates, user
   picks, wire in (replaces Expo template art).
 - [ ] **4. Capture upgrades** — torch toggle, tap-to-focus, pinch-zoom in

@@ -68,7 +68,7 @@ export default function ScanScreen() {
         </Pressable>
       )}
       <Text style={styles.title}>What do you want to do?</Text>
-      <Pressable style={styles.mode} onPress={() => setPicking(true)}>
+      <Pressable accessibilityRole="button" style={styles.mode} onPress={() => setPicking(true)}>
         <View style={styles.modeIcon}>
           <Ionicons name="file-tray" size={24} color={colors.amber} />
         </View>
@@ -78,7 +78,7 @@ export default function ScanScreen() {
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
       </Pressable>
-      <Pressable style={styles.mode} onPress={() => router.push('/scan-code')}>
+      <Pressable accessibilityRole="button" style={styles.mode} onPress={() => router.push('/scan-code')}>
         <View style={styles.modeIcon}>
           <Ionicons name="qr-code" size={22} color={colors.amber} />
         </View>
@@ -89,6 +89,7 @@ export default function ScanScreen() {
         <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
       </Pressable>
       <Pressable
+        accessibilityRole="button"
         style={styles.mode}
         onPress={() => router.push({ pathname: '/capture', params: { mode: 'check_in' } })}
       >
@@ -102,6 +103,7 @@ export default function ScanScreen() {
         <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
       </Pressable>
       <Pressable
+        accessibilityRole="button"
         style={styles.mode}
         onPress={() => router.push({ pathname: '/capture', params: { mode: 'find_it' } })}
       >

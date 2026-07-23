@@ -22,7 +22,11 @@ import { colors, radius, sp, type } from '@/theme';
 function BinCard({ bin, itemCount }: { bin: BinRow; itemCount: number }) {
   return (
     <Link href={{ pathname: '/bin/[id]', params: { id: bin.id } }} asChild>
-      <Pressable style={styles.card}>
+      <Pressable
+        style={styles.card}
+        accessibilityRole="button"
+        accessibilityLabel={`Bin ${bin.short_code}, ${bin.name}, ${itemCount} item${itemCount === 1 ? '' : 's'}`}
+      >
         {bin.cover_photo_uri ? (
           <Image source={{ uri: bin.cover_photo_uri }} style={styles.thumb} contentFit="cover" />
         ) : (
@@ -47,8 +51,16 @@ function BinCard({ bin, itemCount }: { bin: BinRow; itemCount: number }) {
 }
 
 function ResultRow({ result, onPress }: { result: SearchResult; onPress: () => void }) {
+  const where =
+    [result.binName, result.shelfName, result.locationName].filter(Boolean).join(', ') ||
+    'unassigned';
   return (
-    <Pressable style={styles.card} onPress={onPress}>
+    <Pressable
+      style={styles.card}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${result.quantity > 1 ? `${result.quantity} ` : ''}${result.brand ? `${result.brand} ` : ''}${result.name}, in ${where}${result.checkedOutTo ? `, checked out to ${result.checkedOutTo}` : ''}`}
+    >
       {result.binCoverUri ? (
         <Image source={{ uri: result.binCoverUri }} style={styles.thumbSm} contentFit="cover" />
       ) : (
@@ -92,7 +104,12 @@ function StatusRow({
   onOpen: () => void;
 }) {
   return (
-    <Pressable style={styles.statusRow} onPress={onOpen}>
+    <Pressable
+      style={styles.statusRow}
+      onPress={onOpen}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name}, ${detail}${item.bin_code ? `, bin ${item.bin_code}` : ''}`}
+    >
       {item.bin_code ? <CodeTag code={item.bin_code} small /> : null}
       <View style={styles.statusMain}>
         <Text style={styles.statusName} numberOfLines={1}>
@@ -103,7 +120,12 @@ function StatusRow({
         </Text>
       </View>
       {actionLabel && onAction ? (
-        <Pressable style={styles.statusAction} onPress={onAction}>
+        <Pressable
+          style={styles.statusAction}
+          onPress={onAction}
+          accessibilityRole="button"
+          accessibilityLabel={`${actionLabel} ${item.name}`}
+        >
           <Text style={styles.statusActionLabel}>{actionLabel}</Text>
         </Pressable>
       ) : null}
@@ -154,6 +176,8 @@ export default function HomeScreen() {
                 <Pressable
                   key={bin.id}
                   style={styles.binHit}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Bin ${bin.short_code}, ${bin.name}`}
                   onPress={() => router.push({ pathname: '/bin/[id]', params: { id: bin.id } })}
                 >
                   <CodeTag code={bin.short_code} small />
