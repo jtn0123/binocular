@@ -32,6 +32,14 @@ not law.
     `scripts/devtest/inject-camera-image.sh` swaps ground-truth photos onto
     the virtual-scene wall and will work on a host with a functioning
     virtual scene; until then, real-image capture testing needs hardware.
+  - Round 3 (2026-07-22): chaos/torture. Finding — a Metro-connected DEV
+    CLIENT can't be tested for kill-while-offline: airplane mode drops the
+    Metro socket and the bundle can't reload. That path needs a standalone
+    build. Automatable core moved into `src/queue/__tests__/chaos.test.ts`
+    (flapping connectivity never loses/double-processes; kill+reboot
+    recovery; settled scans never reprocessed). `scripts/devtest/chaos.sh`
+    keeps the on-device confirmation, now asserting against the app's own
+    SQLite (ground truth) instead of screen-scraping.
 - [ ] **2. UI/UX quality pass** — empty/loading states, keyboard behavior,
   truncation, contrast, a11y labels, animation polish.
 - [ ] **3. Visual identity** — Binocular icon + splash candidates, user
