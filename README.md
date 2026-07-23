@@ -56,5 +56,6 @@ demo photos (`assets/demo/`, dev only).
 |---|---|
 | [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) | **Source of truth.** Vision, decision log, data model, AI vision contract, workflows with acceptance criteria, Stage 0–7 roadmap, invariants |
 | [`docs/PLAN.md`](docs/PLAN.md) | Execution plan: file-level task checklists per stage, exit criteria, dependencies, testing strategy, risk register |
+| [`docs/POLISH.md`](docs/POLISH.md) | Living post-stage polish plan: pass order, cost/tokenizer notes, image resource ideas |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Parked post-v1 ideas and the long-term list |
 | [`CLAUDE.md`](CLAUDE.md) | Standing orders for AI coding agents: blueprint is law, work in plan order |

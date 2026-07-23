@@ -1,0 +1,71 @@
+# Polish plan — post-stage passes (living doc)
+
+The staged roadmap (blueprint §10) is built through Stage 6; this doc tracks
+the *polish* passes agreed after that. It is subordinate to the blueprint:
+anything here that changes scope graduates via a `blueprint:` commit first
+(D15 did). Reorder/edit freely as priorities shift — this is a working list,
+not law.
+
+## Pass order
+
+- [ ] **0. Cost & image estimation (in progress — D15)** — measured token
+  usage + dollar cost per scan, pre-scan estimate, cumulative spend in
+  Settings, explicit OpenAI `detail` cap. See §Cost notes below.
+- [ ] **1. Flush & validation pass** — walk every screen/flow on the fixture
+  engine in the emulator; punch-list every rough edge; fix; backfill tests
+  where gaps appear.
+- [ ] **2. UI/UX quality pass** — empty/loading states, keyboard behavior,
+  truncation, contrast, a11y labels, animation polish.
+- [ ] **3. Visual identity** — Binocular icon + splash candidates, user
+  picks, wire in (replaces Expo template art).
+- [ ] **4. Capture upgrades** — torch toggle, tap-to-focus, pinch-zoom in
+  `app/capture.tsx`.
+- [ ] **5. Recognition-quality groundwork** — ground-truth eval harness
+  (labeled photo set, mechanical precision/recall scoring), prototype
+  self-consistency voting. No API key needed to build it.
+- [ ] **6. Key day** — user types their OpenAI key into Settings (emulator
+  window, never through the agent); run the eval; compare `gpt-5.6` tiers
+  (Sol/Terra/Luna) on accuracy-per-dollar; iterate prompt against measured
+  scores; record real per-scan costs.
+
+## Cost notes (researched July 2026 — re-verify on key day)
+
+- **OpenAI image tokens** = `ceil(w/32) × ceil(h/32)` patches. On `gpt-5.6`,
+  `detail: auto` behaves like `original`: *no automatic downscaling*. Our
+  1568×~1176 upload ≈ 1.8k tokens; a raw 20MP phone photo ≈ 19.5k tokens
+  (~10×). `detail: low` = fixed 512px thumbnail (cheap pre-pass option).
+- **Claude image tokens** ≈ `(w × h) / 750`; images over 1568px long edge
+  are auto-resized server-side. 1568px upload ≈ 2.5k tokens.
+- **Prices per 1M input/output tokens (July 2026):** OpenAI gpt-5.6 Sol
+  $5/$30, Terra $2.50/$15, Luna $1/$6; gpt-5.5 $5/$30. Anthropic Opus 4.8
+  $5/$25; Sonnet 5 intro $2/$10 (→ $3/$15 after 2026-09-01).
+- **Typical full-scan cost** (1568px photo + prompt + JSON reply ≈ 2.3–3k in,
+  ~0.7k out): roughly 3.3¢ Sol / 1.6¢ Terra / 0.7¢ Luna / 3.2¢ Opus 4.8.
+- Estimates are estimates; the `usage` field on each API response is the
+  source of truth and is what the app records (D15/D5 honesty rule).
+
+## Image resource-saving ideas (brainstormed, not yet scoped)
+
+- **Quality tiers in Settings** — Fine (1568px) / Standard (1024px) /
+  Saver (768px) upload cap; show the cost estimate next to each choice.
+- **Per-mode resolution** — `find_it` needs less detail than `bin_audit`
+  (which must read tiny label text); could default lower.
+- **`detail: low` pre-pass** — cheap 512px first look; only escalate to full
+  resolution when the cheap pass finds packaged goods/text worth reading.
+- **WebP uploads** — both APIs accept WebP; ~30% smaller payloads at equal
+  quality (bandwidth win; token cost is resolution-driven, unchanged).
+- **Skip re-encode when already small** — camera captures below the cap
+  shouldn't pay a decode/encode round-trip.
+- **EXIF strip** — privacy + payload; verify expo-image-manipulator output.
+- **Wi-Fi-aware uploads** — queue full-res on cellular, or drop a tier.
+- **Model-tier auto-pick** — Luna for find_it, Terra/Sol for audits of
+  label-dense bins (decide with eval data, not vibes).
+
+## Parked context
+
+- Video scans: no native video input on OpenAI/Anthropic APIs (July 2026);
+  Gemini has it natively. Honest path when unparked: frame sampling into the
+  existing `photosBase64` array (D11) — no new engine required.
+- Verbalized model confidence (e.g. "0.72") is confabulated per calibration
+  research — the D5/§6.3 enum stands. Real accuracy comes from the eval
+  harness (pass 5); real per-scan spend from `usage` (D15).
