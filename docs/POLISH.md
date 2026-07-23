@@ -22,9 +22,16 @@ not law.
     upgrade on a real db, garbage deep links). Fixed: unhandled promise
     rejection when the haptics native module is absent (`src/lib/haptics.ts`
     best-effort wrappers). Open punch list: search doesn't match bin
-    codes/names (items only) — worth adding; camera preview renders black
-    in emulator screenshots (verify on hardware); dev client predates
-    expo-haptics — next `expo run:android` picks it up.
+    codes/names (items only) — worth adding (shipped, see round 2); camera
+    preview renders black in emulator screenshots (verify on hardware); dev
+    client predates expo-haptics — next `expo run:android` picks it up.
+  - Round 2 (2026-07-22): emulator's back camera captures pure black frames
+    on this host in BOTH `emulated` and `virtualscene` modes (config.ini +
+    `-camera-back virtualscene` both tried; Apple-Silicon GL quirk) — this
+    explains every generic Sky/Monochrome ML Kit label to date.
+    `scripts/devtest/inject-camera-image.sh` swaps ground-truth photos onto
+    the virtual-scene wall and will work on a host with a functioning
+    virtual scene; until then, real-image capture testing needs hardware.
 - [ ] **2. UI/UX quality pass** — empty/loading states, keyboard behavior,
   truncation, contrast, a11y labels, animation polish.
 - [ ] **3. Visual identity** — Binocular icon + splash candidates, user
