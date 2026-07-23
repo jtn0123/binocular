@@ -23,10 +23,12 @@ export function encodeQrPayload(payload: QrPayload): string {
 }
 
 export function parseQrPayload(raw: string): QrPayload | null {
-  const parts = raw.split(':');
+  // Scanners sometimes pad with whitespace or a trailing newline — trim
+  // before parsing so our own labels always round-trip.
+  const parts = raw.trim().split(':');
   if (parts.length !== 4) return null;
   const [prefix, version, type, id] = parts;
   if (prefix !== PREFIX || version !== VERSION) return null;
-  const result = QrPayload.safeParse({ type, id });
+  const result = QrPayload.safeParse({ type, id: id.trim() });
   return result.success ? result.data : null;
 }

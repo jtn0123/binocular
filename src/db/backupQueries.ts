@@ -1,3 +1,7 @@
+import { z } from 'zod';
+
+import { ItemCategory } from '../vision/types';
+
 import type { DbAdapter } from './adapter';
 import type { BinRow, ItemRow, LocationRow, ScanRow, ShelfRow } from './queries';
 
@@ -14,6 +18,91 @@ export interface BackupDump {
   bins: BinRow[];
   items: ItemRow[];
   scans: ScanRow[];
+}
+
+// ------------------------------------------------- import trust boundary
+// Imports are a trust boundary (blueprint D9): the manifest is arbitrary
+// bytes off disk, so every row is zod-validated before it can touch SQLite.
+
+const LocationRowSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  created_at: z.string(),
+});
+
+const ShelfRowSchema = z.object({
+  id: z.string().min(1),
+  location_id: z.string().min(1),
+  name: z.string(),
+  created_at: z.string(),
+});
+
+const BinRowSchema = z.object({
+  id: z.string().min(1),
+  shelf_id: z.string().nullable(),
+  short_code: z.string().min(1),
+  name: z.string(),
+  cover_photo_uri: z.string().nullable(),
+  last_scanned_at: z.string().nullable(),
+  created_at: z.string(),
+});
+
+const ItemRowSchema = z.object({
+  id: z.string().min(1),
+  bin_id: z.string().min(1),
+  name: z.string(),
+  brand: z.string().nullable(),
+  category: ItemCategory,
+  quantity: z.number().int(),
+  label_text: z.string().nullable(),
+  photo_uri: z.string().nullable(),
+  notes: z.string().nullable(),
+  checked_out_to: z.string().nullable(),
+  low_stock_threshold: z.number().int().nullable(),
+  source_scan_id: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+const ScanRowSchema = z.object({
+  id: z.string().min(1),
+  bin_id: z.string().nullable(),
+  mode: z.enum(['bin_audit', 'check_in', 'find_it']),
+  photo_uri: z.string(),
+  status: z.enum(['queued', 'processing', 'review', 'confirmed', 'discarded', 'failed']),
+  raw_response: z.string().nullable(),
+  error: z.string().nullable(),
+  created_at: z.string(),
+  resolved_at: z.string().nullable(),
+  // Pre-D15 backups lack these keys entirely — default them to NULL.
+  engine: z.string().nullable().default(null),
+  input_tokens: z.number().nullable().default(null),
+  output_tokens: z.number().nullable().default(null),
+  cost_usd: z.number().nullable().default(null),
+});
+
+const BackupDumpSchema = z.object({
+  version: z.literal(1),
+  exported_at: z.string(),
+  locations: z.array(LocationRowSchema),
+  shelves: z.array(ShelfRowSchema),
+  bins: z.array(BinRowSchema),
+  items: z.array(ItemRowSchema),
+  scans: z.array(ScanRowSchema),
+});
+
+/** Validates untrusted manifest JSON; throws a friendly error otherwise. */
+export function parseBackupDump(json: unknown): BackupDump {
+  const parsed = BackupDumpSchema.safeParse(json);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    const where = first?.path.join('.') || 'root';
+    throw new Error(
+      `This file is not a valid Binocular backup (problem at ${where}: ${first?.message ?? 'unknown'}).`,
+    );
+  }
+  // Runtime-validated above; the enum fields now match the row types.
+  return parsed.data as BackupDump;
 }
 
 export function dumpAll(db: DbAdapter, exportedAt: string): BackupDump {

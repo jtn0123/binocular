@@ -3,7 +3,7 @@ import * as Sharing from 'expo-sharing';
 import JSZip from 'jszip';
 
 import type { DbAdapter } from '../db/adapter';
-import { dumpAll, restoreAll, type BackupDump } from '../db/backupQueries';
+import { dumpAll, parseBackupDump, restoreAll, type BackupDump } from '../db/backupQueries';
 import { nowIso } from '../lib/time';
 
 import { inventoryCsv } from './csv';
@@ -66,7 +66,14 @@ export async function importBackupZip(db: DbAdapter, zipUri: string): Promise<Im
   const zip = await JSZip.loadAsync(new File(zipUri).bytes());
   const manifest = zip.file('binocular.json');
   if (!manifest) throw new Error('Not a Binocular backup — binocular.json is missing.');
-  const dump = JSON.parse(await manifest.async('string')) as BackupDump;
+  let manifestJson: unknown;
+  try {
+    manifestJson = JSON.parse(await manifest.async('string'));
+  } catch {
+    throw new Error('This backup is damaged — binocular.json is not valid JSON.');
+  }
+  // Trust boundary (D9): full zod validation before anything touches the db.
+  const dump = parseBackupDump(manifestJson);
 
   const photosDir = new Directory(Paths.document, 'photos');
   if (!photosDir.exists) photosDir.create({ intermediates: true });

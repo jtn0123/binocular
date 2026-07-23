@@ -276,7 +276,8 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: sp(4), gap: sp(3), backgroundColor: colors.bg, flexGrow: 1 },
+  // Extra bottom padding keeps the last section above the gesture bar.
+  container: { padding: sp(4), paddingBottom: sp(12), gap: sp(3), backgroundColor: colors.bg, flexGrow: 1 },
   sectionTitle: { ...type.stamp, marginTop: sp(2) },
   keySection: { gap: sp(2.5) },
   providerRow: { flexDirection: 'row', gap: sp(2) },

@@ -94,7 +94,8 @@ export default function BinDetailScreen() {
             initialValue: String(item.quantity),
             keyboardType: 'number-pad' as const,
             onSubmit: (value) => {
-              setItemQuantity(db, item.id, parseInt(value, 10) || 0);
+              // Never below zero — "-5 screws" is not inventory.
+              setItemQuantity(db, item.id, Math.max(0, parseInt(value, 10) || 0));
               setTick((t) => t + 1);
             },
           }),

@@ -11,6 +11,18 @@ describe('CSV export (blueprint D12)', () => {
       expect(escapeCsvField(null)).toBe('');
     });
 
+    it('neutralizes spreadsheet formula injection in text fields', () => {
+      // A hostile item name must open as text, never execute (dogfood fuzz).
+      expect(escapeCsvField('=HYPERLINK("http://evil","x")')).toBe(
+        '"\'=HYPERLINK(""http://evil"",""x"")"',
+      );
+      expect(escapeCsvField('+1-800-PWN')).toBe("'+1-800-PWN");
+      expect(escapeCsvField('@SUM(A1)')).toBe("'@SUM(A1)");
+      expect(escapeCsvField('-negative note')).toBe("'-negative note");
+      // Numbers stay numeric — a negative quantity is data, not a formula.
+      expect(escapeCsvField(-5)).toBe('-5');
+    });
+
     it('quotes commas, quotes, and newlines correctly', () => {
       expect(escapeCsvField('Screws, deck')).toBe('"Screws, deck"');
       expect(escapeCsvField('The "good" tape')).toBe('"The ""good"" tape"');

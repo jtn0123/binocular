@@ -15,6 +15,16 @@ not law.
 - [ ] **1. Flush & validation pass** — walk every screen/flow on the fixture
   engine in the emulator; punch-list every rough edge; fix; backfill tests
   where gaps appear.
+  - Round 1 (2026-07-22) done: trust-boundary fuzz (FTS operators, CSV
+    formula injection → fixed, QR garbage → parser now trims, import
+    manifest → now fully zod-validated per D9, negative quantity → clamped)
+    plus live walk (search fuzz, spend UI, local-engine e2e, migration 003
+    upgrade on a real db, garbage deep links). Fixed: unhandled promise
+    rejection when the haptics native module is absent (`src/lib/haptics.ts`
+    best-effort wrappers). Open punch list: search doesn't match bin
+    codes/names (items only) — worth adding; camera preview renders black
+    in emulator screenshots (verify on hardware); dev client predates
+    expo-haptics — next `expo run:android` picks it up.
 - [ ] **2. UI/UX quality pass** — empty/loading states, keyboard behavior,
   truncation, contrast, a11y labels, animation polish.
 - [ ] **3. Visual identity** — Binocular icon + splash candidates, user

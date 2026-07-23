@@ -22,7 +22,13 @@ export const CSV_HEADERS = [
 
 export function escapeCsvField(value: string | number | null): string {
   if (value === null || value === undefined) return '';
-  const text = String(value);
+  let text = String(value);
+  // Formula-injection guard (text fields only): a name like
+  // `=HYPERLINK(...)` must open in Excel/Sheets as text, not execute.
+  // Numbers are exempt so negative quantities stay numeric.
+  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) {
+    text = `'${text}`;
+  }
   if (/[",\n\r]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }

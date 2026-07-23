@@ -1,4 +1,4 @@
-import { dumpAll, isDatabaseEmpty, restoreAll } from '../backupQueries';
+import { dumpAll, isDatabaseEmpty, parseBackupDump, restoreAll } from '../backupQueries';
 import { createNodeAdapter, type NodeDbAdapter } from '../nodeAdapter';
 import {
   checkOutItem,
@@ -135,5 +135,74 @@ describe('checkout and low stock (stage 6)', () => {
     const low = listLowStockItems(db);
     expect(low).toHaveLength(1);
     expect(low[0].name).toBe('Deck screws');
+  });
+});
+
+describe('import manifest validation (D9 trust boundary, dogfood fuzz)', () => {
+  let db: NodeDbAdapter;
+
+  beforeEach(() => {
+    db = createNodeAdapter(':memory:');
+    runMigrations(db);
+  });
+  afterEach(() => {
+    db.close();
+  });
+
+  function validDump() {
+    const loc = createLocation(db, { name: 'Garage' });
+    const shelf = createShelf(db, { locationId: loc.id, name: 'Shelf A' });
+    const bin = createBin(db, { name: 'Fasteners', shortCode: 'B-001', shelfId: shelf.id });
+    insertItem(db, { binId: bin.id, name: 'Deck screws', category: 'fastener' });
+    return JSON.parse(JSON.stringify(dumpAll(db, '2026-07-22T00:00:00Z'))) as unknown;
+  }
+
+  it('accepts a genuine dump unchanged (round-trip through JSON)', () => {
+    const dump = validDump();
+    expect(() => parseBackupDump(dump)).not.toThrow();
+  });
+
+  it('accepts a pre-D15 dump missing the usage keys, defaulting them to null', () => {
+    const scan = insertScan(db, { mode: 'bin_audit', photoUri: 'file:///s.jpg' });
+    void scan;
+    const dump = JSON.parse(JSON.stringify(dumpAll(db, 'x'))) as {
+      scans: Record<string, unknown>[];
+    };
+    for (const s of dump.scans) {
+      delete s.engine;
+      delete s.input_tokens;
+      delete s.output_tokens;
+      delete s.cost_usd;
+    }
+    const parsed = parseBackupDump(dump);
+    expect(parsed.scans[0].engine).toBeNull();
+    expect(parsed.scans[0].cost_usd).toBeNull();
+  });
+
+  it.each([
+    ['not an object', 'a string'],
+    ['null', null],
+    ['empty object', {}],
+    ['wrong version', { version: 2 }],
+    ['version as string', { version: '1' }],
+  ])('rejects %s with a friendly error', (_label, junk) => {
+    expect(() => parseBackupDump(junk)).toThrow(/not a valid Binocular backup/i);
+  });
+
+  it('rejects a dump whose rows have hostile shapes, naming the path', () => {
+    const clean = validDump();
+    const dump = JSON.parse(JSON.stringify(clean)) as { items: Record<string, unknown>[] };
+    dump.items[0].quantity = 'lots'; // string where an int belongs
+    expect(() => parseBackupDump(dump)).toThrow(/items\.0\.quantity/);
+
+    const dump2 = JSON.parse(JSON.stringify(clean)) as { scans: unknown };
+    dump2.scans = { sneaky: true }; // object where an array belongs
+    expect(() => parseBackupDump(dump2)).toThrow(/not a valid Binocular backup/i);
+  });
+
+  it('rejects an unknown item category instead of writing it to the db', () => {
+    const dump = validDump() as { items: Record<string, unknown>[] };
+    dump.items[0].category = 'contraband';
+    expect(() => parseBackupDump(dump)).toThrow(/category/);
   });
 });
