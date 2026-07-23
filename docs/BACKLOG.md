@@ -37,3 +37,22 @@ polished in daily use. Do not pull these forward.
   "where do I have space?"; extends the vision contract.
 - **Stale-bin nudges** — Home surfaces bins not audited in N months
   (`last_scanned_at` already exists).
+
+## Image-processing ideas (classical CV / OCR — surfaced 2026-07-22)
+
+Not vision *recognition* (that stays with the LLM/ML Kit engines) but
+pre/post-processing around it:
+
+- **Capture quality gate** — a blur/darkness check (Laplacian variance) on
+  the shot BEFORE a paid cloud call: "too blurry — retake" saves the API
+  spend on an unreadable photo. Cheap, classical, high-value. Doable with a
+  light native shader or `expo-image-manipulator`; full OpenCV is overkill.
+- **Pre-processing for accuracy + cost** — auto-crop to the bin, deskew,
+  contrast-boost dim garage shots. Better recall and smaller uploads. Next
+  tier above the current resize/compress pipeline.
+- **On-device OCR for the local engine** — ML Kit Text Recognition would let
+  `localProvider` read `label_text` (it currently returns generic names with
+  brand/label null, D10). Closes the biggest local-engine capability gap
+  without a cloud call. Different from OpenCV; same "optical" neighborhood.
+- **Do NOT bundle full OpenCV into the RN app** — heavy native dependency;
+  the basics are already covered by `expo-image-manipulator`.
