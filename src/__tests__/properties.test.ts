@@ -1,4 +1,4 @@
-import fc from 'fast-check';
+import * as fc from 'fast-check';
 
 import { escapeCsvField, itemsToCsv } from '../backup/csv';
 import { createNodeAdapter, type NodeDbAdapter } from '../db/nodeAdapter';
