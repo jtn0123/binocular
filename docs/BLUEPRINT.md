@@ -52,6 +52,7 @@ blueprint edits instead.
 | D12 | Export | CSV export of all items (Excel-compatible) ships in v1 | The whole inventory belongs in a spreadsheet too; one row per item with location/shelf/bin breadcrumb columns |
 | D13 | QR payload | Typed: `binoc:v1:<type>:<uuid>`, type ∈ `bin \| shelf \| location` | Shelf/location labels enable move mode (§8.5); typing the payload costs nothing before any label is printed |
 | D14 | Cloud engines | Two cloud engines ship in v1 — Anthropic Claude and OpenAI — behind the same `VisionProvider` contract, each isolated in its own provider file with its own API key in Settings | User choice on cost/quality/account; the §6.1 schema and §6.2 prompt are engine-neutral, so a second cloud engine is pure provider code |
+| D15 | Cost transparency | Cloud scans record measured token usage (each API's `usage` field) plus a computed dollar cost per scan; the app shows a pre-scan estimate and cumulative spend in Settings. Estimates use documented tokenizer math (OpenAI 32px patches, Claude ≈px²/750) with a bundled price table; uploads stay capped at 1568px and the OpenAI request pins an explicit `detail` level as a cost ceiling | Same honesty rule as D5: usage is measured, never guessed. On `gpt-5.6`, `detail: auto` means *no auto-downscaling* — a 20MP original would cost ~10× the 1568px upload — so image sizing is a cost policy, not just bandwidth |
 
 ---
 
