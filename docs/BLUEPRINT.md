@@ -179,13 +179,25 @@ export interface ScanContext {
   existingItems?: string[];  // bin_audit merge mode: names already in the bin
 }
 
+/** Token usage measured by the API's `usage` field — never estimated (D15). */
+export interface VisionUsage {
+  inputTokens: number;
+  outputTokens: number;
+  model?: string;            // model ID that produced the measurement
+}
+
+export interface RecognitionOutcome {
+  result: RecognitionResult;
+  usage?: VisionUsage;       // absent on free engines (fixture, local)
+}
+
 export interface VisionProvider {
   /**
-   * Resolves with a validated RecognitionResult or throws VisionError.
-   * v1 always sends exactly one photo (D11); the array type keeps
-   * multi-photo/video additive later.
+   * Resolves with a validated RecognitionResult (plus measured usage for
+   * cloud engines, D15) or throws VisionError. v1 always sends exactly one
+   * photo (D11); the array type keeps multi-photo/video additive later.
    */
-  recognize(photosBase64: string[], ctx: ScanContext): Promise<RecognitionResult>;
+  recognize(photosBase64: string[], ctx: ScanContext): Promise<RecognitionOutcome>;
 }
 
 export class VisionError extends Error {
