@@ -44,3 +44,6 @@ example
 
 # local dev database
 dev.db
+
+# Image bank: manifest is committed, the CC images are re-fetchable via scripts/devtest/fetch-bank.sh
+eval/bank/*.jpg

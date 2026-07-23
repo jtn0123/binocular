@@ -128,3 +128,17 @@ balanced by scenario; (3) human visual review down to 22 across six buckets
 carries per-image scenario, content hint, and CC attribution;
 `LICENSES.md` is the credit list. Next: hand-write ground-truth item lists
 into `labels.json` so `npm run eval` scores real recall/precision per engine.
+
+## Image bank (2026-07-22)
+
+`eval/bank/` is a growing, deduplicated bank of **213 CC-licensed workshop
+images** (Wikimedia Commons, 3 harvests, ~40 categories), for testing and as
+the seed dataset for a future custom local detector (see BACKLOG). Perceptual-
+hash dedup runs across every harvest so it grows without dupes; scenarios:
+single-tool 90, mixed-bin 45, dense-small-parts 42, sets-accessories 20,
+consumables 16. `bank.json` records per-image scenario, category, CC license,
+attribution, source URL, hash, and quality scores; `LICENSES.md` credits each.
+The images themselves are **gitignored** (30 MB doesn't belong in git);
+`scripts/devtest/fetch-bank.sh` rebuilds them from the manifest after a clone.
+To grow it: re-run the harvest scripts → `bank.py` → commit the updated
+manifest. Distinct from `eval/corpus/` (the small hand-labeled eval set).
