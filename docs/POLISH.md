@@ -116,3 +116,15 @@ not law.
 - Verbalized model confidence (e.g. "0.72") is confabulated per calibration
   research — the D5/§6.3 enum stands. Real accuracy comes from the eval
   harness (pass 5); real per-scan spend from `usage` (D15).
+
+## Eval corpus (pass 5 groundwork — 2026-07-22)
+
+`eval/corpus/` holds 22 CC-licensed workshop photos harvested from Wikimedia
+Commons and curated in three passes: (1) generator-query harvest of 111
+candidates across 14 categories; (2) automated cull — PIL perceptual-hash
+dedup + blur/brightness scoring dropped 18 unusable/duplicate frames and
+balanced by scenario; (3) human visual review down to 22 across six buckets
+(mixed-bin, small-parts, single-item, tool-set, paint, dim). `corpus.json`
+carries per-image scenario, content hint, and CC attribution;
+`LICENSES.md` is the credit list. Next: hand-write ground-truth item lists
+into `labels.json` so `npm run eval` scores real recall/precision per engine.

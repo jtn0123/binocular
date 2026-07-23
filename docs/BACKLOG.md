@@ -53,6 +53,16 @@ pre/post-processing around it:
 - **On-device OCR for the local engine** — ML Kit Text Recognition would let
   `localProvider` read `label_text` (it currently returns generic names with
   brand/label null, D10). Closes the biggest local-engine capability gap
-  without a cloud call. Different from OpenCV; same "optical" neighborhood.
-- **Do NOT bundle full OpenCV into the RN app** — heavy native dependency;
-  the basics are already covered by `expo-image-manipulator`.
+  without a cloud call.
+- **Object-detection local engine (OpenCV 5 / YOLO / ONNX)** — OpenCV 5 *does*
+  run object detectors (its DNN module executes YOLO/ONNX models); it is the
+  runtime, not the model. Two caveats confirmed from the OpenCV 5 docs: a
+  stock detector only knows its training set (COCO's ~80 everyday classes —
+  person, bottle, chair — **not** "wire nut", "10 mm socket", or a brand),
+  and it does no OCR. So out of the box it hits the same generic-label ceiling
+  as ML Kit labeling. What it *adds* over whole-image labeling: bounding boxes
+  → **instance counting** (a real `quantity` signal), and it's the inference
+  path for a **custom model trained on workshop images** — which the new
+  `eval/corpus/` is the seed dataset for (ties to the fine-tuning-dataset
+  idea above). Realistic RN path is a TFLite/ONNX YOLO in a vision-camera
+  frame processor, not bundling OpenCV's DNN into the app.
