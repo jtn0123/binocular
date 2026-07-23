@@ -1,8 +1,9 @@
 import { createNodeAdapter, type NodeDbAdapter } from '../../db/nodeAdapter';
 import { createBin, getScan, insertItem, insertScan } from '../../db/queries';
 import { runMigrations } from '../../db/schema';
+import { getProviderChoice } from '../../settings/settings';
 import { resolveVisionProvider } from '../../vision';
-import { VisionError, type VisionProvider } from '../../vision/provider';
+import { VisionError, type VisionProvider, type VisionUsage } from '../../vision/provider';
 import { enqueueScan, processScan } from '../scanFlow';
 
 jest.mock('../photos', () => ({
@@ -14,7 +15,12 @@ jest.mock('../../vision', () => ({
   resolveVisionProvider: jest.fn(),
 }));
 
+jest.mock('../../settings/settings', () => ({
+  getProviderChoice: jest.fn(async () => 'fixture'),
+}));
+
 const mockResolve = resolveVisionProvider as jest.MockedFunction<typeof resolveVisionProvider>;
+const mockChoice = getProviderChoice as jest.MockedFunction<typeof getProviderChoice>;
 
 const RESULT = {
   items: [
@@ -30,8 +36,8 @@ const RESULT = {
   scene_notes: null,
 };
 
-function providerReturning(result: unknown): VisionProvider {
-  return { recognize: jest.fn(async () => result) } as unknown as VisionProvider;
+function providerReturning(result: unknown, usage?: VisionUsage): VisionProvider {
+  return { recognize: jest.fn(async () => ({ result, usage })) } as unknown as VisionProvider;
 }
 
 function providerThrowing(err: unknown): VisionProvider {
@@ -126,6 +132,37 @@ describe('scan lifecycle (blueprint §9 shape)', () => {
     const scan = getScan(db, scanId);
     expect(scan?.error).toBe('bad key');
     expect(scan?.resolved_at).not.toBeNull();
+  });
+
+  it('records engine + measured usage with computed cost on cloud scans (D15)', async () => {
+    const bin = createBin(db, { name: 'A', shortCode: 'B-001' });
+    const scanId = enqueueScan(db, { mode: 'bin_audit', binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
+    mockChoice.mockResolvedValue('openai');
+    mockResolve.mockResolvedValue(
+      providerReturning(RESULT, { inputTokens: 2000, outputTokens: 500, model: 'gpt-5.6' }),
+    );
+
+    await processScan(db, scanId);
+    const scan = getScan(db, scanId);
+    expect(scan?.engine).toBe('openai');
+    expect(scan?.input_tokens).toBe(2000);
+    expect(scan?.output_tokens).toBe(500);
+    // 2000 * $5/M + 500 * $30/M
+    expect(scan?.cost_usd).toBeCloseTo(0.025, 6);
+  });
+
+  it('free engines record which engine ran but no tokens and no cost (D15)', async () => {
+    const bin = createBin(db, { name: 'A', shortCode: 'B-001' });
+    const scanId = enqueueScan(db, { mode: 'bin_audit', binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
+    mockChoice.mockResolvedValue('fixture');
+    mockResolve.mockResolvedValue(providerReturning(RESULT));
+
+    await processScan(db, scanId);
+    const scan = getScan(db, scanId);
+    expect(scan?.engine).toBe('fixture');
+    expect(scan?.input_tokens).toBeNull();
+    expect(scan?.output_tokens).toBeNull();
+    expect(scan?.cost_usd).toBeNull();
   });
 
   it('processScan on a missing scan fails without touching the db', async () => {

@@ -4,12 +4,15 @@ import {
   getScan,
   insertScan,
   itemsForBin,
+  recordScanUsage,
   updateScanStatus,
   type ScanMode,
 } from '../db/queries';
 import { newId } from '../lib/id';
 import { nowIso } from '../lib/time';
+import { getProviderChoice } from '../settings/settings';
 import { resolveVisionProvider } from '../vision';
+import { costForUsage } from '../vision/cost';
 import { VisionError } from '../vision/provider';
 
 import { makeUploadBase64, persistPhoto } from './photos';
@@ -54,12 +57,23 @@ export async function processScan(db: DbAdapter, scanId: string): Promise<ScanFl
     const existingItems = scan.bin_id ? itemsForBin(db, scan.bin_id).map((i) => i.name) : [];
     const provider = await resolveVisionProvider();
     const photoBase64 = await makeUploadBase64(scan.photo_uri);
-    const result = await provider.recognize([photoBase64], {
+    const { result, usage } = await provider.recognize([photoBase64], {
       mode: scan.mode,
       binName: bin?.name,
       existingItems: existingItems.length > 0 ? existingItems : undefined,
     });
     updateScanStatus(db, scanId, 'review', { rawResponse: JSON.stringify(result) });
+    // D15: record which engine ran and, when the API metered it, the spend.
+    const engine = await getProviderChoice();
+    recordScanUsage(db, scanId, {
+      engine,
+      inputTokens: usage?.inputTokens,
+      outputTokens: usage?.outputTokens,
+      costUsd:
+        usage && (engine === 'claude' || engine === 'openai')
+          ? costForUsage(engine, usage)
+          : null,
+    });
     return { scanId, outcome: 'review' };
   } catch (err) {
     if (err instanceof VisionError && (err.kind === 'network' || err.kind === 'rate_limit')) {

@@ -8,9 +8,10 @@ not law.
 
 ## Pass order
 
-- [ ] **0. Cost & image estimation (in progress — D15)** — measured token
-  usage + dollar cost per scan, pre-scan estimate, cumulative spend in
-  Settings, explicit OpenAI `detail` cap. See §Cost notes below.
+- [x] **0. Cost & image estimation (D15 — shipped)** — measured token
+  usage + dollar cost per scan (migration 003), pre-scan estimate on the
+  capture overlay + Settings, Cloud-spend totals in Settings, explicit
+  OpenAI `detail: high` cap. See §Cost notes below.
 - [ ] **1. Flush & validation pass** — walk every screen/flow on the fixture
   engine in the emulator; punch-list every rough edge; fix; backfill tests
   where gaps appear.

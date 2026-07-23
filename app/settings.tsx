@@ -6,6 +6,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { exportBackupZip, exportInventoryCsv, importBackupZip } from '@/backup/backup';
 import { useDb } from '@/db/DbProvider';
 import { isDatabaseEmpty } from '@/db/backupQueries';
+import { listSpendTotals, type SpendTotals } from '@/db/queries';
 import {
   getApiKey,
   getOpenAiApiKey,
@@ -17,6 +18,7 @@ import {
 } from '@/settings/settings';
 import { colors, radius, sp, type } from '@/theme';
 import { testClaudeConnection } from '@/vision/claudeProvider';
+import { estimateScanCost, formatTokens, formatUsd, PRICES_AS_OF } from '@/vision/cost';
 import { testOpenAiConnection } from '@/vision/openaiProvider';
 
 const ENGINE_LABELS: Record<ProviderChoice, string> = {
@@ -137,6 +139,12 @@ export default function SettingsScreen() {
     })();
   }, []);
 
+  // Synchronous SQLite: derive spend on render, no effect/state dance.
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const spend: SpendTotals[] = listSpendTotals(db);
+  const monthSpend: SpendTotals[] = listSpendTotals(db, monthStart);
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.sectionTitle}>Recognition engine</Text>
@@ -161,6 +169,12 @@ export default function SettingsScreen() {
         (dev build only) — generic names, no brands or labels, works with no connection and no
         key. Claude and OpenAI do full recognition and each needs its own API key below.
       </Text>
+      {(provider === 'claude' || provider === 'openai') && (
+        <Text style={styles.estimate} testID="scan-estimate">
+          ≈ {formatUsd(estimateScanCost(provider).usd)} per scan (estimate at bundled{' '}
+          {PRICES_AS_OF} prices — actual spend below is measured)
+        </Text>
+      )}
 
       <KeySection
         title="Anthropic API key (Claude)"
@@ -193,6 +207,41 @@ export default function SettingsScreen() {
           await testOpenAiConnection(key);
         }}
       />
+
+      <Text style={styles.sectionTitle}>Cloud spend</Text>
+      {spend.length === 0 ? (
+        <Text style={styles.hint}>
+          No cloud scans yet. Once a cloud engine runs, its real cost shows here — measured
+          from each API&apos;s own usage numbers, never guessed.
+        </Text>
+      ) : (
+        <View style={styles.spendCard} testID="spend-card">
+          {spend.map((row) => {
+            const month = monthSpend.find((m) => m.engine === row.engine);
+            return (
+              <View key={row.engine} style={styles.spendRow}>
+                <Text style={styles.spendEngine}>
+                  {ENGINE_LABELS[row.engine as ProviderChoice] ?? row.engine}
+                </Text>
+                <View style={styles.spendBody}>
+                  <Text style={styles.spendMain}>
+                    {formatUsd(row.cost_usd)} all time · {row.scans} scan
+                    {row.scans === 1 ? '' : 's'}
+                  </Text>
+                  <Text style={styles.spendDetail}>
+                    {formatTokens(row.input_tokens)} tokens in · {formatTokens(row.output_tokens)}{' '}
+                    out · {month ? `${formatUsd(month.cost_usd)} this month` : 'none this month'}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+          <Text style={styles.hint}>
+            Measured from API usage fields (D15). Dollar amounts use prices bundled{' '}
+            {PRICES_AS_OF}.
+          </Text>
+        </View>
+      )}
 
       <Text style={styles.sectionTitle}>Data</Text>
       <Text style={styles.hint}>
@@ -243,6 +292,20 @@ const styles = StyleSheet.create({
   providerLabel: { color: colors.textDim, fontWeight: '600', fontSize: 13 },
   providerLabelActive: { color: colors.amberInkOn },
   hint: { ...type.dim, lineHeight: 18 },
+  estimate: { color: colors.amber, fontSize: 13, fontWeight: '600' },
+  spendCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    padding: sp(3),
+    gap: sp(3),
+  },
+  spendRow: { flexDirection: 'row', gap: sp(3), alignItems: 'flex-start' },
+  spendEngine: { color: colors.steel, fontWeight: '700', fontSize: 13, minWidth: 64 },
+  spendBody: { flex: 1, gap: 2 },
+  spendMain: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  spendDetail: { ...type.dim, fontSize: 12 },
   input: {
     borderWidth: 1,
     borderColor: colors.borderStrong,

@@ -1,13 +1,15 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useDb } from '@/db/DbProvider';
 import { getBin, type ScanMode } from '@/db/queries';
 import { enqueueScan, processScan } from '@/scan/scanFlow';
+import { getProviderChoice, type ProviderChoice } from '@/settings/settings';
 import { colors } from '@/theme';
+import { estimateScanCost, formatUsd } from '@/vision/cost';
 
 const HINTS: Record<ScanMode, string> = {
   bin_audit: 'Fill the frame with the open bin',
@@ -24,6 +26,13 @@ export default function CaptureScreen() {
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [busy, setBusy] = useState<'idle' | 'capturing' | 'recognizing'>('idle');
+  const [engine, setEngine] = useState<ProviderChoice | null>(null);
+
+  useEffect(() => {
+    getProviderChoice().then(setEngine, () => setEngine(null));
+  }, []);
+  // Pre-scan estimate (D15): cloud engines only — fixture/local are free.
+  const estimate = engine === 'claude' || engine === 'openai' ? estimateScanCost(engine) : null;
 
   const bin = params.binId ? getBin(db, params.binId) : null;
 
@@ -104,6 +113,11 @@ export default function CaptureScreen() {
             {bin.short_code} · {bin.name}
           </Text>
         ) : null}
+        {estimate ? (
+          <Text style={styles.costPill} testID="capture-estimate">
+            ≈ {formatUsd(estimate.usd)} per scan · {engine === 'openai' ? 'OpenAI' : 'Claude'}
+          </Text>
+        ) : null}
       </View>
       <View style={styles.overlayBottom}>
         {busy === 'recognizing' ? (
@@ -165,6 +179,15 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: 'hidden',
     fontSize: 13,
+  },
+  costPill: {
+    color: 'rgba(255,255,255,0.85)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+    overflow: 'hidden',
+    fontSize: 12,
   },
   overlayBottom: {
     position: 'absolute',

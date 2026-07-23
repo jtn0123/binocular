@@ -88,9 +88,22 @@ INSERT INTO item_search(rowid, name, brand, label_text, notes)
   SELECT rowid, name, brand, label_text, notes FROM items;
 `;
 
+/**
+ * D15 cost transparency: cloud scans record which engine ran and the
+ * measured token usage + computed dollar cost. All nullable — free engines
+ * (fixture, local) and pre-migration scans simply have NULLs.
+ */
+const MIGRATION_003_SCAN_USAGE = `
+ALTER TABLE scans ADD COLUMN engine TEXT;
+ALTER TABLE scans ADD COLUMN input_tokens INTEGER;
+ALTER TABLE scans ADD COLUMN output_tokens INTEGER;
+ALTER TABLE scans ADD COLUMN cost_usd REAL;
+`;
+
 export const MIGRATIONS: readonly string[] = [
   MIGRATION_001_INITIAL_SCHEMA,
   MIGRATION_002_FTS_TRIGGERS,
+  MIGRATION_003_SCAN_USAGE,
 ];
 
 export function getSchemaVersion(db: DbAdapter): number {

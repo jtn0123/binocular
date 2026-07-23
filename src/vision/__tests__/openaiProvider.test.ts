@@ -35,9 +35,10 @@ function fakeResponse(init: {
   } as unknown as Response;
 }
 
-function messageBody(text: string) {
+function messageBody(text: string, usage?: { input_tokens: number; output_tokens: number }) {
   return {
     status: 'completed',
+    usage,
     output: [
       { type: 'reasoning', content: [] },
       { type: 'message', content: [{ type: 'output_text', text }] },
@@ -62,7 +63,8 @@ describe('buildOpenAiRequestBody', () => {
     expect(content[0]).toEqual({
       type: 'input_image',
       image_url: 'data:image/jpeg;base64,AAAA',
-      detail: 'auto',
+      // Pinned, not 'auto': on gpt-5.6 auto = original = no downscaling (D15).
+      detail: 'high',
     });
     expect(content[1]).toEqual({ type: 'input_text', text: 'prompt text' });
     expect(body.text.format.type).toBe('json_schema');
@@ -98,29 +100,46 @@ describe('extractOpenAiOutputText', () => {
 describe('createOpenAiProvider', () => {
   const getKey = async () => 'sk-test';
 
-  it('returns a validated RecognitionResult on success', async () => {
+  it('returns a validated RecognitionResult plus measured usage on success', async () => {
     const fetchFn: FetchLike = jest.fn(async () =>
-      fakeResponse({ ok: true, json: messageBody(JSON.stringify(VALID_RESULT)) }),
+      fakeResponse({
+        ok: true,
+        json: messageBody(JSON.stringify(VALID_RESULT), { input_tokens: 2100, output_tokens: 480 }),
+      }),
     );
     const provider = createOpenAiProvider(getKey, fetchFn);
-    const result = await provider.recognize(['img'], { mode: 'bin_audit' });
+    const { result, usage } = await provider.recognize(['img'], { mode: 'bin_audit' });
     expect(result.items[0].name).toBe('Phillips screwdriver');
+    expect(usage).toEqual({ inputTokens: 2100, outputTokens: 480, model: 'gpt-5.6' });
     expect(fetchFn).toHaveBeenCalledTimes(1);
     const [url, init] = (fetchFn as jest.Mock).mock.calls[0];
     expect(url).toBe('https://api.openai.com/v1/responses');
     expect(init.headers.Authorization).toBe('Bearer sk-test');
   });
 
-  it('repairs once on an invalid first response (§6.1)', async () => {
+  it('repairs once on an invalid first response and sums usage across both calls (§6.1, D15)', async () => {
     const fetchFn = jest
       .fn<Promise<Response>, Parameters<FetchLike>>()
-      .mockResolvedValueOnce(fakeResponse({ ok: true, json: messageBody('not json at all') }))
       .mockResolvedValueOnce(
-        fakeResponse({ ok: true, json: messageBody(JSON.stringify(VALID_RESULT)) }),
+        fakeResponse({
+          ok: true,
+          json: messageBody('not json at all', { input_tokens: 2000, output_tokens: 50 }),
+        }),
+      )
+      .mockResolvedValueOnce(
+        fakeResponse({
+          ok: true,
+          json: messageBody(JSON.stringify(VALID_RESULT), {
+            input_tokens: 2200,
+            output_tokens: 500,
+          }),
+        }),
       );
     const provider = createOpenAiProvider(getKey, fetchFn);
-    const result = await provider.recognize(['img'], { mode: 'bin_audit' });
+    const { result, usage } = await provider.recognize(['img'], { mode: 'bin_audit' });
     expect(result.items).toHaveLength(1);
+    // The scan's true spend includes the failed first attempt.
+    expect(usage).toEqual({ inputTokens: 4200, outputTokens: 550, model: 'gpt-5.6' });
     expect(fetchFn).toHaveBeenCalledTimes(2);
     const retryBody = JSON.parse(fetchFn.mock.calls[1][1].body as string);
     expect(retryBody.input[0].content.at(-1).text).toContain('previous response was invalid');

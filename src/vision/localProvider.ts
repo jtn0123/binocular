@@ -107,7 +107,8 @@ export function createLocalProvider(labelFn?: LabelFn): VisionProvider {
       try {
         scratch.write(base64ToBytes(photosBase64[0] ?? ''));
         const labels = await label(scratch.uri);
-        return mapLabelsToResult(labels);
+        // On-device is free: no usage is reported (D15).
+        return { result: mapLabelsToResult(labels) };
       } catch (err) {
         if (err instanceof VisionError) throw err;
         throw new VisionError(

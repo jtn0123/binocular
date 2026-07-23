@@ -64,7 +64,7 @@ export function createClaudeProvider(getApiKey: () => Promise<string | null>): V
     client: Anthropic,
     photosBase64: string[],
     promptText: string,
-  ): Promise<string> {
+  ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
     const msg = await client.messages.create({
       model: VISION_MODEL,
       max_tokens: MAX_TOKENS,
@@ -86,7 +86,11 @@ export function createClaudeProvider(getApiKey: () => Promise<string | null>): V
         },
       ],
     });
-    return textFromResponse(msg);
+    return {
+      text: textFromResponse(msg),
+      inputTokens: msg.usage.input_tokens,
+      outputTokens: msg.usage.output_tokens,
+    };
   }
 
   return {
@@ -101,10 +105,16 @@ export function createClaudeProvider(getApiKey: () => Promise<string | null>): V
         dangerouslyAllowBrowser: true,
       });
       const prompt = buildVisionPrompt(ctx);
+      // Usage accumulates across the repair retry — the scan's true spend (D15).
+      let inputTokens = 0;
+      let outputTokens = 0;
+      const usage = () => ({ inputTokens, outputTokens, model: VISION_MODEL });
       try {
-        const text = await request(client, photosBase64, prompt);
+        const first = await request(client, photosBase64, prompt);
+        inputTokens += first.inputTokens;
+        outputTokens += first.outputTokens;
         try {
-          return parseRecognitionText(text);
+          return { result: parseRecognitionText(first.text), usage: usage() };
         } catch (firstFailure) {
           if (!(firstFailure instanceof VisionError) || firstFailure.kind !== 'invalid_response') {
             throw firstFailure;
@@ -117,7 +127,9 @@ export function createClaudeProvider(getApiKey: () => Promise<string | null>): V
             `${prompt}\n\nYour previous response was invalid: ${firstFailure.message}\n` +
               'Respond again with ONLY a corrected JSON object.',
           );
-          return parseRecognitionText(repaired);
+          inputTokens += repaired.inputTokens;
+          outputTokens += repaired.outputTokens;
+          return { result: parseRecognitionText(repaired.text), usage: usage() };
         }
       } catch (err) {
         throw toVisionError(err);

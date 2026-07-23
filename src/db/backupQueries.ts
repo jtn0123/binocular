@@ -84,8 +84,9 @@ export function restoreAll(
     // Scans before items: items.source_scan_id references scans.
     for (const s of dump.scans) {
       db.runSync(
-        `INSERT INTO scans (id, bin_id, mode, photo_uri, status, raw_response, error, created_at, resolved_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO scans (id, bin_id, mode, photo_uri, status, raw_response, error, created_at,
+                            resolved_at, engine, input_tokens, output_tokens, cost_usd)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           s.id,
           s.bin_id,
@@ -96,6 +97,11 @@ export function restoreAll(
           s.error,
           s.created_at,
           s.resolved_at,
+          // Pre-D15 backups lack these fields; restore them as NULL.
+          s.engine ?? null,
+          s.input_tokens ?? null,
+          s.output_tokens ?? null,
+          s.cost_usd ?? null,
         ],
       );
     }

@@ -71,6 +71,12 @@ export interface ScanRow {
   error: string | null;
   created_at: string;
   resolved_at: string | null;
+  /** D15: engine that processed the scan; null until recognition ran. */
+  engine: string | null;
+  /** D15: measured by the API's usage field — never estimated. */
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cost_usd: number | null;
 }
 
 // ---------------------------------------------------------------- locations
@@ -450,6 +456,10 @@ export function insertScan(
     error: null,
     created_at: nowIso(),
     resolved_at: null,
+    engine: null,
+    input_tokens: null,
+    output_tokens: null,
+    cost_usd: null,
   };
   db.runSync(
     `INSERT INTO scans (id, bin_id, mode, photo_uri, status, raw_response, error, created_at, resolved_at)
@@ -527,5 +537,46 @@ export function updateScanStatus(
        resolved_at = COALESCE(?, resolved_at)
      WHERE id = ?`,
     [status, extra.rawResponse ?? null, extra.error ?? null, extra.resolvedAt ?? null, id],
+  );
+}
+
+/** D15: records which engine ran a scan and, for cloud engines, its measured spend. */
+export function recordScanUsage(
+  db: DbAdapter,
+  id: string,
+  usage: {
+    engine: string;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    costUsd?: number | null;
+  },
+): void {
+  db.runSync(
+    'UPDATE scans SET engine = ?, input_tokens = ?, output_tokens = ?, cost_usd = ? WHERE id = ?',
+    [usage.engine, usage.inputTokens ?? null, usage.outputTokens ?? null, usage.costUsd ?? null, id],
+  );
+}
+
+export interface SpendTotals {
+  engine: string;
+  scans: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+
+/** Cumulative measured spend per engine, optionally since an ISO date. */
+export function listSpendTotals(db: DbAdapter, sinceIso?: string): SpendTotals[] {
+  return db.getAllSync<SpendTotals>(
+    `SELECT engine,
+            COUNT(*) AS scans,
+            COALESCE(SUM(input_tokens), 0) AS input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS output_tokens,
+            COALESCE(SUM(cost_usd), 0) AS cost_usd
+     FROM scans
+     WHERE cost_usd IS NOT NULL AND engine IS NOT NULL AND created_at >= ?
+     GROUP BY engine
+     ORDER BY cost_usd DESC`,
+    [sinceIso ?? ''],
   );
 }

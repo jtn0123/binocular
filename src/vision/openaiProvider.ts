@@ -21,6 +21,7 @@ interface ResponsesApiBody {
   status?: string;
   error?: { code?: string; message?: string } | null;
   incomplete_details?: { reason?: string } | null;
+  usage?: { input_tokens?: number; output_tokens?: number } | null;
   output?: {
     type: string;
     content?: { type: string; text?: string }[];
@@ -86,7 +87,10 @@ export function buildOpenAiRequestBody(photosBase64: string[], promptText: strin
           ...photosBase64.map((data) => ({
             type: 'input_image',
             image_url: `data:image/jpeg;base64,${data}`,
-            detail: 'auto',
+            // Pinned cost ceiling (D15): on gpt-5.6, `auto` = `original`,
+            // which skips downscaling — an unresized 20MP photo would be
+            // ~10x the tokens. `high` keeps the documented patch budget.
+            detail: 'high',
           })),
           { type: 'input_text', text: promptText },
         ],
@@ -146,10 +150,14 @@ export function createOpenAiProvider(
     apiKey: string,
     photosBase64: string[],
     promptText: string,
-  ): Promise<string> {
+  ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
     const body = buildOpenAiRequestBody(photosBase64, promptText);
     const responseBody = await postResponses(fetchFn, apiKey, body);
-    return extractOpenAiOutputText(responseBody);
+    return {
+      text: extractOpenAiOutputText(responseBody),
+      inputTokens: responseBody.usage?.input_tokens ?? 0,
+      outputTokens: responseBody.usage?.output_tokens ?? 0,
+    };
   }
 
   return {
@@ -159,9 +167,15 @@ export function createOpenAiProvider(
         throw new VisionError('No OpenAI API key configured — add one in Settings', 'auth');
       }
       const prompt = buildVisionPrompt(ctx);
-      const text = await requestText(apiKey, photosBase64, prompt);
+      // Usage accumulates across the repair retry — the scan's true spend (D15).
+      let inputTokens = 0;
+      let outputTokens = 0;
+      const usage = () => ({ inputTokens, outputTokens, model: VISION_MODEL });
+      const first = await requestText(apiKey, photosBase64, prompt);
+      inputTokens += first.inputTokens;
+      outputTokens += first.outputTokens;
       try {
-        return parseOpenAiRecognitionText(text);
+        return { result: parseOpenAiRecognitionText(first.text), usage: usage() };
       } catch (firstFailure) {
         if (!(firstFailure instanceof VisionError) || firstFailure.kind !== 'invalid_response') {
           throw firstFailure;
@@ -173,7 +187,9 @@ export function createOpenAiProvider(
           `${prompt}\n\nYour previous response was invalid: ${firstFailure.message}\n` +
             'Respond again with ONLY a corrected JSON object.',
         );
-        return parseOpenAiRecognitionText(repaired);
+        inputTokens += repaired.inputTokens;
+        outputTokens += repaired.outputTokens;
+        return { result: parseOpenAiRecognitionText(repaired.text), usage: usage() };
       }
     },
   };

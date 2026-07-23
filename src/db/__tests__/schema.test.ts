@@ -50,6 +50,27 @@ describe('migration runner', () => {
     expect(hits[0].name).toBe('Phillips screwdriver');
   });
 
+  it('migration 003 adds the D15 usage columns to scans, including on upgrade', () => {
+    // A database stopped at version 2 (pre-cost-transparency)...
+    db.withTransactionSync(() => {
+      db.execSync(MIGRATIONS[0]);
+      db.execSync(MIGRATIONS[1]);
+      db.execSync('PRAGMA user_version = 2');
+    });
+    db.runSync(
+      "INSERT INTO scans (id, mode, photo_uri, status, created_at) VALUES ('s1', 'bin_audit', 'file:///x.jpg', 'confirmed', '2026-01-01T00:00:00Z')",
+    );
+    runMigrations(db);
+    // ...gains the columns with NULLs for pre-existing scans.
+    const row = db.getFirstSync<{
+      engine: string | null;
+      input_tokens: number | null;
+      output_tokens: number | null;
+      cost_usd: number | null;
+    }>('SELECT engine, input_tokens, output_tokens, cost_usd FROM scans WHERE id = ?', ['s1']);
+    expect(row).toEqual({ engine: null, input_tokens: null, output_tokens: null, cost_usd: null });
+  });
+
   it('backfills the FTS index for items that predate migration 002', () => {
     // Apply only migration 001, insert an item, then run the rest.
     db.withTransactionSync(() => {

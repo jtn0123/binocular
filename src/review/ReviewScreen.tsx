@@ -29,6 +29,7 @@ import { newId } from '../lib/id';
 import { nowIso } from '../lib/time';
 import { processScan } from '../scan/scanFlow';
 import { colors, mono, radius, sp, type } from '../theme';
+import { formatTokens, formatUsd } from '../vision/cost';
 import { ItemCategory, RecognitionResult, type Confidence } from '../vision/types';
 
 /**
@@ -271,6 +272,13 @@ export function ReviewScreen({
             <Text style={styles.sceneNotesText}>{parsed.scene_notes}</Text>
           </View>
         ) : null}
+        {scan.input_tokens != null && (
+          <Text style={styles.usageLine} testID="scan-usage">
+            This scan: {formatTokens(scan.input_tokens)} tokens in ·{' '}
+            {formatTokens(scan.output_tokens ?? 0)} out
+            {scan.cost_usd != null ? ` · ${formatUsd(scan.cost_usd)} measured` : ''}
+          </Text>
+        )}
 
         {!isCheckIn && existingItems.length > 0 && (
           <View style={styles.modeRow}>
@@ -588,6 +596,7 @@ const styles = StyleSheet.create({
     padding: sp(3),
   },
   sceneNotesText: { color: '#E8CE7A', fontSize: 13 },
+  usageLine: { color: colors.textFaint, fontSize: 12 },
   modeRow: { flexDirection: 'row', gap: sp(2) },
   modeButton: {
     flex: 1,

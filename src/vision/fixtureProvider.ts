@@ -96,7 +96,8 @@ export function createFixtureProvider(opts: { delayMs?: number } = {}): VisionPr
     async recognize(_photosBase64, ctx) {
       await delay(delayMs);
       // Fixtures pass through the same trust boundary as real responses.
-      return RecognitionResult.parse(FIXTURES[ctx.mode]);
+      // No usage: nothing was metered, so nothing is reported (D15).
+      return { result: RecognitionResult.parse(FIXTURES[ctx.mode]) };
     },
   };
 }

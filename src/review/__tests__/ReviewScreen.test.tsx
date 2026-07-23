@@ -10,6 +10,7 @@ import {
   insertItem,
   insertScan,
   itemsForBin,
+  recordScanUsage,
   updateScanStatus,
   type BinRow,
 } from '../../db/queries';
@@ -91,6 +92,24 @@ describe('ReviewScreen (blueprint §6.3 + §8.1)', () => {
   it('shows the scene notes banner', async () => {
     const { screen } = await renderScreen(makeScan());
     expect(screen.getByText('Bin is quite full.')).toBeTruthy();
+  });
+
+  it('shows measured tokens + cost when the scan recorded usage, hides it otherwise (D15)', async () => {
+    const withUsage = makeScan();
+    recordScanUsage(db, withUsage, {
+      engine: 'openai',
+      inputTokens: 2100,
+      outputTokens: 480,
+      costUsd: 0.0249,
+    });
+    const { screen } = await renderScreen(withUsage);
+    const line = screen.getByTestId('scan-usage');
+    expect(line.props.children.join('')).toContain('2,100 tokens in');
+    expect(line.props.children.join('')).toContain('2.5¢ measured');
+
+    const withoutUsage = makeScan();
+    const { screen: plain } = await renderScreen(withoutUsage);
+    expect(plain.queryByTestId('scan-usage')).toBeNull();
   });
 
   it('save persists exactly the selected chips, with source_scan_id and bin updates', async () => {
