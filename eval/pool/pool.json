@@ -1,5 +1,5 @@
 {
-  "note": "Deduplicated image bank for Binocular testing + future model-training. Perceptual-hash dedup across all harvests. CC-licensed, sourced from Wikimedia Commons.",
+  "note": "Pending pool of harvested CC images under review \u2014 NOT yet confirmed. status: pending (unreviewed) | rejected (agent flagged not-useful, awaiting user confirm) | banked (user-confirmed useful). Perceptual-hash deduped; CC-licensed from Wikimedia Commons.",
   "count": 213,
   "dropped": {
     "dup": 5,
@@ -9,7 +9,7 @@
   },
   "images": [
     {
-      "id": "bank-001.jpg",
+      "id": "pool-001.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "1327664853 u-125-ris.2.jpg",
@@ -20,10 +20,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 199.1,
-      "sharpness": 42.5
+      "sharpness": 42.5,
+      "status": "pending"
     },
     {
-      "id": "bank-002.jpg",
+      "id": "pool-002.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "1328687024 u-135-ris.2.jpg",
@@ -34,10 +35,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 199.9,
-      "sharpness": 40.9
+      "sharpness": 40.9,
+      "status": "pending"
     },
     {
-      "id": "bank-003.jpg",
+      "id": "pool-003.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "1910 Tool Cabinet.png",
@@ -48,10 +50,11 @@
       "w": 874,
       "h": 620,
       "brightness": 134.3,
-      "sharpness": 49.4
+      "sharpness": 49.4,
+      "status": "pending"
     },
     {
-      "id": "bank-004.jpg",
+      "id": "pool-004.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "20060513 toolbox.jpg",
@@ -62,10 +65,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 111.9,
-      "sharpness": 50.7
+      "sharpness": 50.7,
+      "status": "pending"
     },
     {
-      "id": "bank-005.jpg",
+      "id": "pool-005.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "2013 Coke 400 19 (9236441091).jpg",
@@ -76,10 +80,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 84.0,
-      "sharpness": 62.3
+      "sharpness": 62.3,
+      "status": "pending"
     },
     {
-      "id": "bank-006.jpg",
+      "id": "pool-006.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "2015 UEC Track Elite European Championships 200.JPG",
@@ -90,10 +95,11 @@
       "w": 683,
       "h": 1024,
       "brightness": 110.4,
-      "sharpness": 49.1
+      "sharpness": 49.1,
+      "status": "pending"
     },
     {
-      "id": "bank-007.jpg",
+      "id": "pool-007.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "2015 UEC Track Elite European Championships 201.JPG",
@@ -104,10 +110,12 @@
       "w": 683,
       "h": 1024,
       "brightness": 78.9,
-      "sharpness": 47.2
+      "sharpness": 47.2,
+      "status": "rejected",
+      "reject_reason": "person in frame"
     },
     {
-      "id": "bank-008.jpg",
+      "id": "pool-008.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "2015 UEC Track Elite European Championships 305.JPG",
@@ -118,10 +126,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 87.9,
-      "sharpness": 65.3
+      "sharpness": 65.3,
+      "status": "pending"
     },
     {
-      "id": "bank-009.jpg",
+      "id": "pool-009.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "WWII tool case at Easton Lodge Gardens, Little Easton, Essex, England.jpg",
@@ -132,10 +141,11 @@
       "w": 819,
       "h": 1024,
       "brightness": 86.5,
-      "sharpness": 49.5
+      "sharpness": 49.5,
+      "status": "pending"
     },
     {
-      "id": "bank-010.jpg",
+      "id": "pool-010.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "WWII toolbox at Easton Lodge Gardens, Little Easton, Essex, England.jpg",
@@ -146,10 +156,11 @@
       "w": 1024,
       "h": 576,
       "brightness": 103.2,
-      "sharpness": 59.8
+      "sharpness": 59.8,
+      "status": "pending"
     },
     {
-      "id": "bank-011.jpg",
+      "id": "pool-011.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "2023 General Tire 200 (Sonoma) - Sarah Stierch 05.jpg",
@@ -160,10 +171,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 112.2,
-      "sharpness": 67.2
+      "sharpness": 67.2,
+      "status": "rejected",
+      "reject_reason": "sponsor signage"
     },
     {
-      "id": "bank-012.jpg",
+      "id": "pool-012.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "2023 Wkr\u0119tak z bitami.jpg",
@@ -174,10 +187,11 @@
       "w": 1024,
       "h": 789,
       "brightness": 208.9,
-      "sharpness": 38.3
+      "sharpness": 38.3,
+      "status": "pending"
     },
     {
-      "id": "bank-013.jpg",
+      "id": "pool-013.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "26TDeerfieldRunningBoardBox.jpg",
@@ -188,10 +202,12 @@
       "w": 1024,
       "h": 610,
       "brightness": 88.0,
-      "sharpness": 50.0
+      "sharpness": 50.0,
+      "status": "rejected",
+      "reject_reason": "closed box on car"
     },
     {
-      "id": "bank-014.jpg",
+      "id": "pool-014.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "26TDeerfieldRunningBoardBoxBetter.jpg",
@@ -202,10 +218,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 105.4,
-      "sharpness": 54.4
+      "sharpness": 54.4,
+      "status": "rejected",
+      "reject_reason": "closed dirty box"
     },
     {
-      "id": "bank-015.jpg",
+      "id": "pool-015.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "A mechanic at work 2.jpg",
@@ -216,10 +234,11 @@
       "w": 1024,
       "h": 1024,
       "brightness": 95.8,
-      "sharpness": 56.2
+      "sharpness": 56.2,
+      "status": "pending"
     },
     {
-      "id": "bank-016.jpg",
+      "id": "pool-016.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "Adventuress - toolbox 01.jpg",
@@ -230,10 +249,11 @@
       "w": 680,
       "h": 1024,
       "brightness": 113.5,
-      "sharpness": 50.9
+      "sharpness": 50.9,
+      "status": "pending"
     },
     {
-      "id": "bank-017.jpg",
+      "id": "pool-017.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "Alat photo Moma SM.jpg",
@@ -244,10 +264,11 @@
       "w": 1011,
       "h": 1024,
       "brightness": 93.0,
-      "sharpness": 51.0
+      "sharpness": 51.0,
+      "status": "pending"
     },
     {
-      "id": "bank-018.jpg",
+      "id": "pool-018.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "Archaeologist excavating a round feature at Northern Sustainable Placement Area Phase 1, Hillingdon, 2019 (HS2 Phase One).jpg",
@@ -258,10 +279,12 @@
       "w": 576,
       "h": 1024,
       "brightness": 132.0,
-      "sharpness": 75.9
+      "sharpness": 75.9,
+      "status": "rejected",
+      "reject_reason": "person digging"
     },
     {
-      "id": "bank-019.jpg",
+      "id": "pool-019.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "Archaeologist sectioning a small feature at Northern Sustainable Placement Area Phase 1, Hillingdon, 2019 (HS2 Phase One).jpg",
@@ -272,10 +295,12 @@
       "w": 576,
       "h": 1024,
       "brightness": 118.7,
-      "sharpness": 71.9
+      "sharpness": 71.9,
+      "status": "rejected",
+      "reject_reason": "person digging"
     },
     {
-      "id": "bank-020.jpg",
+      "id": "pool-020.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "Attrezzi vari.jpg",
@@ -286,10 +311,11 @@
       "w": 597,
       "h": 1024,
       "brightness": 121.1,
-      "sharpness": 54.3
+      "sharpness": 54.3,
+      "status": "pending"
     },
     {
-      "id": "bank-021.jpg",
+      "id": "pool-021.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "Bad Ragaz - Former Munitions Dump Buel II (39634546160).jpg",
@@ -300,10 +326,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 100.6,
-      "sharpness": 40.8
+      "sharpness": 40.8,
+      "status": "pending"
     },
     {
-      "id": "bank-022.jpg",
+      "id": "pool-022.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "Beautiful Simple Singing Toolbox (5516868634).jpg",
@@ -314,10 +341,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 79.9,
-      "sharpness": 17.6
+      "sharpness": 17.6,
+      "status": "pending"
     },
     {
-      "id": "bank-023.jpg",
+      "id": "pool-023.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "Bengkel.jpg",
@@ -328,10 +356,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 115.4,
-      "sharpness": 78.5
+      "sharpness": 78.5,
+      "status": "pending"
     },
     {
-      "id": "bank-024.jpg",
+      "id": "pool-024.jpg",
       "scenario": "mixed-bin",
       "category": "Toolboxes",
       "title": "Beschilderde houten doos met initialen F.M., de inhoud bestaat uit gereedschap, mesjes - Hogebeintum - 20398948 - RCE.jpg",
@@ -342,10 +371,11 @@
       "w": 1024,
       "h": 1024,
       "brightness": 193.2,
-      "sharpness": 50.4
+      "sharpness": 50.4,
+      "status": "pending"
     },
     {
-      "id": "bank-025.jpg",
+      "id": "pool-025.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "1904 Burglars Tools PHO 28182 MOHIST.jpg",
@@ -356,10 +386,12 @@
       "w": 1024,
       "h": 738,
       "brightness": 93.5,
-      "sharpness": 84.6
+      "sharpness": 84.6,
+      "status": "rejected",
+      "reject_reason": "antique panel"
     },
     {
-      "id": "bank-026.jpg",
+      "id": "pool-026.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Copped Hall horticultural bygones, Epping, Essex, England 01 darker render.jpg",
@@ -370,10 +402,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 103.6,
-      "sharpness": 75.3
+      "sharpness": 75.3,
+      "status": "pending"
     },
     {
-      "id": "bank-027.jpg",
+      "id": "pool-027.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Copped Hall lawn mowers, Epping, Essex, England 01.jpg",
@@ -384,10 +417,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 101.4,
-      "sharpness": 70.9
+      "sharpness": 70.9,
+      "status": "rejected",
+      "reject_reason": "lawnmowers"
     },
     {
-      "id": "bank-028.jpg",
+      "id": "pool-028.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Arquebus Krigshistorisk Museum Norway WW2 German Kriegsmarine G7a torpedo maintenance shop diorama Mechanical equipment tools equipment hooks on wall Oil can Propeller Mesure dials Uniform sailor colani jacket mannequin etc 2023.jpg",
@@ -398,10 +433,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 127.9,
-      "sharpness": 65.2
+      "sharpness": 65.2,
+      "status": "rejected",
+      "reject_reason": "vintage + person"
     },
     {
-      "id": "bank-029.jpg",
+      "id": "pool-029.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Blue Grass Chemical Agent-Destruction Pilot Plant Maintenance Building (31820185301).jpg",
@@ -412,10 +449,12 @@
       "w": 1024,
       "h": 683,
       "brightness": 115.6,
-      "sharpness": 46.8
+      "sharpness": 46.8,
+      "status": "rejected",
+      "reject_reason": "person at shelves"
     },
     {
-      "id": "bank-030.jpg",
+      "id": "pool-030.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Camarsac, exposition d'anciens outils.JPG",
@@ -426,10 +465,11 @@
       "w": 1024,
       "h": 1002,
       "brightness": 130.3,
-      "sharpness": 33.2
+      "sharpness": 33.2,
+      "status": "pending"
     },
     {
-      "id": "bank-031.jpg",
+      "id": "pool-031.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Erasmus College Zoetermeer (34).jpg",
@@ -440,10 +480,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 126.1,
-      "sharpness": 53.5
+      "sharpness": 53.5,
+      "status": "rejected",
+      "reject_reason": "wide workshop"
     },
     {
-      "id": "bank-032.jpg",
+      "id": "pool-032.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Erasmus College Zoetermeer (38).jpg",
@@ -454,10 +496,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 119.8,
-      "sharpness": 54.6
+      "sharpness": 54.6,
+      "status": "rejected",
+      "reject_reason": "wide workshop"
     },
     {
-      "id": "bank-033.jpg",
+      "id": "pool-033.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Freiluftmuseum Schmiedleithen Museum Werkzeugschrank.jpg",
@@ -468,10 +512,11 @@
       "w": 787,
       "h": 1024,
       "brightness": 109.5,
-      "sharpness": 40.3
+      "sharpness": 40.3,
+      "status": "pending"
     },
     {
-      "id": "bank-034.jpg",
+      "id": "pool-034.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Garage tool rack.jpg",
@@ -482,10 +527,12 @@
       "w": 571,
       "h": 743,
       "brightness": 203.4,
-      "sharpness": 66.7
+      "sharpness": 66.7,
+      "status": "rejected",
+      "reject_reason": "tool-rack drawing"
     },
     {
-      "id": "bank-035.jpg",
+      "id": "pool-035.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Gardening Utensils.jpg",
@@ -496,10 +543,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 98.4,
-      "sharpness": 40.2
+      "sharpness": 40.2,
+      "status": "pending"
     },
     {
-      "id": "bank-036.jpg",
+      "id": "pool-036.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Gereedschapsrek monument dieselgemaal Papekop aan het Kromwijkerpad te Woerden.jpg",
@@ -510,10 +558,11 @@
       "w": 1013,
       "h": 1024,
       "brightness": 134.3,
-      "sharpness": 34.9
+      "sharpness": 34.9,
+      "status": "pending"
     },
     {
-      "id": "bank-037.jpg",
+      "id": "pool-037.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Gillnets in storage at unidentified cannery, Nushagak, Alaska, 1917 (COBB 173).jpeg",
@@ -524,10 +573,12 @@
       "w": 419,
       "h": 512,
       "brightness": 124.1,
-      "sharpness": 67.9
+      "sharpness": 67.9,
+      "status": "rejected",
+      "reject_reason": "barn interior"
     },
     {
-      "id": "bank-038.jpg",
+      "id": "pool-038.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Handwerks-Schrank Steiff-Museum (4760544892).jpg",
@@ -538,10 +589,11 @@
       "w": 1024,
       "h": 933,
       "brightness": 132.5,
-      "sharpness": 50.4
+      "sharpness": 50.4,
+      "status": "pending"
     },
     {
-      "id": "bank-039.jpg",
+      "id": "pool-039.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Herramientas aula de tecnolog\u00eda 09.JPG",
@@ -552,10 +604,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 100.9,
-      "sharpness": 38.1
+      "sharpness": 38.1,
+      "status": "pending"
     },
     {
-      "id": "bank-040.jpg",
+      "id": "pool-040.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Herramientas aula de tecnolog\u00eda 10.JPG",
@@ -566,10 +619,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 112.2,
-      "sharpness": 35.0
+      "sharpness": 35.0,
+      "status": "pending"
     },
     {
-      "id": "bank-041.jpg",
+      "id": "pool-041.jpg",
       "scenario": "mixed-bin",
       "category": "Tool storage",
       "title": "Herramientas de aula de tecnolog\u00eda 08.JPG",
@@ -580,10 +634,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 104.7,
-      "sharpness": 26.8
+      "sharpness": 26.8,
+      "status": "pending"
     },
     {
-      "id": "bank-042.jpg",
+      "id": "pool-042.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "010 Screws and bolts in OBI home improvement store in Poland.jpg",
@@ -594,10 +649,11 @@
       "w": 768,
       "h": 1024,
       "brightness": 119.4,
-      "sharpness": 82.3
+      "sharpness": 82.3,
+      "status": "pending"
     },
     {
-      "id": "bank-043.jpg",
+      "id": "pool-043.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "011 Screws and bolts in OBI hardware store home improvement retail store in Poland.jpg",
@@ -608,10 +664,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 119.0,
-      "sharpness": 82.3
+      "sharpness": 82.3,
+      "status": "pending"
     },
     {
-      "id": "bank-044.jpg",
+      "id": "pool-044.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "1 Kilo Schrauben.jpg",
@@ -622,10 +679,11 @@
       "w": 800,
       "h": 500,
       "brightness": 184.2,
-      "sharpness": 59.6
+      "sharpness": 59.6,
+      "status": "pending"
     },
     {
-      "id": "bank-045.jpg",
+      "id": "pool-045.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "18-03-16-Schrauben-M6x20 RRK3196.jpg",
@@ -636,10 +694,11 @@
       "w": 1024,
       "h": 685,
       "brightness": 141.8,
-      "sharpness": 49.4
+      "sharpness": 49.4,
+      "status": "pending"
     },
     {
-      "id": "bank-046.jpg",
+      "id": "pool-046.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "18-03-16-Schrauben-M6x20 RRK3198.jpg",
@@ -650,10 +709,11 @@
       "w": 1024,
       "h": 590,
       "brightness": 159.6,
-      "sharpness": 53.2
+      "sharpness": 53.2,
+      "status": "pending"
     },
     {
-      "id": "bank-047.jpg",
+      "id": "pool-047.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "18-04-13-Schrauben-Schl\u00fcssel RRK3436.jpg",
@@ -664,10 +724,11 @@
       "w": 1024,
       "h": 602,
       "brightness": 197.4,
-      "sharpness": 42.8
+      "sharpness": 42.8,
+      "status": "pending"
     },
     {
-      "id": "bank-048.jpg",
+      "id": "pool-048.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "2014-365-314 One Bolt Will Do (15577329829).jpg",
@@ -678,10 +739,12 @@
       "w": 1024,
       "h": 767,
       "brightness": 128.4,
-      "sharpness": 75.5
+      "sharpness": 75.5,
+      "status": "rejected",
+      "reject_reason": "single bolt macro"
     },
     {
-      "id": "bank-049.jpg",
+      "id": "pool-049.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "21-01-20-schraube MG 97858689.jpg",
@@ -692,10 +755,11 @@
       "w": 1024,
       "h": 1024,
       "brightness": 171.1,
-      "sharpness": 23.7
+      "sharpness": 23.7,
+      "status": "pending"
     },
     {
-      "id": "bank-050.jpg",
+      "id": "pool-050.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "4 \u00d7 8 Template FB (27731660725).jpg",
@@ -706,10 +770,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 93.4,
-      "sharpness": 72.6
+      "sharpness": 72.6,
+      "status": "rejected",
+      "reject_reason": "nails in board"
     },
     {
-      "id": "bank-051.jpg",
+      "id": "pool-051.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "94147 moshe beril at work in the screw factory PikiWiki Israel.jpg",
@@ -720,10 +786,12 @@
       "w": 1024,
       "h": 631,
       "brightness": 69.6,
-      "sharpness": 43.6
+      "sharpness": 43.6,
+      "status": "rejected",
+      "reject_reason": "person"
     },
     {
-      "id": "bank-052.jpg",
+      "id": "pool-052.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "A bolt through the heart... - Flickr - Kate^2112.jpg",
@@ -734,10 +802,12 @@
       "w": 1024,
       "h": 754,
       "brightness": 160.3,
-      "sharpness": 68.3
+      "sharpness": 68.3,
+      "status": "rejected",
+      "reject_reason": "screws-as-art"
     },
     {
-      "id": "bank-053.jpg",
+      "id": "pool-053.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "A screw from the tip.JPG",
@@ -748,10 +818,12 @@
       "w": 741,
       "h": 1024,
       "brightness": 120.9,
-      "sharpness": 44.6
+      "sharpness": 44.6,
+      "status": "rejected",
+      "reject_reason": "single dome nut"
     },
     {
-      "id": "bank-054.jpg",
+      "id": "pool-054.jpg",
       "scenario": "dense-small-parts",
       "category": "Screws",
       "title": "A turn of the screw (24801451012).jpg",
@@ -762,10 +834,11 @@
       "w": 1024,
       "h": 506,
       "brightness": 115.5,
-      "sharpness": 26.4
+      "sharpness": 26.4,
+      "status": "pending"
     },
     {
-      "id": "bank-055.jpg",
+      "id": "pool-055.jpg",
       "scenario": "dense-small-parts",
       "category": "Nuts (hardware)",
       "title": "2014-01-29-Varm detalje (12211021574).jpg",
@@ -776,10 +849,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 143.8,
-      "sharpness": 21.2
+      "sharpness": 21.2,
+      "status": "rejected",
+      "reject_reason": "single bolt macro"
     },
     {
-      "id": "bank-056.jpg",
+      "id": "pool-056.jpg",
       "scenario": "dense-small-parts",
       "category": "Nuts (hardware)",
       "title": "500px photo (139567823).jpeg",
@@ -790,10 +865,12 @@
       "w": 1024,
       "h": 706,
       "brightness": 59.9,
-      "sharpness": 65.7
+      "sharpness": 65.7,
+      "status": "rejected",
+      "reject_reason": "rust macro"
     },
     {
-      "id": "bank-057.jpg",
+      "id": "pool-057.jpg",
       "scenario": "dense-small-parts",
       "category": "Nuts (hardware)",
       "title": "AnchorBolt Setsubi 01.jpg",
@@ -804,10 +881,12 @@
       "w": 600,
       "h": 600,
       "brightness": 102.1,
-      "sharpness": 59.8
+      "sharpness": 59.8,
+      "status": "rejected",
+      "reject_reason": "single bolt"
     },
     {
-      "id": "bank-058.jpg",
+      "id": "pool-058.jpg",
       "scenario": "dense-small-parts",
       "category": "Nuts (hardware)",
       "title": "Aneka Macam Mur dan Baut.jpg",
@@ -818,10 +897,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 131.7,
-      "sharpness": 80.3
+      "sharpness": 80.3,
+      "status": "pending"
     },
     {
-      "id": "bank-059.jpg",
+      "id": "pool-059.jpg",
       "scenario": "dense-small-parts",
       "category": "Nuts (hardware)",
       "title": "ARFISA 13.jpg",
@@ -832,10 +912,11 @@
       "w": 575,
       "h": 397,
       "brightness": 193.9,
-      "sharpness": 34.8
+      "sharpness": 34.8,
+      "status": "pending"
     },
     {
-      "id": "bank-060.jpg",
+      "id": "pool-060.jpg",
       "scenario": "dense-small-parts",
       "category": "Nuts (hardware)",
       "title": "Arretierung einer L\u00e4rmschtzwand an der BAB7 in Niendorf, Hamburg.jpg",
@@ -846,10 +927,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 102.6,
-      "sharpness": 47.9
+      "sharpness": 47.9,
+      "status": "rejected",
+      "reject_reason": "bollards"
     },
     {
-      "id": "bank-061.jpg",
+      "id": "pool-061.jpg",
       "scenario": "dense-small-parts",
       "category": "Nuts (hardware)",
       "title": "Aurora, Oregon - Aurora Mills Architectural Salvage - Dorman bolt and nut boxes.jpg",
@@ -860,10 +943,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 91.4,
-      "sharpness": 52.2
+      "sharpness": 52.2,
+      "status": "pending"
     },
     {
-      "id": "bank-062.jpg",
+      "id": "pool-062.jpg",
       "scenario": "dense-small-parts",
       "category": "Washers (hardware)",
       "title": "\"sealing\" washers (100757402).jpg",
@@ -874,10 +958,11 @@
       "w": 1024,
       "h": 535,
       "brightness": 125.6,
-      "sharpness": 20.9
+      "sharpness": 20.9,
+      "status": "pending"
     },
     {
-      "id": "bank-063.jpg",
+      "id": "pool-063.jpg",
       "scenario": "dense-small-parts",
       "category": "Washers (hardware)",
       "title": "Both spacers over head view.JPG",
@@ -888,10 +973,12 @@
       "w": 1024,
       "h": 934,
       "brightness": 137.6,
-      "sharpness": 17.0
+      "sharpness": 17.0,
+      "status": "rejected",
+      "reject_reason": "single washer"
     },
     {
-      "id": "bank-064.jpg",
+      "id": "pool-064.jpg",
       "scenario": "dense-small-parts",
       "category": "Washers (hardware)",
       "title": "Burnt washer.JPG",
@@ -902,10 +989,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 124.8,
-      "sharpness": 24.4
+      "sharpness": 24.4,
+      "status": "rejected",
+      "reject_reason": "single washer"
     },
     {
-      "id": "bank-065.jpg",
+      "id": "pool-065.jpg",
       "scenario": "sets-accessories",
       "category": "Drill bits",
       "title": "... Handy notes and queries (1887) (14760632446).jpg",
@@ -916,10 +1005,12 @@
       "w": 665,
       "h": 1024,
       "brightness": 107.0,
-      "sharpness": 81.6
+      "sharpness": 81.6,
+      "status": "rejected",
+      "reject_reason": "catalog page"
     },
     {
-      "id": "bank-066.jpg",
+      "id": "pool-066.jpg",
       "scenario": "sets-accessories",
       "category": "Drill bits",
       "title": "12 \u00bc inch hybrid bit.jpg",
@@ -930,10 +1021,12 @@
       "w": 600,
       "h": 450,
       "brightness": 124.6,
-      "sharpness": 40.8
+      "sharpness": 40.8,
+      "status": "rejected",
+      "reject_reason": "mining bit"
     },
     {
-      "id": "bank-067.jpg",
+      "id": "pool-067.jpg",
       "scenario": "sets-accessories",
       "category": "Drill bits",
       "title": "2mm diamond drill bits macro.jpg",
@@ -944,10 +1037,11 @@
       "w": 1024,
       "h": 731,
       "brightness": 176.5,
-      "sharpness": 40.8
+      "sharpness": 40.8,
+      "status": "pending"
     },
     {
-      "id": "bank-068.jpg",
+      "id": "pool-068.jpg",
       "scenario": "sets-accessories",
       "category": "Drill bits",
       "title": "6-Rollen-Bohrkrone.jpg",
@@ -958,10 +1052,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 140.8,
-      "sharpness": 54.8
+      "sharpness": 54.8,
+      "status": "rejected",
+      "reject_reason": "mining bit"
     },
     {
-      "id": "bank-069.jpg",
+      "id": "pool-069.jpg",
       "scenario": "sets-accessories",
       "category": "Drill bits",
       "title": "6\u70b9\u68d2\u304b\u30894\u70b9\u68d2\u3078.JPG",
@@ -972,10 +1068,12 @@
       "w": 1024,
       "h": 751,
       "brightness": 111.2,
-      "sharpness": 48.9
+      "sharpness": 48.9,
+      "status": "rejected",
+      "reject_reason": "crowd"
     },
     {
-      "id": "bank-070.jpg",
+      "id": "pool-070.jpg",
       "scenario": "sets-accessories",
       "category": "Drill bits",
       "title": "7m6a0166 Jpg (107521855).jpeg",
@@ -986,10 +1084,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 75.2,
-      "sharpness": 50.7
+      "sharpness": 50.7,
+      "status": "pending"
     },
     {
-      "id": "bank-071.jpg",
+      "id": "pool-071.jpg",
       "scenario": "sets-accessories",
       "category": "Drill bits",
       "title": "A variety of drill bits.jpg",
@@ -1000,10 +1099,11 @@
       "w": 1024,
       "h": 897,
       "brightness": 151.6,
-      "sharpness": 50.0
+      "sharpness": 50.0,
+      "status": "pending"
     },
     {
-      "id": "bank-072.jpg",
+      "id": "pool-072.jpg",
       "scenario": "sets-accessories",
       "category": "Drill bits",
       "title": "Adopter drill chuck for pcb drilling (4) cr.jpg",
@@ -1014,10 +1114,11 @@
       "w": 1024,
       "h": 455,
       "brightness": 210.8,
-      "sharpness": 32.7
+      "sharpness": 32.7,
+      "status": "pending"
     },
     {
-      "id": "bank-073.jpg",
+      "id": "pool-073.jpg",
       "scenario": "dense-small-parts",
       "category": "Nails",
       "title": "2010-365-287 Undecided (5083208418).jpg",
@@ -1028,10 +1129,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 102.9,
-      "sharpness": 22.0
+      "sharpness": 22.0,
+      "status": "rejected",
+      "reject_reason": "single nail"
     },
     {
-      "id": "bank-074.jpg",
+      "id": "pool-074.jpg",
       "scenario": "dense-small-parts",
       "category": "Nails",
       "title": "Acrylic nails by Salon Sagesse.jpg",
@@ -1042,10 +1145,12 @@
       "w": 819,
       "h": 1024,
       "brightness": 94.6,
-      "sharpness": 51.7
+      "sharpness": 51.7,
+      "status": "rejected",
+      "reject_reason": "painted fingernails"
     },
     {
-      "id": "bank-075.jpg",
+      "id": "pool-075.jpg",
       "scenario": "single-tool",
       "category": "Wrenches",
       "title": "18-04-13-Schrauben-Schl\u00fcssel RRK3429.jpg",
@@ -1056,10 +1161,11 @@
       "w": 1024,
       "h": 602,
       "brightness": 194.6,
-      "sharpness": 34.9
+      "sharpness": 34.9,
+      "status": "pending"
     },
     {
-      "id": "bank-076.jpg",
+      "id": "pool-076.jpg",
       "scenario": "single-tool",
       "category": "Wrenches",
       "title": "18-04-13-Schrauben-Schl\u00fcssel RRK3432.jpg",
@@ -1070,10 +1176,11 @@
       "w": 1024,
       "h": 592,
       "brightness": 198.2,
-      "sharpness": 27.2
+      "sharpness": 27.2,
+      "status": "pending"
     },
     {
-      "id": "bank-077.jpg",
+      "id": "pool-077.jpg",
       "scenario": "single-tool",
       "category": "Wrenches",
       "title": "2019-07-20. \u0415\u0439\u0441\u043a\u0438\u0439 \u0438\u0441\u0442\u043e\u0440\u0438\u043a\u043e-\u043a\u0440\u0430\u0435\u0432\u0435\u0434\u0447\u0435\u0441\u043a\u0438\u0439 \u043c\u0443\u0437\u0435\u0439 061.jpg",
@@ -1084,10 +1191,12 @@
       "w": 1024,
       "h": 678,
       "brightness": 117.2,
-      "sharpness": 30.5
+      "sharpness": 30.5,
+      "status": "rejected",
+      "reject_reason": "museum wrench"
     },
     {
-      "id": "bank-078.jpg",
+      "id": "pool-078.jpg",
       "scenario": "single-tool",
       "category": "Wrenches",
       "title": "44 Gabelschluessel.jpg",
@@ -1098,10 +1207,11 @@
       "w": 1024,
       "h": 1024,
       "brightness": 100.3,
-      "sharpness": 52.8
+      "sharpness": 52.8,
+      "status": "pending"
     },
     {
-      "id": "bank-079.jpg",
+      "id": "pool-079.jpg",
       "scenario": "single-tool",
       "category": "Wrenches",
       "title": "50pc Wrench Set Maxtech.jpg",
@@ -1112,10 +1222,11 @@
       "w": 768,
       "h": 1024,
       "brightness": 146.8,
-      "sharpness": 55.2
+      "sharpness": 55.2,
+      "status": "pending"
     },
     {
-      "id": "bank-080.jpg",
+      "id": "pool-080.jpg",
       "scenario": "single-tool",
       "category": "Wrenches",
       "title": "A clamp ratchet wrench.jpg",
@@ -1126,10 +1237,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 128.3,
-      "sharpness": 26.9
+      "sharpness": 26.9,
+      "status": "pending"
     },
     {
-      "id": "bank-081.jpg",
+      "id": "pool-081.jpg",
       "scenario": "single-tool",
       "category": "Wrenches",
       "title": "Adjustable spanner in hand.jpg",
@@ -1140,10 +1252,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 129.9,
-      "sharpness": 34.8
+      "sharpness": 34.8,
+      "status": "rejected",
+      "reject_reason": "gloved hand"
     },
     {
-      "id": "bank-082.jpg",
+      "id": "pool-082.jpg",
       "scenario": "single-tool",
       "category": "Pliers",
       "title": "1980s pet nail clippers model 743 by Millers Forge USA.jpg",
@@ -1154,10 +1268,11 @@
       "w": 1024,
       "h": 495,
       "brightness": 119.1,
-      "sharpness": 53.5
+      "sharpness": 53.5,
+      "status": "pending"
     },
     {
-      "id": "bank-083.jpg",
+      "id": "pool-083.jpg",
       "scenario": "single-tool",
       "category": "Pliers",
       "title": "2003-11-27 Making chainmail armour 1.jpg",
@@ -1168,10 +1283,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 127.1,
-      "sharpness": 32.5
+      "sharpness": 32.5,
+      "status": "rejected",
+      "reject_reason": "hands using tool"
     },
     {
-      "id": "bank-084.jpg",
+      "id": "pool-084.jpg",
       "scenario": "single-tool",
       "category": "Pliers",
       "title": "2003-11-27 Making chainmail armour 2.jpg",
@@ -1182,10 +1299,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 139.2,
-      "sharpness": 47.7
+      "sharpness": 47.7,
+      "status": "rejected",
+      "reject_reason": "hands"
     },
     {
-      "id": "bank-085.jpg",
+      "id": "pool-085.jpg",
       "scenario": "single-tool",
       "category": "Pliers",
       "title": "2023 Szczypce zaciskowe Morse'a.jpg",
@@ -1196,10 +1315,11 @@
       "w": 1024,
       "h": 602,
       "brightness": 223.4,
-      "sharpness": 37.6
+      "sharpness": 37.6,
+      "status": "pending"
     },
     {
-      "id": "bank-086.jpg",
+      "id": "pool-086.jpg",
       "scenario": "single-tool",
       "category": "Pliers",
       "title": "26626-Annaberg-1935-Frohnauer Hammer-Br\u00fcck & Sohn Kunstverlag.jpg",
@@ -1210,10 +1330,12 @@
       "w": 1024,
       "h": 670,
       "brightness": 96.8,
-      "sharpness": 87.7
+      "sharpness": 87.7,
+      "status": "rejected",
+      "reject_reason": "vintage forge"
     },
     {
-      "id": "bank-087.jpg",
+      "id": "pool-087.jpg",
       "scenario": "dense-small-parts",
       "category": "Screwdrivers",
       "title": "09 CacciaviteTaglionero.JPG",
@@ -1224,10 +1346,11 @@
       "w": 1024,
       "h": 681,
       "brightness": 90.3,
-      "sharpness": 21.9
+      "sharpness": 21.9,
+      "status": "pending"
     },
     {
-      "id": "bank-088.jpg",
+      "id": "pool-088.jpg",
       "scenario": "dense-small-parts",
       "category": "Screwdrivers",
       "title": "2010-365-320 If Tools Could Talk (5183793314).jpg",
@@ -1238,10 +1361,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 65.5,
-      "sharpness": 19.9
+      "sharpness": 19.9,
+      "status": "pending"
     },
     {
-      "id": "bank-089.jpg",
+      "id": "pool-089.jpg",
       "scenario": "dense-small-parts",
       "category": "Screwdrivers",
       "title": "2013-365-167 Dad Held This Screwdriver (9064786538).jpg",
@@ -1252,10 +1376,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 100.8,
-      "sharpness": 23.2
+      "sharpness": 23.2,
+      "status": "rejected",
+      "reject_reason": "hand holding"
     },
     {
-      "id": "bank-090.jpg",
+      "id": "pool-090.jpg",
       "scenario": "consumables",
       "category": "Paint cans",
       "title": "001- PINTURAS TITANLUX - ESMALTE BRILLANTE.jpg",
@@ -1266,10 +1392,11 @@
       "w": 1024,
       "h": 759,
       "brightness": 88.3,
-      "sharpness": 58.2
+      "sharpness": 58.2,
+      "status": "pending"
     },
     {
-      "id": "bank-091.jpg",
+      "id": "pool-091.jpg",
       "scenario": "consumables",
       "category": "Paint cans",
       "title": "2011-365-141 Triplet (5745210681).jpg",
@@ -1280,10 +1407,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 96.4,
-      "sharpness": 48.7
+      "sharpness": 48.7,
+      "status": "pending"
     },
     {
-      "id": "bank-092.jpg",
+      "id": "pool-092.jpg",
       "scenario": "consumables",
       "category": "Paint cans",
       "title": "5pointz graffiti (Tools of trade 2).jpg",
@@ -1294,10 +1422,11 @@
       "w": 746,
       "h": 1024,
       "brightness": 116.1,
-      "sharpness": 59.5
+      "sharpness": 59.5,
+      "status": "pending"
     },
     {
-      "id": "bank-093.jpg",
+      "id": "pool-093.jpg",
       "scenario": "consumables",
       "category": "Paint cans",
       "title": "Alcro paint.jpg",
@@ -1308,10 +1437,11 @@
       "w": 683,
       "h": 1024,
       "brightness": 100.2,
-      "sharpness": 24.9
+      "sharpness": 24.9,
+      "status": "pending"
     },
     {
-      "id": "bank-094.jpg",
+      "id": "pool-094.jpg",
       "scenario": "single-tool",
       "category": "Ratchets",
       "title": "Blackhawk quick-release pear-head ratchet.jpg",
@@ -1322,10 +1452,11 @@
       "w": 1024,
       "h": 439,
       "brightness": 92.3,
-      "sharpness": 25.5
+      "sharpness": 25.5,
+      "status": "pending"
     },
     {
-      "id": "bank-095.jpg",
+      "id": "pool-095.jpg",
       "scenario": "single-tool",
       "category": "Ratchets",
       "title": "Cable car d\u00e9tail.jpg",
@@ -1336,10 +1467,12 @@
       "w": 1024,
       "h": 680,
       "brightness": 104.4,
-      "sharpness": 49.2
+      "sharpness": 49.2,
+      "status": "rejected",
+      "reject_reason": "scrap metal"
     },
     {
-      "id": "bank-096.jpg",
+      "id": "pool-096.jpg",
       "scenario": "single-tool",
       "category": "Ratchets",
       "title": "Carraca.jpg",
@@ -1350,10 +1483,11 @@
       "w": 684,
       "h": 1024,
       "brightness": 205.2,
-      "sharpness": 21.6
+      "sharpness": 21.6,
+      "status": "pending"
     },
     {
-      "id": "bank-097.jpg",
+      "id": "pool-097.jpg",
       "scenario": "single-tool",
       "category": "Ratchets",
       "title": "Cliquet.jpg",
@@ -1364,10 +1498,12 @@
       "w": 680,
       "h": 1024,
       "brightness": 123.2,
-      "sharpness": 45.3
+      "sharpness": 45.3,
+      "status": "rejected",
+      "reject_reason": "machinery base"
     },
     {
-      "id": "bank-098.jpg",
+      "id": "pool-098.jpg",
       "scenario": "single-tool",
       "category": "Ratchets",
       "title": "Comealong.jpg",
@@ -1378,10 +1514,11 @@
       "w": 527,
       "h": 1024,
       "brightness": 230.5,
-      "sharpness": 35.4
+      "sharpness": 35.4,
+      "status": "pending"
     },
     {
-      "id": "bank-099.jpg",
+      "id": "pool-099.jpg",
       "scenario": "single-tool",
       "category": "Ratchets",
       "title": "Doppel-Ratschenschl\u00fcssel.jpg",
@@ -1392,10 +1529,11 @@
       "w": 326,
       "h": 315,
       "brightness": 82.5,
-      "sharpness": 40.3
+      "sharpness": 40.3,
+      "status": "pending"
     },
     {
-      "id": "bank-100.jpg",
+      "id": "pool-100.jpg",
       "scenario": "single-tool",
       "category": "Ratchets",
       "title": "Drehung (26413928771).jpg",
@@ -1406,10 +1544,12 @@
       "w": 1024,
       "h": 683,
       "brightness": 80.3,
-      "sharpness": 44.7
+      "sharpness": 44.7,
+      "status": "rejected",
+      "reject_reason": "spoked wheel"
     },
     {
-      "id": "bank-101.jpg",
+      "id": "pool-101.jpg",
       "scenario": "single-tool",
       "category": "Chisels",
       "title": "10251 Katwijk DeWoerd IJzeren beitel provZH.jpg",
@@ -1420,10 +1560,12 @@
       "w": 1024,
       "h": 630,
       "brightness": 209.6,
-      "sharpness": 37.8
+      "sharpness": 37.8,
+      "status": "rejected",
+      "reject_reason": "stone artifact"
     },
     {
-      "id": "bank-102.jpg",
+      "id": "pool-102.jpg",
       "scenario": "single-tool",
       "category": "Chisels",
       "title": "A post medieval - Modern iron chisel (17th - early 18th century). (FindID 154196).jpg",
@@ -1434,10 +1576,11 @@
       "w": 865,
       "h": 1024,
       "brightness": 168.1,
-      "sharpness": 65.3
+      "sharpness": 65.3,
+      "status": "pending"
     },
     {
-      "id": "bank-103.jpg",
+      "id": "pool-103.jpg",
       "scenario": "single-tool",
       "category": "Chisels",
       "title": "Abram Ryan Monument (24 May 2017) Graffiti.jpg",
@@ -1448,10 +1591,12 @@
       "w": 768,
       "h": 1024,
       "brightness": 114.0,
-      "sharpness": 47.7
+      "sharpness": 47.7,
+      "status": "rejected",
+      "reject_reason": "gravestone"
     },
     {
-      "id": "bank-104.jpg",
+      "id": "pool-104.jpg",
       "scenario": "single-tool",
       "category": "Chisels",
       "title": "Bedane Lussault.jpg",
@@ -1462,10 +1607,11 @@
       "w": 1021,
       "h": 680,
       "brightness": 190.1,
-      "sharpness": 27.7
+      "sharpness": 27.7,
+      "status": "pending"
     },
     {
-      "id": "bank-105.jpg",
+      "id": "pool-105.jpg",
       "scenario": "single-tool",
       "category": "Chisels",
       "title": "Beitel - L1ZFL - 60012112 - RCE.jpg",
@@ -1476,10 +1622,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 233.0,
-      "sharpness": 40.5
+      "sharpness": 40.5,
+      "status": "pending"
     },
     {
-      "id": "bank-106.jpg",
+      "id": "pool-106.jpg",
       "scenario": "single-tool",
       "category": "Hand saws",
       "title": "14 Caixa de bispeis (2).jpg",
@@ -1490,10 +1637,11 @@
       "w": 1024,
       "h": 576,
       "brightness": 75.3,
-      "sharpness": 14.0
+      "sharpness": 14.0,
+      "status": "pending"
     },
     {
-      "id": "bank-107.jpg",
+      "id": "pool-107.jpg",
       "scenario": "single-tool",
       "category": "Hand saws",
       "title": "2011 08 10 S\u00e4gen DSCI5947 P k.JPG",
@@ -1504,10 +1652,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 130.3,
-      "sharpness": 28.2
+      "sharpness": 28.2,
+      "status": "pending"
     },
     {
-      "id": "bank-108.jpg",
+      "id": "pool-108.jpg",
       "scenario": "single-tool",
       "category": "Hand saws",
       "title": "20th century catalogue of supplies for watchmakers, jewelers and kindred trades (1899) (14783784552).jpg",
@@ -1518,10 +1667,12 @@
       "w": 992,
       "h": 1024,
       "brightness": 156.6,
-      "sharpness": 70.9
+      "sharpness": 70.9,
+      "status": "rejected",
+      "reject_reason": "antique-saw print"
     },
     {
-      "id": "bank-109.jpg",
+      "id": "pool-109.jpg",
       "scenario": "single-tool",
       "category": "Hand saws",
       "title": "Archaeological site of Akrotiri - Museum of prehistoric Thera - Santorini - bronze saw - 01.jpg",
@@ -1532,10 +1683,12 @@
       "w": 1024,
       "h": 510,
       "brightness": 163.8,
-      "sharpness": 31.0
+      "sharpness": 31.0,
+      "status": "rejected",
+      "reject_reason": "museum blade"
     },
     {
-      "id": "bank-110.jpg",
+      "id": "pool-110.jpg",
       "scenario": "single-tool",
       "category": "Hand saws",
       "title": "Assault Engineers rebuild home on BVI MOD 45163087.jpg",
@@ -1546,10 +1699,12 @@
       "w": 717,
       "h": 1024,
       "brightness": 128.5,
-      "sharpness": 57.9
+      "sharpness": 57.9,
+      "status": "rejected",
+      "reject_reason": "person sawing"
     },
     {
-      "id": "bank-111.jpg",
+      "id": "pool-111.jpg",
       "scenario": "single-tool",
       "category": "Hand saws",
       "title": "Benson Building shovel (39167972240).jpg",
@@ -1560,10 +1715,12 @@
       "w": 1024,
       "h": 537,
       "brightness": 122.3,
-      "sharpness": 47.7
+      "sharpness": 47.7,
+      "status": "rejected",
+      "reject_reason": "ceremonial saw"
     },
     {
-      "id": "bank-112.jpg",
+      "id": "pool-112.jpg",
       "scenario": "single-tool",
       "category": "Hand saws",
       "title": "Bronze saw, Akrotiri, LC I, 17th century BC, PMTh, 176574.jpg",
@@ -1574,10 +1731,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 156.6,
-      "sharpness": 50.2
+      "sharpness": 50.2,
+      "status": "rejected",
+      "reject_reason": "museum blade"
     },
     {
-      "id": "bank-113.jpg",
+      "id": "pool-113.jpg",
       "scenario": "single-tool",
       "category": "Utility knives",
       "title": "\" 12 - ITALY - Arburese - coltello sardo per scuoiare bovini - skinning knife from Sardinia (Italy) 2.JPG",
@@ -1588,10 +1747,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 113.7,
-      "sharpness": 64.9
+      "sharpness": 64.9,
+      "status": "pending"
     },
     {
-      "id": "bank-114.jpg",
+      "id": "pool-114.jpg",
       "scenario": "single-tool",
       "category": "Utility knives",
       "title": "\" 12 - ITALY - Coltello da cavaliere - knife knight.JPG",
@@ -1602,10 +1762,11 @@
       "w": 683,
       "h": 1024,
       "brightness": 132.8,
-      "sharpness": 61.7
+      "sharpness": 61.7,
+      "status": "pending"
     },
     {
-      "id": "bank-115.jpg",
+      "id": "pool-115.jpg",
       "scenario": "single-tool",
       "category": "Utility knives",
       "title": "\" 12 - ITALY - coltello maremmano - work knife of tuscany.JPG",
@@ -1616,10 +1777,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 96.0,
-      "sharpness": 60.0
+      "sharpness": 60.0,
+      "status": "pending"
     },
     {
-      "id": "bank-116.jpg",
+      "id": "pool-116.jpg",
       "scenario": "single-tool",
       "category": "Utility knives",
       "title": "\" 12 - ITALY - Palmerino (o temperino) \"scalprum librarium\" quill knife.JPG",
@@ -1630,10 +1792,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 140.9,
-      "sharpness": 16.9
+      "sharpness": 16.9,
+      "status": "pending"
     },
     {
-      "id": "bank-117.jpg",
+      "id": "pool-117.jpg",
       "scenario": "single-tool",
       "category": "Utility knives",
       "title": "Arbelos Shoemakers Knife.jpg",
@@ -1644,10 +1807,11 @@
       "w": 1024,
       "h": 945,
       "brightness": 120.0,
-      "sharpness": 65.9
+      "sharpness": 65.9,
+      "status": "pending"
     },
     {
-      "id": "bank-118.jpg",
+      "id": "pool-118.jpg",
       "scenario": "consumables",
       "category": "Tape measures",
       "title": "- panoramio (638).jpg",
@@ -1658,10 +1822,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 112.9,
-      "sharpness": 52.3
+      "sharpness": 52.3,
+      "status": "rejected",
+      "reject_reason": "cement/jobsite"
     },
     {
-      "id": "bank-119.jpg",
+      "id": "pool-119.jpg",
       "scenario": "consumables",
       "category": "Tape measures",
       "title": "171120-N-BD308-0017 - SH2 Carmen Zela measures MC3 Michael Molina during BCA aboard USS Wasp.jpg",
@@ -1672,10 +1838,12 @@
       "w": 1007,
       "h": 1024,
       "brightness": 80.9,
-      "sharpness": 26.6
+      "sharpness": 26.6,
+      "status": "rejected",
+      "reject_reason": "person"
     },
     {
-      "id": "bank-120.jpg",
+      "id": "pool-120.jpg",
       "scenario": "consumables",
       "category": "Tape measures",
       "title": "2017-09-30 (108) Krammer-Schneider-Br\u00fccke.jpg",
@@ -1686,10 +1854,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 138.3,
-      "sharpness": 71.7
+      "sharpness": 71.7,
+      "status": "rejected",
+      "reject_reason": "stone wall"
     },
     {
-      "id": "bank-121.jpg",
+      "id": "pool-121.jpg",
       "scenario": "consumables",
       "category": "Tape measures",
       "title": "2023 Metr krawiecki.jpg",
@@ -1700,10 +1870,11 @@
       "w": 1024,
       "h": 562,
       "brightness": 235.9,
-      "sharpness": 49.7
+      "sharpness": 49.7,
+      "status": "pending"
     },
     {
-      "id": "bank-122.jpg",
+      "id": "pool-122.jpg",
       "scenario": "consumables",
       "category": "Tape measures",
       "title": "2023 Schneiderma\u00dfband.jpg",
@@ -1714,10 +1885,11 @@
       "w": 1024,
       "h": 903,
       "brightness": 132.0,
-      "sharpness": 28.3
+      "sharpness": 28.3,
+      "status": "pending"
     },
     {
-      "id": "bank-123.jpg",
+      "id": "pool-123.jpg",
       "scenario": "consumables",
       "category": "Tape measures",
       "title": "20x138mm.jpg",
@@ -1728,10 +1900,12 @@
       "w": 745,
       "h": 1024,
       "brightness": 182.9,
-      "sharpness": 16.1
+      "sharpness": 16.1,
+      "status": "rejected",
+      "reject_reason": "ammunition"
     },
     {
-      "id": "bank-124.jpg",
+      "id": "pool-124.jpg",
       "scenario": "consumables",
       "category": "Tape measures",
       "title": "30 \u00d7 113 mm.jpg",
@@ -1742,10 +1916,12 @@
       "w": 683,
       "h": 1024,
       "brightness": 170.0,
-      "sharpness": 17.4
+      "sharpness": 17.4,
+      "status": "rejected",
+      "reject_reason": "ammunition"
     },
     {
-      "id": "bank-125.jpg",
+      "id": "pool-125.jpg",
       "scenario": "single-tool",
       "category": "Clamps",
       "title": "01 Klemmhebel 2012.jpg",
@@ -1756,10 +1932,11 @@
       "w": 1024,
       "h": 683,
       "brightness": 237.2,
-      "sharpness": 30.0
+      "sharpness": 30.0,
+      "status": "pending"
     },
     {
-      "id": "bank-126.jpg",
+      "id": "pool-126.jpg",
       "scenario": "single-tool",
       "category": "Clamps",
       "title": "Bread on blue plate with clamps nearby.jpg",
@@ -1770,10 +1947,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 85.8,
-      "sharpness": 49.3
+      "sharpness": 49.3,
+      "status": "rejected",
+      "reject_reason": "food on plate"
     },
     {
-      "id": "bank-127.jpg",
+      "id": "pool-127.jpg",
       "scenario": "single-tool",
       "category": "Clamps",
       "title": "Bread on blue plate with electronics and clamp from a lower angle.jpg",
@@ -1784,10 +1963,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 82.7,
-      "sharpness": 21.9
+      "sharpness": 21.9,
+      "status": "rejected",
+      "reject_reason": "food on plate"
     },
     {
-      "id": "bank-128.jpg",
+      "id": "pool-128.jpg",
       "scenario": "single-tool",
       "category": "Clamps",
       "title": "Bread on blue plate with electronics and clamp, zoomed in.jpg",
@@ -1798,10 +1979,12 @@
       "w": 683,
       "h": 1024,
       "brightness": 87.0,
-      "sharpness": 24.7
+      "sharpness": 24.7,
+      "status": "rejected",
+      "reject_reason": "food on plate"
     },
     {
-      "id": "bank-129.jpg",
+      "id": "pool-129.jpg",
       "scenario": "single-tool",
       "category": "Clamps",
       "title": "Bread on blue plate with electronics and clamp.jpg",
@@ -1812,10 +1995,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 91.0,
-      "sharpness": 53.4
+      "sharpness": 53.4,
+      "status": "rejected",
+      "reject_reason": "food on plate"
     },
     {
-      "id": "bank-130.jpg",
+      "id": "pool-130.jpg",
       "scenario": "single-tool",
       "category": "Clamps",
       "title": "Chevillette.jpg",
@@ -1826,10 +2011,11 @@
       "w": 800,
       "h": 600,
       "brightness": 147.2,
-      "sharpness": 23.7
+      "sharpness": 23.7,
+      "status": "pending"
     },
     {
-      "id": "bank-131.jpg",
+      "id": "pool-131.jpg",
       "scenario": "single-tool",
       "category": "Clamps",
       "title": "Clamp for project.jpg",
@@ -1840,10 +2026,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 65.5,
-      "sharpness": 16.3
+      "sharpness": 16.3,
+      "status": "rejected",
+      "reject_reason": "green-screen wire"
     },
     {
-      "id": "bank-132.jpg",
+      "id": "pool-132.jpg",
       "scenario": "single-tool",
       "category": "Clamps",
       "title": "Clamps (44729886).jpeg",
@@ -1854,10 +2042,11 @@
       "w": 727,
       "h": 1024,
       "brightness": 80.4,
-      "sharpness": 33.7
+      "sharpness": 33.7,
+      "status": "pending"
     },
     {
-      "id": "bank-133.jpg",
+      "id": "pool-133.jpg",
       "scenario": "single-tool",
       "category": "Bench vises",
       "title": "-Metalworker in Apron Working with a Vise- MET DP700151.jpg",
@@ -1868,10 +2057,12 @@
       "w": 1024,
       "h": 659,
       "brightness": 111.3,
-      "sharpness": 54.4
+      "sharpness": 54.4,
+      "status": "rejected",
+      "reject_reason": "portrait"
     },
     {
-      "id": "bank-134.jpg",
+      "id": "pool-134.jpg",
       "scenario": "single-tool",
       "category": "Bench vises",
       "title": "1.25 Male Pvc to Check valve.jpg",
@@ -1882,10 +2073,11 @@
       "w": 765,
       "h": 1024,
       "brightness": 99.6,
-      "sharpness": 32.4
+      "sharpness": 32.4,
+      "status": "pending"
     },
     {
-      "id": "bank-135.jpg",
+      "id": "pool-135.jpg",
       "scenario": "single-tool",
       "category": "Bench vises",
       "title": "1990s Zyliss 4 \u00d7 1 1 hobby vise \u2013 aluminum bench vise and clamp system Swiss made.jpg",
@@ -1896,10 +2088,11 @@
       "w": 1024,
       "h": 547,
       "brightness": 116.6,
-      "sharpness": 83.0
+      "sharpness": 83.0,
+      "status": "pending"
     },
     {
-      "id": "bank-136.jpg",
+      "id": "pool-136.jpg",
       "scenario": "single-tool",
       "category": "Bench vises",
       "title": "2 rows pin cap.jpg",
@@ -1910,10 +2103,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 118.0,
-      "sharpness": 36.1
+      "sharpness": 36.1,
+      "status": "pending"
     },
     {
-      "id": "bank-137.jpg",
+      "id": "pool-137.jpg",
       "scenario": "single-tool",
       "category": "Bench vises",
       "title": "20th century catalogue of supplies for watchmakers, jewelers and kindred trades (1899) (14597521469).jpg",
@@ -1924,10 +2118,12 @@
       "w": 942,
       "h": 1024,
       "brightness": 152.4,
-      "sharpness": 68.3
+      "sharpness": 68.3,
+      "status": "rejected",
+      "reject_reason": "vise engraving"
     },
     {
-      "id": "bank-138.jpg",
+      "id": "pool-138.jpg",
       "scenario": "single-tool",
       "category": "Bench vises",
       "title": "20th century catalogue of supplies for watchmakers, jewelers and kindred trades (1899) (14597539988).jpg",
@@ -1938,10 +2134,12 @@
       "w": 934,
       "h": 1024,
       "brightness": 163.7,
-      "sharpness": 70.1
+      "sharpness": 70.1,
+      "status": "rejected",
+      "reject_reason": "vise engraving"
     },
     {
-      "id": "bank-139.jpg",
+      "id": "pool-139.jpg",
       "scenario": "sets-accessories",
       "category": "Hex keys",
       "title": "18-04-13-Schrauben-Schl\u00fcssel RRK3423.jpg",
@@ -1952,10 +2150,11 @@
       "w": 1024,
       "h": 680,
       "brightness": 208.1,
-      "sharpness": 25.5
+      "sharpness": 25.5,
+      "status": "pending"
     },
     {
-      "id": "bank-140.jpg",
+      "id": "pool-140.jpg",
       "scenario": "sets-accessories",
       "category": "Hex keys",
       "title": "18-04-13-Schrauben-Schl\u00fcssel RRK3424.jpg",
@@ -1966,10 +2165,11 @@
       "w": 1024,
       "h": 680,
       "brightness": 207.4,
-      "sharpness": 31.4
+      "sharpness": 31.4,
+      "status": "pending"
     },
     {
-      "id": "bank-141.jpg",
+      "id": "pool-141.jpg",
       "scenario": "sets-accessories",
       "category": "Hex keys",
       "title": "1980s Wiha T handle hex key 334 6 mm hex 100 mm shaft Made in West Germany.jpg",
@@ -1980,10 +2180,11 @@
       "w": 1024,
       "h": 753,
       "brightness": 107.6,
-      "sharpness": 56.9
+      "sharpness": 56.9,
+      "status": "pending"
     },
     {
-      "id": "bank-142.jpg",
+      "id": "pool-142.jpg",
       "scenario": "sets-accessories",
       "category": "Hex keys",
       "title": "1st choice metric hex key set (2).jpg",
@@ -1994,10 +2195,11 @@
       "w": 719,
       "h": 1024,
       "brightness": 162.7,
-      "sharpness": 28.0
+      "sharpness": 28.0,
+      "status": "pending"
     },
     {
-      "id": "bank-143.jpg",
+      "id": "pool-143.jpg",
       "scenario": "sets-accessories",
       "category": "Hex keys",
       "title": "1st choice metric hex key set.jpg",
@@ -2008,10 +2210,11 @@
       "w": 665,
       "h": 1024,
       "brightness": 187.0,
-      "sharpness": 35.1
+      "sharpness": 35.1,
+      "status": "pending"
     },
     {
-      "id": "bank-144.jpg",
+      "id": "pool-144.jpg",
       "scenario": "single-tool",
       "category": "Cable ties",
       "title": "Active shooter exercise 120328-F-NE761-151.jpg",
@@ -2022,10 +2225,12 @@
       "w": 682,
       "h": 1024,
       "brightness": 82.5,
-      "sharpness": 16.8
+      "sharpness": 16.8,
+      "status": "rejected",
+      "reject_reason": "hands + weapon"
     },
     {
-      "id": "bank-145.jpg",
+      "id": "pool-145.jpg",
       "scenario": "single-tool",
       "category": "Cable ties",
       "title": "Air cables Thailand.png",
@@ -2036,10 +2241,12 @@
       "w": 768,
       "h": 1024,
       "brightness": 117.7,
-      "sharpness": 64.4
+      "sharpness": 64.4,
+      "status": "rejected",
+      "reject_reason": "power lines"
     },
     {
-      "id": "bank-146.jpg",
+      "id": "pool-146.jpg",
       "scenario": "single-tool",
       "category": "Cable ties",
       "title": "Kabelbaum A320.jpeg",
@@ -2050,10 +2257,12 @@
       "w": 768,
       "h": 1024,
       "brightness": 121.2,
-      "sharpness": 60.6
+      "sharpness": 60.6,
+      "status": "rejected",
+      "reject_reason": "infrastructure"
     },
     {
-      "id": "bank-147.jpg",
+      "id": "pool-147.jpg",
       "scenario": "single-tool",
       "category": "Hinges",
       "title": "156 Lajos Street, green, 2020 \u00d3buda.jpg",
@@ -2064,10 +2273,12 @@
       "w": 941,
       "h": 1024,
       "brightness": 136.1,
-      "sharpness": 86.9
+      "sharpness": 86.9,
+      "status": "rejected",
+      "reject_reason": "wooden door"
     },
     {
-      "id": "bank-148.jpg",
+      "id": "pool-148.jpg",
       "scenario": "single-tool",
       "category": "Hinges",
       "title": "1974 AMC Ambassador station wagon in Daisy Yellow and woodgrain at Macungie PA show 07of15.jpg",
@@ -2078,10 +2289,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 130.2,
-      "sharpness": 56.7
+      "sharpness": 56.7,
+      "status": "rejected",
+      "reject_reason": "car taillight"
     },
     {
-      "id": "bank-149.jpg",
+      "id": "pool-149.jpg",
       "scenario": "single-tool",
       "category": "Hinges",
       "title": "60.Curr\u00f3n.JPG",
@@ -2092,10 +2305,12 @@
       "w": 768,
       "h": 1024,
       "brightness": 140.5,
-      "sharpness": 47.3
+      "sharpness": 47.3,
+      "status": "rejected",
+      "reject_reason": "timber joint"
     },
     {
-      "id": "bank-150.jpg",
+      "id": "pool-150.jpg",
       "scenario": "single-tool",
       "category": "Hinges",
       "title": "ALUMINUM CONTINUOUS GEARED HINGE.jpg",
@@ -2106,10 +2321,12 @@
       "w": 1024,
       "h": 714,
       "brightness": 220.0,
-      "sharpness": 91.5
+      "sharpness": 91.5,
+      "status": "rejected",
+      "reject_reason": "patent text"
     },
     {
-      "id": "bank-151.jpg",
+      "id": "pool-151.jpg",
       "scenario": "single-tool",
       "category": "Hinges",
       "title": "Anbau Barockh\u00e4uschen vor Uni-Reithalle (Torhaus) mit alten Mauerresten und Angel Barf\u00fc\u00dferstra\u00dfe 1A Marburg, 2019-06-18.jpg",
@@ -2120,10 +2337,12 @@
       "w": 768,
       "h": 1024,
       "brightness": 92.2,
-      "sharpness": 40.0
+      "sharpness": 40.0,
+      "status": "rejected",
+      "reject_reason": "brick wall"
     },
     {
-      "id": "bank-152.jpg",
+      "id": "pool-152.jpg",
       "scenario": "single-tool",
       "category": "Hinges",
       "title": "Archaeologia cantiana (1859) (14799224853).jpg",
@@ -2134,10 +2353,12 @@
       "w": 652,
       "h": 1024,
       "brightness": 211.2,
-      "sharpness": 71.2
+      "sharpness": 71.2,
+      "status": "rejected",
+      "reject_reason": "machinery drawing"
     },
     {
-      "id": "bank-153.jpg",
+      "id": "pool-153.jpg",
       "scenario": "single-tool",
       "category": "Springs (mechanical)",
       "title": "2016 - Skye (25749472804).jpg",
@@ -2148,10 +2369,12 @@
       "w": 1024,
       "h": 678,
       "brightness": 56.7,
-      "sharpness": 87.8
+      "sharpness": 87.8,
+      "status": "rejected",
+      "reject_reason": "abstract wires"
     },
     {
-      "id": "bank-154.jpg",
+      "id": "pool-154.jpg",
       "scenario": "single-tool",
       "category": "Springs (mechanical)",
       "title": "201\u0413\u042174 \u042d\u043b\u0435\u043a\u0442\u0440\u043e\u0441\u0438\u0433\u043d\u0430\u043b \u041d\u043e\u0432\u043e\u0441\u0438\u0431\u0438\u0440\u0441\u043a (2) \u043f\u0440\u0443\u0436\u0438\u043d\u043d\u0430\u044f \u043f\u0440\u043e\u043a\u043b\u0430\u0434\u043a\u0430.jpg",
@@ -2162,10 +2385,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 162.0,
-      "sharpness": 25.1
+      "sharpness": 25.1,
+      "status": "pending"
     },
     {
-      "id": "bank-155.jpg",
+      "id": "pool-155.jpg",
       "scenario": "single-tool",
       "category": "Springs (mechanical)",
       "title": "201\u0413\u042174 \u042d\u043b\u0435\u043a\u0442\u0440\u043e\u0441\u0438\u0433\u043d\u0430\u043b \u041d\u043e\u0432\u043e\u0441\u0438\u0431\u0438\u0440\u0441\u043a (3) \u043f\u0440\u0443\u0436\u0438\u043d\u043d\u0430\u044f \u043f\u0440\u043e\u043a\u043b\u0430\u0434\u043a\u0430.jpg",
@@ -2176,10 +2400,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 144.6,
-      "sharpness": 20.2
+      "sharpness": 20.2,
+      "status": "pending"
     },
     {
-      "id": "bank-156.jpg",
+      "id": "pool-156.jpg",
       "scenario": "single-tool",
       "category": "Springs (mechanical)",
       "title": "2022 Taiwan Lantern Festival artworks 06.jpg",
@@ -2190,10 +2415,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 59.6,
-      "sharpness": 49.7
+      "sharpness": 49.7,
+      "status": "rejected",
+      "reject_reason": "lit building"
     },
     {
-      "id": "bank-157.jpg",
+      "id": "pool-157.jpg",
       "scenario": "single-tool",
       "category": "Springs (mechanical)",
       "title": "2023 Miedziane spr\u0119\u017cynki pryzmatyczne.jpg",
@@ -2204,10 +2431,11 @@
       "w": 1024,
       "h": 746,
       "brightness": 212.8,
-      "sharpness": 37.5
+      "sharpness": 37.5,
+      "status": "pending"
     },
     {
-      "id": "bank-158.jpg",
+      "id": "pool-158.jpg",
       "scenario": "dense-small-parts",
       "category": "Wall plugs",
       "title": "6er Spreizd\u00fcbel1647.JPG",
@@ -2218,10 +2446,12 @@
       "w": 1024,
       "h": 402,
       "brightness": 151.1,
-      "sharpness": 29.2
+      "sharpness": 29.2,
+      "status": "rejected",
+      "reject_reason": "single anchor macro"
     },
     {
-      "id": "bank-159.jpg",
+      "id": "pool-159.jpg",
       "scenario": "dense-small-parts",
       "category": "Wall plugs",
       "title": "Alter Schraubd\u00fcbel in Ritterstrasse Marburg 2016-04-13.JPG",
@@ -2232,10 +2462,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 123.4,
-      "sharpness": 66.4
+      "sharpness": 66.4,
+      "status": "rejected",
+      "reject_reason": "anchors set in wall"
     },
     {
-      "id": "bank-160.jpg",
+      "id": "pool-160.jpg",
       "scenario": "dense-small-parts",
       "category": "Wall plugs",
       "title": "Betonov\u00e1 kotva (001).JPG",
@@ -2246,10 +2478,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 153.2,
-      "sharpness": 22.0
+      "sharpness": 22.0,
+      "status": "rejected",
+      "reject_reason": "wall hole"
     },
     {
-      "id": "bank-161.jpg",
+      "id": "pool-161.jpg",
       "scenario": "dense-small-parts",
       "category": "Wall plugs",
       "title": "Betonov\u00e1 kotva (002).JPG",
@@ -2260,10 +2494,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 167.0,
-      "sharpness": 28.6
+      "sharpness": 28.6,
+      "status": "rejected",
+      "reject_reason": "ceiling hole"
     },
     {
-      "id": "bank-162.jpg",
+      "id": "pool-162.jpg",
       "scenario": "dense-small-parts",
       "category": "Wall plugs",
       "title": "Betonov\u00e1 kotva (003).JPG",
@@ -2274,10 +2510,12 @@
       "w": 1024,
       "h": 768,
       "brightness": 136.0,
-      "sharpness": 38.2
+      "sharpness": 38.2,
+      "status": "rejected",
+      "reject_reason": "wall hole"
     },
     {
-      "id": "bank-163.jpg",
+      "id": "pool-163.jpg",
       "scenario": "mixed-bin",
       "category": "Garages",
       "title": "\"Can You Hear me Now?\" (8911985709).jpg",
@@ -2288,10 +2526,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 93.4,
-      "sharpness": 44.0
+      "sharpness": 44.0,
+      "status": "rejected",
+      "reject_reason": "empty corridor"
     },
     {
-      "id": "bank-164.jpg",
+      "id": "pool-164.jpg",
       "scenario": "mixed-bin",
       "category": "Garages",
       "title": "1974 Super Outbreak school bus garage Brandenburg Kentucky 3 April 1974.png",
@@ -2302,10 +2542,12 @@
       "w": 1024,
       "h": 576,
       "brightness": 79.3,
-      "sharpness": 34.7
+      "sharpness": 34.7,
+      "status": "rejected",
+      "reject_reason": "aerial wreckage"
     },
     {
-      "id": "bank-165.jpg",
+      "id": "pool-165.jpg",
       "scenario": "mixed-bin",
       "category": "Garages",
       "title": "2015 Manta Clan Mural Steinhuder Meer, Garage Fischerweg Ecke Bleichenstra\u00dfe.jpg",
@@ -2316,10 +2558,12 @@
       "w": 1024,
       "h": 577,
       "brightness": 120.9,
-      "sharpness": 87.4
+      "sharpness": 87.4,
+      "status": "rejected",
+      "reject_reason": "wall mural"
     },
     {
-      "id": "bank-166.jpg",
+      "id": "pool-166.jpg",
       "scenario": "mixed-bin",
       "category": "Garages",
       "title": "2163 17th St. - garage (2026).jpg",
@@ -2330,10 +2574,12 @@
       "w": 1024,
       "h": 1011,
       "brightness": 126.1,
-      "sharpness": 83.6
+      "sharpness": 83.6,
+      "status": "rejected",
+      "reject_reason": "shed exterior"
     },
     {
-      "id": "bank-167.jpg",
+      "id": "pool-167.jpg",
       "scenario": "single-tool",
       "category": "Combination wrenches",
       "title": "1933 Plomb Combination Wrench.jpg",
@@ -2344,10 +2590,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 192.2,
-      "sharpness": 29.2
+      "sharpness": 29.2,
+      "status": "pending"
     },
     {
-      "id": "bank-168.jpg",
+      "id": "pool-168.jpg",
       "scenario": "single-tool",
       "category": "Combination wrenches",
       "title": "2008-04-14 Chrome-Vanadium Wrenches.jpg",
@@ -2358,10 +2605,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 29.1,
-      "sharpness": 40.4
+      "sharpness": 40.4,
+      "status": "pending"
     },
     {
-      "id": "bank-169.jpg",
+      "id": "pool-169.jpg",
       "scenario": "single-tool",
       "category": "Combination wrenches",
       "title": "5S Tools drawer.jpg",
@@ -2372,10 +2620,11 @@
       "w": 677,
       "h": 1024,
       "brightness": 94.1,
-      "sharpness": 40.3
+      "sharpness": 40.3,
+      "status": "pending"
     },
     {
-      "id": "bank-170.jpg",
+      "id": "pool-170.jpg",
       "scenario": "sets-accessories",
       "category": "Socket wrenches",
       "title": "1964 Autodynamics D1 Formula Vee, transmission (Greenwich 2025).jpg",
@@ -2386,10 +2635,12 @@
       "w": 824,
       "h": 1024,
       "brightness": 112.1,
-      "sharpness": 38.5
+      "sharpness": 38.5,
+      "status": "rejected",
+      "reject_reason": "engine context"
     },
     {
-      "id": "bank-171.jpg",
+      "id": "pool-171.jpg",
       "scenario": "sets-accessories",
       "category": "Socket wrenches",
       "title": "Bit socket 001.jpg",
@@ -2400,10 +2651,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 220.9,
-      "sharpness": 31.3
+      "sharpness": 31.3,
+      "status": "pending"
     },
     {
-      "id": "bank-172.jpg",
+      "id": "pool-172.jpg",
       "scenario": "sets-accessories",
       "category": "Socket wrenches",
       "title": "Black & Decker Dogbone Socket Tool (5073720864).jpg",
@@ -2414,10 +2666,11 @@
       "w": 1024,
       "h": 686,
       "brightness": 148.3,
-      "sharpness": 26.5
+      "sharpness": 26.5,
+      "status": "pending"
     },
     {
-      "id": "bank-173.jpg",
+      "id": "pool-173.jpg",
       "scenario": "single-tool",
       "category": "Mallets",
       "title": "Mallet resting on the soil between rows of vibrant green plants in a greenhouse setting.jpg",
@@ -2428,10 +2681,12 @@
       "w": 684,
       "h": 1024,
       "brightness": 80.4,
-      "sharpness": 19.2
+      "sharpness": 19.2,
+      "status": "rejected",
+      "reject_reason": "greenhouse plants"
     },
     {
-      "id": "bank-174.jpg",
+      "id": "pool-174.jpg",
       "scenario": "single-tool",
       "category": "Mallets",
       "title": "Meat-mallet from Vienna.jpg",
@@ -2442,10 +2697,11 @@
       "w": 1024,
       "h": 728,
       "brightness": 139.8,
-      "sharpness": 27.1
+      "sharpness": 27.1,
+      "status": "pending"
     },
     {
-      "id": "bank-175.jpg",
+      "id": "pool-175.jpg",
       "scenario": "single-tool",
       "category": "Mallets",
       "title": "Plugging mallets-2;The Dental cosmos (1891).jpg",
@@ -2456,10 +2712,12 @@
       "w": 884,
       "h": 1024,
       "brightness": 146.8,
-      "sharpness": 85.9
+      "sharpness": 85.9,
+      "status": "rejected",
+      "reject_reason": "mallet engraving"
     },
     {
-      "id": "bank-176.jpg",
+      "id": "pool-176.jpg",
       "scenario": "single-tool",
       "category": "Mallets",
       "title": "Plugging mallets-3;The Dental cosmos (1891).jpg",
@@ -2470,10 +2728,12 @@
       "w": 1024,
       "h": 542,
       "brightness": 144.6,
-      "sharpness": 92.1
+      "sharpness": 92.1,
+      "status": "rejected",
+      "reject_reason": "mallet engraving"
     },
     {
-      "id": "bank-177.jpg",
+      "id": "pool-177.jpg",
       "scenario": "single-tool",
       "category": "Mallets",
       "title": "Skryje (RA), muzeum, kuchy\u0148sk\u00e9 n\u00e1\u010din\u00ed.jpg",
@@ -2484,10 +2744,12 @@
       "w": 768,
       "h": 1024,
       "brightness": 134.4,
-      "sharpness": 33.8
+      "sharpness": 33.8,
+      "status": "rejected",
+      "reject_reason": "kitchen ware"
     },
     {
-      "id": "bank-178.jpg",
+      "id": "pool-178.jpg",
       "scenario": "single-tool",
       "category": "Wire strippers",
       "title": "D\u00e9tail d'une pince \u00e0 d\u00e9nuder avec inscrit France de marque Facom.jpg",
@@ -2498,10 +2760,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 98.5,
-      "sharpness": 22.7
+      "sharpness": 22.7,
+      "status": "pending"
     },
     {
-      "id": "bank-179.jpg",
+      "id": "pool-179.jpg",
       "scenario": "single-tool",
       "category": "Wire strippers",
       "title": "Pinza16a.JPG",
@@ -2512,10 +2775,11 @@
       "w": 768,
       "h": 1024,
       "brightness": 137.8,
-      "sharpness": 35.4
+      "sharpness": 35.4,
+      "status": "pending"
     },
     {
-      "id": "bank-180.jpg",
+      "id": "pool-180.jpg",
       "scenario": "single-tool",
       "category": "Wire strippers",
       "title": "Schleuniger Unistrip 2300 wire stripping machine.jpg",
@@ -2526,10 +2790,12 @@
       "w": 1024,
       "h": 975,
       "brightness": 149.2,
-      "sharpness": 31.5
+      "sharpness": 31.5,
+      "status": "rejected",
+      "reject_reason": "industrial machine"
     },
     {
-      "id": "bank-181.jpg",
+      "id": "pool-181.jpg",
       "scenario": "single-tool",
       "category": "Wire strippers",
       "title": "TriCut Z14106-170.JPG",
@@ -2540,10 +2806,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 149.3,
-      "sharpness": 29.6
+      "sharpness": 29.6,
+      "status": "pending"
     },
     {
-      "id": "bank-182.jpg",
+      "id": "pool-182.jpg",
       "scenario": "single-tool",
       "category": "Soldering irons",
       "title": "1957-Soviet-Soldering-iron.jpg",
@@ -2554,10 +2821,11 @@
       "w": 1024,
       "h": 598,
       "brightness": 169.2,
-      "sharpness": 49.2
+      "sharpness": 49.2,
+      "status": "pending"
     },
     {
-      "id": "bank-183.jpg",
+      "id": "pool-183.jpg",
       "scenario": "single-tool",
       "category": "Soldering irons",
       "title": "35C3 Impression (39) (39828647773).jpg",
@@ -2568,10 +2836,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 83.1,
-      "sharpness": 43.0
+      "sharpness": 43.0,
+      "status": "rejected",
+      "reject_reason": "electronics project"
     },
     {
-      "id": "bank-184.jpg",
+      "id": "pool-184.jpg",
       "scenario": "single-tool",
       "category": "Soldering irons",
       "title": "3D Printed Precision- U S Army Leverages FPV and Delivery Drones During Agile Spirit 25 (9234074).jpg",
@@ -2582,10 +2852,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 122.2,
-      "sharpness": 23.2
+      "sharpness": 23.2,
+      "status": "rejected",
+      "reject_reason": "hands soldering"
     },
     {
-      "id": "bank-185.jpg",
+      "id": "pool-185.jpg",
       "scenario": "single-tool",
       "category": "Soldering irons",
       "title": "3D Printed Precision- U S Army Leverages FPV and Delivery Drones During Agile Spirit 25 (9234077).jpg",
@@ -2596,10 +2868,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 105.5,
-      "sharpness": 31.1
+      "sharpness": 31.1,
+      "status": "rejected",
+      "reject_reason": "person"
     },
     {
-      "id": "bank-186.jpg",
+      "id": "pool-186.jpg",
       "scenario": "single-tool",
       "category": "Multimeters",
       "title": "All multimeters.jpg",
@@ -2610,10 +2884,11 @@
       "w": 1024,
       "h": 603,
       "brightness": 101.6,
-      "sharpness": 77.5
+      "sharpness": 77.5,
+      "status": "pending"
     },
     {
-      "id": "bank-187.jpg",
+      "id": "pool-187.jpg",
       "scenario": "single-tool",
       "category": "Multimeters",
       "title": "Anal\u00f3g multim\u00e9ter t\u00falterhel\u00e9s v\u00e9delme.jpg",
@@ -2624,10 +2899,12 @@
       "w": 771,
       "h": 1024,
       "brightness": 245.8,
-      "sharpness": 50.1
+      "sharpness": 50.1,
+      "status": "rejected",
+      "reject_reason": "circuit schematic"
     },
     {
-      "id": "bank-188.jpg",
+      "id": "pool-188.jpg",
       "scenario": "sets-accessories",
       "category": "Router bits",
       "title": "Oberfraese Fraeser 1.jpg",
@@ -2638,10 +2915,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 120.1,
-      "sharpness": 64.5
+      "sharpness": 64.5,
+      "status": "pending"
     },
     {
-      "id": "bank-189.jpg",
+      "id": "pool-189.jpg",
       "scenario": "sets-accessories",
       "category": "Router bits",
       "title": "Oberfraese Fraeser 2.jpg",
@@ -2652,10 +2930,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 149.7,
-      "sharpness": 37.8
+      "sharpness": 37.8,
+      "status": "pending"
     },
     {
-      "id": "bank-190.jpg",
+      "id": "pool-190.jpg",
       "scenario": "sets-accessories",
       "category": "Router bits",
       "title": "Oberfraese Fraesschablone.jpg",
@@ -2666,10 +2945,11 @@
       "w": 666,
       "h": 1024,
       "brightness": 152.5,
-      "sharpness": 36.0
+      "sharpness": 36.0,
+      "status": "pending"
     },
     {
-      "id": "bank-191.jpg",
+      "id": "pool-191.jpg",
       "scenario": "sets-accessories",
       "category": "Router bits",
       "title": "PCD Slat wall - T-slot Router Tooling.jpg",
@@ -2680,10 +2960,11 @@
       "w": 1024,
       "h": 578,
       "brightness": 199.3,
-      "sharpness": 51.0
+      "sharpness": 51.0,
+      "status": "pending"
     },
     {
-      "id": "bank-192.jpg",
+      "id": "pool-192.jpg",
       "scenario": "single-tool",
       "category": "Grinding wheels",
       "title": "2019 Casa de Estudillo grinding wheels.jpg",
@@ -2694,10 +2975,11 @@
       "w": 1024,
       "h": 683,
       "brightness": 125.4,
-      "sharpness": 66.0
+      "sharpness": 66.0,
+      "status": "pending"
     },
     {
-      "id": "bank-193.jpg",
+      "id": "pool-193.jpg",
       "scenario": "single-tool",
       "category": "Grinding wheels",
       "title": "Abrichten EK.jpg",
@@ -2708,10 +2990,11 @@
       "w": 1024,
       "h": 527,
       "brightness": 53.5,
-      "sharpness": 23.0
+      "sharpness": 23.0,
+      "status": "pending"
     },
     {
-      "id": "bank-194.jpg",
+      "id": "pool-194.jpg",
       "scenario": "single-tool",
       "category": "Grinding wheels",
       "title": "Afghan National Army soldiers in the lead 140330-M-EN264-075.jpg",
@@ -2722,10 +3005,12 @@
       "w": 765,
       "h": 1024,
       "brightness": 155.6,
-      "sharpness": 53.4
+      "sharpness": 53.4,
+      "status": "rejected",
+      "reject_reason": "person grinding"
     },
     {
-      "id": "bank-195.jpg",
+      "id": "pool-195.jpg",
       "scenario": "consumables",
       "category": "Paint brushes",
       "title": "City of London Cemetery white heart floral tribute 1.jpg",
@@ -2736,10 +3021,12 @@
       "w": 1024,
       "h": 1024,
       "brightness": 99.1,
-      "sharpness": 87.2
+      "sharpness": 87.2,
+      "status": "rejected",
+      "reject_reason": "funeral wreath"
     },
     {
-      "id": "bank-196.jpg",
+      "id": "pool-196.jpg",
       "scenario": "consumables",
       "category": "Paint brushes",
       "title": "58206 Pincelier.jpg",
@@ -2750,10 +3037,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 76.5,
-      "sharpness": 60.7
+      "sharpness": 60.7,
+      "status": "pending"
     },
     {
-      "id": "bank-197.jpg",
+      "id": "pool-197.jpg",
       "scenario": "consumables",
       "category": "Paint brushes",
       "title": "A notebook with paint brushes.jpg",
@@ -2764,10 +3052,11 @@
       "w": 1024,
       "h": 611,
       "brightness": 127.1,
-      "sharpness": 56.2
+      "sharpness": 56.2,
+      "status": "pending"
     },
     {
-      "id": "bank-198.jpg",
+      "id": "pool-198.jpg",
       "scenario": "consumables",
       "category": "Paint brushes",
       "title": "Andrian Valeanu 2016-04-11 (Unsplash).jpg",
@@ -2778,10 +3067,11 @@
       "w": 1024,
       "h": 684,
       "brightness": 99.0,
-      "sharpness": 33.4
+      "sharpness": 33.4,
+      "status": "pending"
     },
     {
-      "id": "bank-199.jpg",
+      "id": "pool-199.jpg",
       "scenario": "consumables",
       "category": "Paint brushes",
       "title": "Aquarellkasten Pinsel.jpg",
@@ -2792,10 +3082,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 148.6,
-      "sharpness": 52.2
+      "sharpness": 52.2,
+      "status": "pending"
     },
     {
-      "id": "bank-200.jpg",
+      "id": "pool-200.jpg",
       "scenario": "dense-small-parts",
       "category": "Wood screws",
       "title": "Alte Schrauben.jpg",
@@ -2806,10 +3097,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 87.7,
-      "sharpness": 34.8
+      "sharpness": 34.8,
+      "status": "pending"
     },
     {
-      "id": "bank-201.jpg",
+      "id": "pool-201.jpg",
       "scenario": "dense-small-parts",
       "category": "Wood screws",
       "title": "Beuel-bahnhof-2015-020.jpg",
@@ -2820,10 +3112,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 114.0,
-      "sharpness": 70.1
+      "sharpness": 70.1,
+      "status": "rejected",
+      "reject_reason": "rusty screw outdoors"
     },
     {
-      "id": "bank-202.jpg",
+      "id": "pool-202.jpg",
       "scenario": "dense-small-parts",
       "category": "Wood screws",
       "title": "Black wood screw with flat Phillips head.jpg",
@@ -2834,10 +3128,12 @@
       "w": 1024,
       "h": 850,
       "brightness": 159.5,
-      "sharpness": 19.4
+      "sharpness": 19.4,
+      "status": "rejected",
+      "reject_reason": "single screw"
     },
     {
-      "id": "bank-203.jpg",
+      "id": "pool-203.jpg",
       "scenario": "dense-small-parts",
       "category": "Machine screws",
       "title": "18-03-16-Schrauben-M6x20 RRK3175.jpg",
@@ -2848,10 +3144,12 @@
       "w": 1024,
       "h": 681,
       "brightness": 174.7,
-      "sharpness": 36.0
+      "sharpness": 36.0,
+      "status": "rejected",
+      "reject_reason": "single bolt"
     },
     {
-      "id": "bank-204.jpg",
+      "id": "pool-204.jpg",
       "scenario": "dense-small-parts",
       "category": "Machine screws",
       "title": "18-03-16-Schrauben-M6x20 RRK3177.jpg",
@@ -2862,10 +3160,12 @@
       "w": 1024,
       "h": 680,
       "brightness": 196.7,
-      "sharpness": 35.9
+      "sharpness": 35.9,
+      "status": "rejected",
+      "reject_reason": "single bolt"
     },
     {
-      "id": "bank-205.jpg",
+      "id": "pool-205.jpg",
       "scenario": "dense-small-parts",
       "category": "Machine screws",
       "title": "18-03-16-Schrauben-M6x20 RRK3178.jpg",
@@ -2876,10 +3176,12 @@
       "w": 1024,
       "h": 680,
       "brightness": 184.1,
-      "sharpness": 32.7
+      "sharpness": 32.7,
+      "status": "rejected",
+      "reject_reason": "single bolt"
     },
     {
-      "id": "bank-206.jpg",
+      "id": "pool-206.jpg",
       "scenario": "dense-small-parts",
       "category": "Machine screws",
       "title": "18-03-16-Schrauben-M6x20 RRK3179.jpg",
@@ -2890,10 +3192,12 @@
       "w": 1024,
       "h": 680,
       "brightness": 173.8,
-      "sharpness": 28.4
+      "sharpness": 28.4,
+      "status": "rejected",
+      "reject_reason": "single bolt"
     },
     {
-      "id": "bank-207.jpg",
+      "id": "pool-207.jpg",
       "scenario": "dense-small-parts",
       "category": "Machine screws",
       "title": "18-03-16-Schrauben-M6x20 RRK3181.jpg",
@@ -2904,10 +3208,12 @@
       "w": 1024,
       "h": 680,
       "brightness": 175.4,
-      "sharpness": 29.5
+      "sharpness": 29.5,
+      "status": "rejected",
+      "reject_reason": "single bolt"
     },
     {
-      "id": "bank-208.jpg",
+      "id": "pool-208.jpg",
       "scenario": "dense-small-parts",
       "category": "Machine screws",
       "title": "18-03-16-Schrauben-M6x20 RRK3185.jpg",
@@ -2918,10 +3224,12 @@
       "w": 1024,
       "h": 680,
       "brightness": 83.6,
-      "sharpness": 29.9
+      "sharpness": 29.9,
+      "status": "rejected",
+      "reject_reason": "bolt on scale"
     },
     {
-      "id": "bank-209.jpg",
+      "id": "pool-209.jpg",
       "scenario": "single-tool",
       "category": "Electrical connectors",
       "title": "10-pole heavy duty connector.jpg",
@@ -2932,10 +3240,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 76.4,
-      "sharpness": 31.6
+      "sharpness": 31.6,
+      "status": "pending"
     },
     {
-      "id": "bank-210.jpg",
+      "id": "pool-210.jpg",
       "scenario": "single-tool",
       "category": "Electrical connectors",
       "title": "2013 04 14 Re 420 213 LION 04 ROK 0625.JPG",
@@ -2946,10 +3255,12 @@
       "w": 1024,
       "h": 682,
       "brightness": 133.1,
-      "sharpness": 66.8
+      "sharpness": 66.8,
+      "status": "rejected",
+      "reject_reason": "train"
     },
     {
-      "id": "bank-211.jpg",
+      "id": "pool-211.jpg",
       "scenario": "single-tool",
       "category": "Electrical connectors",
       "title": "2016 366 300 Powering Up (29958855274).jpg",
@@ -2960,10 +3271,11 @@
       "w": 1024,
       "h": 682,
       "brightness": 115.4,
-      "sharpness": 44.5
+      "sharpness": 44.5,
+      "status": "pending"
     },
     {
-      "id": "bank-212.jpg",
+      "id": "pool-212.jpg",
       "scenario": "single-tool",
       "category": "Electrical connectors",
       "title": "5pin lock cable (2010-02-19 20.55.09 by c-g.).jpg",
@@ -2974,10 +3286,11 @@
       "w": 1024,
       "h": 768,
       "brightness": 172.7,
-      "sharpness": 49.4
+      "sharpness": 49.4,
+      "status": "pending"
     },
     {
-      "id": "bank-213.jpg",
+      "id": "pool-213.jpg",
       "scenario": "single-tool",
       "category": "Electrical connectors",
       "title": "5pin lock cable (2010-02-19 20.55.44 by c-g.).jpg",
@@ -2988,7 +3301,8 @@
       "w": 1024,
       "h": 768,
       "brightness": 162.8,
-      "sharpness": 27.4
+      "sharpness": 27.4,
+      "status": "pending"
     }
   ]
 }
