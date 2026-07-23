@@ -27,7 +27,10 @@ not law.
 - [ ] **6. Key day** — user types their OpenAI key into Settings (emulator
   window, never through the agent); run the eval; compare `gpt-5.6` tiers
   (Sol/Terra/Luna) on accuracy-per-dollar; iterate prompt against measured
-  scores; record real per-scan costs.
+  scores; record real per-scan costs. **Resolution A/B:** same labeled bins
+  at 1568px / 2048px / full-res (`original` detail, OpenAI only — Claude
+  resizes server-side past 1568) scoring `label_text` recall per dollar;
+  compare against the close-up-photo pattern before adding a res tier.
 
 ## Cost notes (researched July 2026 — re-verify on key day)
 
