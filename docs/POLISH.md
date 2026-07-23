@@ -40,6 +40,17 @@ not law.
     recovery; settled scans never reprocessed). `scripts/devtest/chaos.sh`
     keeps the on-device confirmation, now asserting against the app's own
     SQLite (ground truth) instead of screen-scraping.
+  - Round 4 (2026-07-22): adb monkey. Touch-only run (8,000 events, no
+    keycodes) survived clean — app stayed resumed, and random taps that
+    reached the delete-bin flow were correctly blocked by the "Bin not
+    empty — inventory is never deleted" guard (the §11 no-silent-deletion
+    invariant, verified under chaos). The ONLY crash was a monkey run that
+    included hardware keycodes: `NullPointerException` in
+    `com.facebook.react.ReactActivityDelegate.onKeyDown` while the dev
+    launcher (not our bundle) was foreground — RN framework code, our app
+    has no custom key handling, and it needs a hardware keyboard during the
+    launcher window. Not an app bug; recorded for completeness. Monkey the
+    app touch-only (`--pct-anyevent 0 --pct-syskeys 0`).
 - [ ] **2. UI/UX quality pass** — empty/loading states, keyboard behavior,
   truncation, contrast, a11y labels, animation polish.
 - [ ] **3. Visual identity** — Binocular icon + splash candidates, user
