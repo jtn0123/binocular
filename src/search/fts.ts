@@ -1,5 +1,5 @@
 import type { DbAdapter } from '../db/adapter';
-import type { ItemCategory } from '../db/queries';
+import type { BinRow, ItemCategory } from '../db/queries';
 
 /**
  * FTS5 search helpers (blueprint §8.3): prefix matching ("scre" finds
@@ -35,6 +35,24 @@ export function toFtsQuery(raw: string): string | null {
     .filter((t) => t.length > 0);
   if (tokens.length === 0) return null;
   return tokens.map((t) => `"${t.replace(/"/g, '')}"*`).join(' ');
+}
+
+/**
+ * Bin lookup by code or name (dogfood find: typing "B-002" into Home found
+ * nothing because FTS only indexes items). Plain LIKE with the user's
+ * wildcards escaped — "%" in a query is text, not an operator.
+ */
+export function searchBins(db: DbAdapter, rawQuery: string, limit = 6): BinRow[] {
+  const q = rawQuery.trim();
+  if (!q) return [];
+  const like = `%${q.replace(/([\\%_])/g, '\\$1')}%`;
+  return db.getAllSync<BinRow>(
+    `SELECT * FROM bins
+     WHERE short_code LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\'
+     ORDER BY short_code
+     LIMIT ?`,
+    [like, like, limit],
+  );
 }
 
 export function searchItems(db: DbAdapter, rawQuery: string, limit = 50): SearchResult[] {

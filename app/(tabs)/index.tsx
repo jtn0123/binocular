@@ -16,7 +16,7 @@ import {
   type ItemWithBin,
 } from '@/db/queries';
 import { useFocusTick } from '@/lib/useFocusTick';
-import { searchItems, type SearchResult } from '@/search/fts';
+import { searchBins, searchItems, type SearchResult } from '@/search/fts';
 import { colors, radius, sp, type } from '@/theme';
 
 function BinCard({ bin, itemCount }: { bin: BinRow; itemCount: number }) {
@@ -121,6 +121,7 @@ export default function HomeScreen() {
   void tick;
   const trimmed = query.trim();
   const results = trimmed ? searchItems(db, trimmed, 50) : [];
+  const binMatches = trimmed ? searchBins(db, trimmed) : [];
   const recentBins = trimmed ? [] : listRecentBins(db, 12);
   const checkedOut = trimmed ? [] : listCheckedOutItems(db);
   const lowStock = trimmed ? [] : listLowStockItems(db);
@@ -147,6 +148,22 @@ export default function HomeScreen() {
 
       {trimmed ? (
         <>
+          {binMatches.length > 0 && (
+            <View style={styles.binHits} testID="bin-hits">
+              {binMatches.map((bin) => (
+                <Pressable
+                  key={bin.id}
+                  style={styles.binHit}
+                  onPress={() => router.push({ pathname: '/bin/[id]', params: { id: bin.id } })}
+                >
+                  <CodeTag code={bin.short_code} small />
+                  <Text style={styles.binHitName} numberOfLines={1}>
+                    {bin.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
           <Text style={styles.stamp}>
             {results.length} match{results.length === 1 ? '' : 'es'}
           </Text>
@@ -261,6 +278,19 @@ const styles = StyleSheet.create({
   crumbRow: { flexDirection: 'row', alignItems: 'center', gap: sp(2) },
   checkedOut: { fontSize: 11, color: colors.warn },
   empty: { ...type.dim, paddingVertical: sp(6), textAlign: 'center' },
+  binHits: { gap: sp(1.5) },
+  binHit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(2.5),
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    paddingHorizontal: sp(3),
+    paddingVertical: sp(2.5),
+  },
+  binHitName: { color: colors.text, fontWeight: '600', flex: 1 },
   statusBlock: { gap: sp(2) },
   statusRow: {
     flexDirection: 'row',
