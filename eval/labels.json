@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "note": "Hand-written ground truth for the bundled demo photos. Grow this set from the curated corpus (POLISH.md pass 5) — every case needs a human to have looked at the photo.",
+  "cases": [
+    {
+      "id": "handtools-box",
+      "photo": "assets/demo/bin-handtools.jpg",
+      "binName": "Hand tools",
+      "expected": [
+        { "name": "wrenches", "aliases": ["wrench", "spanner", "combination wrench", "spanners"] },
+        { "name": "spirit level", "aliases": ["level", "bubble level"] },
+        { "name": "tape roll", "aliases": ["duct tape", "masking tape", "roll of tape"] },
+        { "name": "cable ties", "aliases": ["zip ties", "cable tie", "wire ties"] }
+      ]
+    },
+    {
+      "id": "fastener-organizer",
+      "photo": "assets/demo/bin-fasteners.jpg",
+      "binName": "Fasteners",
+      "expected": [
+        { "name": "bolts", "aliases": ["bolt", "hex bolts", "cap screws", "machine screws"] },
+        { "name": "nuts", "aliases": ["nut", "hex nuts", "lock nuts"] },
+        { "name": "washers", "aliases": ["washer", "flat washers"] },
+        { "name": "screws", "aliases": ["screw", "threaded fasteners", "fasteners"] }
+      ]
+    },
+    {
+      "id": "wire-connectors",
+      "photo": "assets/demo/bin-electrical.jpg",
+      "binName": "Electrical connectors",
+      "expected": [
+        {
+          "name": "wire nuts",
+          "aliases": ["wire connectors", "twist-on connectors", "wire nut", "twist connectors"]
+        }
+      ]
+    },
+    {
+      "id": "paint-cans",
+      "photo": "assets/demo/bin-adhesives.jpg",
+      "binName": "Adhesives & finish",
+      "expected": [
+        { "name": "paint cans", "aliases": ["paint", "paint can", "paint tins", "cans of paint"] }
+      ]
+    }
+  ]
+}
