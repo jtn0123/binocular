@@ -7,11 +7,15 @@ import Constants from 'expo-constants';
  * (docs/RELEASES.md), "am I on the latest?" is a real question — and the
  * phone in the workshop is the one place that can't answer it from memory.
  *
- * What this deliberately does NOT do is poll for a version. The repository
- * is private, so an anonymous check is impossible, and the alternatives —
- * shipping a token in the APK, or standing up a service — are both worse
- * than one tap to the page that already lists every build. Same honesty rule
- * as D5 and D15: show what is known, never a number that was guessed at.
+ * There is **no update check here** — no polling, no version comparison. The
+ * repository is private, so an anonymous check is impossible, and the
+ * alternatives (a token shipped in the APK, or a service to stand up) are
+ * both worse than one tap to the page that already lists every build.
+ *
+ * So the UI must not claim otherwise. The row states the running build and
+ * links out; it is labelled "Open releases page", not "Check for updates",
+ * because a button that says it checks something had better check it. Same
+ * honesty rule as D5 and D15: show what is known, never imply more.
  */
 /**
  * The releases *list*, deliberately not `/releases/latest`: that URL resolves
