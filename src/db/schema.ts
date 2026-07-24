@@ -141,12 +141,55 @@ CREATE TABLE deleted_items (
 CREATE INDEX deleted_items_deleted_at ON deleted_items(deleted_at);
 `;
 
+/**
+ * Field-test finding: the review screen and item editor call `category` a
+ * **Tag**, but it was never indexed — typing "fastener" into Home returned
+ * nothing while every fastener in the workshop carried that tag.
+ *
+ * FTS5 has no ALTER TABLE, so widening the index means rebuilding it. That
+ * is safe here in a way that an inventory change would not be: `item_search`
+ * is derived data over `items` (external content), so dropping and
+ * repopulating it cannot lose anything — the append-only rule (§11.6) is
+ * about the migration list, and this is a new entry, not an edited one.
+ */
+const MIGRATION_006_FTS_CATEGORY = `
+DROP TRIGGER items_fts_insert;
+DROP TRIGGER items_fts_delete;
+DROP TRIGGER items_fts_update;
+DROP TABLE item_search;
+
+CREATE VIRTUAL TABLE item_search USING fts5(
+  name, brand, label_text, notes, category, content='items', content_rowid='rowid'
+);
+
+CREATE TRIGGER items_fts_insert AFTER INSERT ON items BEGIN
+  INSERT INTO item_search(rowid, name, brand, label_text, notes, category)
+  VALUES (new.rowid, new.name, new.brand, new.label_text, new.notes, new.category);
+END;
+
+CREATE TRIGGER items_fts_delete AFTER DELETE ON items BEGIN
+  INSERT INTO item_search(item_search, rowid, name, brand, label_text, notes, category)
+  VALUES ('delete', old.rowid, old.name, old.brand, old.label_text, old.notes, old.category);
+END;
+
+CREATE TRIGGER items_fts_update AFTER UPDATE ON items BEGIN
+  INSERT INTO item_search(item_search, rowid, name, brand, label_text, notes, category)
+  VALUES ('delete', old.rowid, old.name, old.brand, old.label_text, old.notes, old.category);
+  INSERT INTO item_search(rowid, name, brand, label_text, notes, category)
+  VALUES (new.rowid, new.name, new.brand, new.label_text, new.notes, new.category);
+END;
+
+INSERT INTO item_search(rowid, name, brand, label_text, notes, category)
+  SELECT rowid, name, brand, label_text, notes, category FROM items;
+`;
+
 export const MIGRATIONS: readonly string[] = [
   MIGRATION_001_INITIAL_SCHEMA,
   MIGRATION_002_FTS_TRIGGERS,
   MIGRATION_003_SCAN_USAGE,
   MIGRATION_004_EVENTS,
   MIGRATION_005_DELETED_ITEMS,
+  MIGRATION_006_FTS_CATEGORY,
 ];
 
 export function getSchemaVersion(db: DbAdapter): number {

@@ -46,6 +46,22 @@ describe('FTS search (blueprint §8.3)', () => {
     expect(searchItems(db, 'pry')).toHaveLength(0);
   });
 
+  it('finds items by their tag, ranked below a name match', () => {
+    const bin = createBin(db, { name: 'Fixings', shortCode: 'B-004' });
+    insertItem(db, { binId: bin.id, name: 'Deck screws', category: 'fastener' });
+    insertItem(db, { binId: bin.id, name: 'Wall plugs', category: 'fastener' });
+    // The editor calls this field "Tag", so the tag has to be searchable.
+    expect(
+      searchItems(db, 'fastener')
+        .map((r) => r.name)
+        .sort(),
+    ).toEqual(['Deck screws', 'Wall plugs']);
+
+    // An item actually *named* for the term still comes first.
+    insertItem(db, { binId: bin.id, name: 'Fastener assortment box', category: 'hardware' });
+    expect(searchItems(db, 'fastener')[0].name).toBe('Fastener assortment box');
+  });
+
   it('matches label_text and notes, and carries the full breadcrumb', () => {
     const loc = createLocation(db, { name: 'Garage' });
     const shelf = createShelf(db, { locationId: loc.id, name: 'Shelf A' });

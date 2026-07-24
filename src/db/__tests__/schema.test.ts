@@ -87,6 +87,62 @@ describe('migration runner', () => {
     expect(getSchemaVersion(db)).toBe(MIGRATIONS.length);
   });
 
+  it('migration 006 indexes tags, on upgrade, without losing what was indexed', () => {
+    // A database stopped at version 5 — the shape on a field-test phone
+    // before this build, with items already in it.
+    db.withTransactionSync(() => {
+      for (let i = 0; i < 5; i++) db.execSync(MIGRATIONS[i]);
+      db.execSync('PRAGMA user_version = 5');
+    });
+    db.runSync(
+      "INSERT INTO bins (id, short_code, name, created_at) VALUES ('b1', 'B-001', 'Fixings', '2026-01-01T00:00:00Z')",
+    );
+    db.runSync(
+      "INSERT INTO items (id, bin_id, name, brand, category, quantity, notes, created_at, updated_at) VALUES ('i1', 'b1', 'Deck screws', 'Spax', 'fastener', 40, 'galvanised', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+    );
+    // Before: the tag is invisible to search.
+    expect(
+      db.getAllSync("SELECT name FROM item_search WHERE item_search MATCH 'fastener'"),
+    ).toHaveLength(0);
+
+    runMigrations(db);
+
+    // After: the tag is searchable...
+    expect(
+      db.getAllSync<{ name: string }>(
+        "SELECT name FROM item_search WHERE item_search MATCH 'fastener'",
+      ),
+    ).toEqual([{ name: 'Deck screws' }]);
+    // ...and every column that was already indexed still is.
+    for (const query of ['deck*', 'spax', 'galvanised']) {
+      expect(
+        db.getAllSync(`SELECT name FROM item_search WHERE item_search MATCH '${query}'`),
+      ).toHaveLength(1);
+    }
+  });
+
+  it('keeps the rebuilt FTS triggers in step on update and delete', () => {
+    runMigrations(db);
+    db.runSync(
+      "INSERT INTO bins (id, short_code, name, created_at) VALUES ('b1', 'B-001', 'Fixings', '2026-01-01T00:00:00Z')",
+    );
+    db.runSync(
+      "INSERT INTO items (id, bin_id, name, category, quantity, created_at, updated_at) VALUES ('i1', 'b1', 'Deck screws', 'fastener', 40, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+    );
+    db.runSync("UPDATE items SET category = 'hardware' WHERE id = 'i1'");
+    expect(
+      db.getAllSync("SELECT name FROM item_search WHERE item_search MATCH 'fastener'"),
+    ).toHaveLength(0);
+    expect(
+      db.getAllSync("SELECT name FROM item_search WHERE item_search MATCH 'hardware'"),
+    ).toHaveLength(1);
+
+    db.runSync("DELETE FROM items WHERE id = 'i1'");
+    expect(
+      db.getAllSync("SELECT name FROM item_search WHERE item_search MATCH 'hardware'"),
+    ).toHaveLength(0);
+  });
+
   it('backfills the FTS index for items that predate migration 002', () => {
     // Apply only migration 001, insert an item, then run the rest.
     db.withTransactionSync(() => {
