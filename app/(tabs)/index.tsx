@@ -10,6 +10,7 @@ import { QrModal } from '@/components/QrModal';
 import { useDb } from '@/db/DbProvider';
 import {
   countItemsForBin,
+  countScansByAttention,
   getBin,
   getBinPlace,
   listCheckedOutItems,
@@ -215,6 +216,11 @@ export default function HomeScreen() {
   }, [db, trimmed]);
   const checkedOut = trimmed ? [] : listCheckedOutItems(db);
   const lowStock = trimmed ? [] : listLowStockItems(db);
+  // Home is the screen you land on when you walk back in from the workshop,
+  // so this is where a scan waiting for review has to be visible — the queue
+  // banner on the Scan tab is a screen you have to think to visit.
+  const scans = countScansByAttention(db);
+  const scansWaiting = scans.review + scans.working + scans.failed;
 
   return (
     <View style={styles.container}>
@@ -329,6 +335,33 @@ export default function HomeScreen() {
         </>
       ) : (
         <>
+          {scansWaiting > 0 && (
+            <Pressable
+              style={styles.queueBanner}
+              onPress={() => router.push('/queue')}
+              accessibilityRole="button"
+              accessibilityLabel={
+                scans.review > 0
+                  ? `${scans.review} scan${scans.review === 1 ? '' : 's'} ready to review`
+                  : `${scansWaiting} scan${scansWaiting === 1 ? '' : 's'} in the queue`
+              }
+              testID="home-queue-banner"
+            >
+              <Ionicons
+                name={scans.review > 0 ? 'albums' : 'cloud-upload-outline'}
+                size={16}
+                color={colors.amber}
+              />
+              <Text style={styles.queueLabel}>
+                {scans.review > 0
+                  ? `${scans.review} ready to review`
+                  : scans.failed > 0 && scans.working === 0
+                    ? `${scans.failed} scan${scans.failed === 1 ? '' : 's'} need attention`
+                    : `${scans.working} scan${scans.working === 1 ? '' : 's'} recognizing…`}
+              </Text>
+              <Ionicons name="chevron-forward" size={15} color={colors.textFaint} />
+            </Pressable>
+          )}
           {checkedOut.length > 0 && (
             <View style={styles.statusBlock}>
               <Text style={styles.stamp}>Checked out</Text>
@@ -443,6 +476,18 @@ const styles = StyleSheet.create({
     paddingVertical: sp(2.5),
   },
   binHitName: { color: colors.text, fontWeight: '600' },
+  queueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(2),
+    backgroundColor: colors.chipSelectedBg,
+    borderWidth: 1,
+    borderColor: colors.chipSelectedBorder,
+    borderRadius: radius.md,
+    paddingHorizontal: sp(3),
+    paddingVertical: sp(2.5),
+  },
+  queueLabel: { color: colors.text, fontWeight: '600', fontSize: 13, flex: 1 },
   statusBlock: { gap: sp(2) },
   statusRow: {
     flexDirection: 'row',

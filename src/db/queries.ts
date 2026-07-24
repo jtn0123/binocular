@@ -646,6 +646,35 @@ export function countAttentionScans(db: DbAdapter): number {
   return row?.n ?? 0;
 }
 
+export interface ScanAttentionCounts {
+  /** Recognized and waiting for the review screen — the actionable one. */
+  review: number;
+  /** Still queued or mid-recognition; nothing for the user to do yet. */
+  working: number;
+  /** Settled badly and needing a retry or a discard. */
+  failed: number;
+}
+
+/**
+ * Attention split by what the user can actually do about it. Home leads with
+ * "ready to review" because that is the one that needs a person; D18 made
+ * that the normal end of a capture rather than the exception.
+ */
+export function countScansByAttention(db: DbAdapter): ScanAttentionCounts {
+  const rows = db.getAllSync<{ status: string; n: number }>(
+    `SELECT status, COUNT(*) AS n FROM scans
+     WHERE status IN ('queued', 'processing', 'failed', 'review')
+     GROUP BY status`,
+  );
+  const counts: ScanAttentionCounts = { review: 0, working: 0, failed: 0 };
+  for (const row of rows) {
+    if (row.status === 'review') counts.review += row.n;
+    else if (row.status === 'failed') counts.failed += row.n;
+    else counts.working += row.n;
+  }
+  return counts;
+}
+
 /** Boot recovery (§9 kill-test): an interrupted scan resumes as queued. */
 export function resetInterruptedScans(db: DbAdapter): number {
   const stuck = db.getFirstSync<{ n: number }>(
