@@ -53,6 +53,7 @@ blueprint edits instead.
 | D13 | QR payload | Typed: `binoc:v1:<type>:<uuid>`, type ∈ `bin \| shelf \| location` | Shelf/location labels enable move mode (§8.5); typing the payload costs nothing before any label is printed |
 | D14 | Cloud engines | Two cloud engines ship in v1 — Anthropic Claude and OpenAI — behind the same `VisionProvider` contract, each isolated in its own provider file with its own API key in Settings | User choice on cost/quality/account; the §6.1 schema and §6.2 prompt are engine-neutral, so a second cloud engine is pure provider code |
 | D16 | Diagnostics | A local, always-on but **bounded** event log (`events` table, 5,000 entries / 30 days) records app lifecycle, scan timings, queue retries, search, and crashes; a global error handler captures otherwise-invisible crashes. Export is **user-initiated only** — no network telemetry, no third-party crash SDK. Disable-able in Settings | Field testing happens on a standalone build with no Metro console, so `__DEV__`-gated logging would record nothing exactly when it is needed. Bounded + local + opt-out keeps it honest with offline-first (I4) and the privacy stance: the workshop photos and usage history never leave the device unless the user shares them |
+| D17 | Deleted items | Deleting an item moves a full snapshot into a `deleted_items` table (migration 005): instantly undoable via snackbar, restorable for 30 days from a Recently-deleted screen, purged on boot after that. Live-item queries and the FTS index are untouched because deletion really deletes from `items` — the snapshot is a copy | Field testing showed early mis-tagged items need cleanup, but §11 forbids silent inventory loss. A copy-table beats a `deleted_at` flag: no query in the app needs a new WHERE clause, and search can never surface a ghost item |
 | D15 | Cost transparency | Cloud scans record measured token usage (each API's `usage` field) plus a computed dollar cost per scan; the app shows a pre-scan estimate and cumulative spend in Settings. Estimates use documented tokenizer math (OpenAI 32px patches, Claude ≈px²/750) with a bundled price table; uploads stay capped at 1568px and the OpenAI request pins an explicit `detail` level as a cost ceiling | Same honesty rule as D5: usage is measured, never guessed. On `gpt-5.6`, `detail: auto` means *no auto-downscaling* — a 20MP original would cost ~10× the 1568px upload — so image sizing is a cost policy, not just bandwidth |
 
 ---
@@ -174,6 +175,26 @@ CREATE TABLE events (
   duration_ms INTEGER,
   scan_id TEXT,                           -- correlation only, not a foreign key
   created_at TEXT NOT NULL
+);
+
+-- D17: recently-deleted safety net. Deleting an item snapshots the full row
+-- here (a copy, so every live-item query and the FTS index stay untouched),
+-- restorable from a Recently-deleted screen; purged after 30 days on boot.
+-- Extends the §11 no-silent-deletion invariant beyond the undo snackbar.
+CREATE TABLE deleted_items (
+  id TEXT PRIMARY KEY,                    -- the item's original id
+  bin_id TEXT,                           -- original bin (may since be gone)
+  name TEXT NOT NULL,
+  brand TEXT,
+  category TEXT NOT NULL,
+  quantity INTEGER NOT NULL,
+  label_text TEXT,
+  photo_uri TEXT,
+  notes TEXT,
+  low_stock_threshold INTEGER,
+  source_scan_id TEXT,
+  created_at TEXT NOT NULL,
+  deleted_at TEXT NOT NULL
 );
 
 CREATE VIRTUAL TABLE item_search USING fts5(
