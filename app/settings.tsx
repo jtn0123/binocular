@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import * as DocumentPicker from 'expo-document-picker';
 import { Link } from 'expo-router';
@@ -15,6 +24,7 @@ import { logEvent } from '@/diagnostics/events';
 import { useDb } from '@/db/DbProvider';
 import { isDatabaseEmpty } from '@/db/backupQueries';
 import { listSpendTotals, type SpendTotals } from '@/db/queries';
+import { buildInfo, describeBuild, RELEASES_URL } from '@/settings/build';
 import {
   getApiKey,
   getOpenAiApiKey,
@@ -142,6 +152,7 @@ export default function SettingsScreen() {
   // read once on mount rather than on every render — and re-read after a
   // cleanup, which is the only thing that changes it from here.
   const [storage, setStorage] = useState<StorageReport>(() => readStorageReport(db));
+  const build = buildInfo();
 
   useEffect(() => {
     void (async () => {
@@ -277,6 +288,25 @@ export default function SettingsScreen() {
           <Text style={styles.secondaryLabel}>Open diagnostics</Text>
         </Pressable>
       </Link>
+
+      <Text style={styles.sectionTitle}>This build</Text>
+      <Text style={styles.hint} testID="build-line">
+        {describeBuild(build)}. Updates are published as GitHub Releases — open the page on this
+        phone and install the APK over the top; your bins, items and photos are kept.
+      </Text>
+      <Pressable
+        style={styles.secondaryButton}
+        accessibilityRole="button"
+        accessibilityLabel="Open the releases page to check for a newer build"
+        testID="open-releases"
+        onPress={() => {
+          void Linking.openURL(RELEASES_URL).catch(() =>
+            Alert.alert('Could not open the browser', RELEASES_URL),
+          );
+        }}
+      >
+        <Text style={styles.secondaryLabel}>Check for updates</Text>
+      </Pressable>
 
       <Text style={styles.sectionTitle}>Storage</Text>
       <Text style={styles.hint}>
