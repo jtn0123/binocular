@@ -19,6 +19,11 @@ Both run `typecheck` + the Jest suite first — a release APK never ships from
 red code — then `expo prebuild` → `assembleRelease`, and publish the APK with
 install instructions and the commit list since the previous release.
 
+Ad-hoc builds are published as **pre-releases**, which is why the app's
+*Check for updates* opens `/releases` rather than `/releases/latest` — that
+URL resolves only to the newest *non*-pre-release and 404s while only ad-hoc
+builds exist. Push a `v*` tag when you want a build to be the "latest".
+
 Default build is **arm64-v8a only** (~60 MB instead of the ~181 MB four-ABI
 APK — it matters when the download happens on workshop Wi-Fi). Any phone from
 the last decade is arm64; the *Run workflow* dialog offers the wider ABI sets
