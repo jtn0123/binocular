@@ -18,13 +18,22 @@ taps.
   and auto-drain on reconnect
 - **Daily driver** — check-out/return, low-stock alerts, audit photo history,
   full zip backup/restore, CSV export
+- **Cost transparency** — every cloud scan records *measured* token usage and
+  dollar cost from the API's own `usage` field; pre-scan estimates on the
+  capture screen, cumulative spend in Settings (never a guessed number)
 
 ## Status
 
-Stages 0–6 of the roadmap are built, tested (118 Jest tests), and
-emulator-verified. Stage 7 (iOS pass) remains, plus the physical-world exit
-criteria: a real-bin recognition audit with a cloud API key and a
-print-then-scan label round-trip.
+Stages 0–6 of the roadmap are built, tested (**240 Jest tests**), and
+emulator-verified, plus hardening passes: trust-boundary fuzzing,
+property-based tests, 1,000-item perf assertions, queue chaos coverage, an
+8,000-event monkey run, and an accessibility sweep.
+
+Still open: the Stage 7 iOS pass, and the physical-world exit criteria that
+need real hardware — a real-bin recognition audit with a cloud API key and a
+print-then-scan label round-trip. (This machine's emulator captures black
+camera frames, so real-image recognition testing needs a physical device —
+see `docs/POLISH.md`.)
 
 ## Development
 
@@ -35,6 +44,39 @@ npm test             # Jest (jest-expo; better-sqlite3 backs the db tests)
 npm run typecheck    # tsc --noEmit (strict)
 npm run lint         # expo lint
 npm run seed         # writes an inspectable dev.db via better-sqlite3
+npm run eval         # score an engine against the labeled eval set
+```
+
+### Recognition eval
+
+`npm run eval` measures recall/precision against hand-labeled photos —
+accuracy is *measured*, never self-reported by a model:
+
+```bash
+npm run eval                      # fixture engine (free; proves the harness)
+OPENAI_API_KEY=… npm run eval -- --engine openai
+ANTHROPIC_API_KEY=… npm run eval -- --engine claude
+```
+
+Keys are read from your shell at run time — never stored or committed.
+Cloud runs also print measured token usage and cost.
+
+### Test images
+
+- `eval/corpus/` — the small hand-labeled eval set used by `npm run eval`.
+- `eval/pool/` — 213 CC-licensed workshop images harvested from Wikimedia
+  Commons and deduplicated by perceptual hash. Each carries a `status` in
+  `pool.json`: **banked** (68, human-confirmed useful — the working test set
+  and seed for a future custom detector), **rejected** (145, archived not
+  deleted). Credits in `LICENSES.md` / `BANK.md`.
+- Image files are **gitignored**; `scripts/devtest/fetch-pool.sh` rebuilds
+  them from the manifest after a clone.
+
+### Device test scripts
+
+```bash
+./scripts/devtest/chaos.sh              # offline/kill chaos vs the app's own SQLite
+./scripts/devtest/inject-camera-image.sh # put a known photo on the emulator camera
 ```
 
 Everything except the on-device engine runs in **Expo Go**. The local ML Kit
