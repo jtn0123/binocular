@@ -633,6 +633,7 @@ export function ChipEditor({
             keyboardType="number-pad"
             testID="editor-quantity"
           />
+          <Text style={styles.tagHeading}>Tag</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
             {ItemCategory.options.map((cat) => (
               <Pressable
@@ -824,6 +825,7 @@ const styles = StyleSheet.create({
     padding: sp(2.5),
     fontSize: 15,
   },
+  tagHeading: { ...type.stamp, marginTop: sp(1) },
   catRow: { flexGrow: 0 },
   catChip: {
     paddingHorizontal: sp(3),

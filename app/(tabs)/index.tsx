@@ -4,11 +4,15 @@ import { Link, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { BinThumb } from '@/components/BinThumb';
 import { CodeTag } from '@/components/CodeTag';
+import { QrModal } from '@/components/QrModal';
 import { useDb } from '@/db/DbProvider';
 import {
   countItemsForBin,
+  getBin,
   listCheckedOutItems,
+  listItemPhotoUris,
   listLowStockItems,
   listRecentBins,
   returnItem,
@@ -20,7 +24,17 @@ import { useFocusTick } from '@/lib/useFocusTick';
 import { searchBins, searchItems, type SearchResult } from '@/search/fts';
 import { colors, radius, sp, type } from '@/theme';
 
-function BinCard({ bin, itemCount }: { bin: BinRow; itemCount: number }) {
+function BinCard({
+  bin,
+  itemCount,
+  itemPhotoUris,
+  onShowQr,
+}: {
+  bin: BinRow;
+  itemCount: number;
+  itemPhotoUris: string[];
+  onShowQr: () => void;
+}) {
   return (
     <Link href={{ pathname: '/bin/[id]', params: { id: bin.id } }} asChild>
       <Pressable
@@ -28,13 +42,19 @@ function BinCard({ bin, itemCount }: { bin: BinRow; itemCount: number }) {
         accessibilityRole="button"
         accessibilityLabel={`Bin ${bin.short_code}, ${bin.name}, ${itemCount} item${itemCount === 1 ? '' : 's'}`}
       >
-        {bin.cover_photo_uri ? (
-          <Image source={{ uri: bin.cover_photo_uri }} style={styles.thumb} contentFit="cover" />
-        ) : (
-          <View style={[styles.thumb, styles.thumbEmpty]}>
-            <Ionicons name="file-tray" size={22} color={colors.textFaint} />
-          </View>
-        )}
+        <Pressable
+          onPress={onShowQr}
+          accessibilityRole="button"
+          accessibilityLabel={`Show QR code for ${bin.short_code}`}
+          testID={`qr-thumb-${bin.short_code}`}
+        >
+          <BinThumb
+            coverUri={bin.cover_photo_uri}
+            itemPhotoUris={itemPhotoUris}
+            size={64}
+            radius={radius.md}
+          />
+        </Pressable>
         <View style={styles.cardMain}>
           <CodeTag code={bin.short_code} small />
           <Text style={styles.cardName} numberOfLines={1}>
@@ -51,7 +71,15 @@ function BinCard({ bin, itemCount }: { bin: BinRow; itemCount: number }) {
   );
 }
 
-function ResultRow({ result, onPress }: { result: SearchResult; onPress: () => void }) {
+function ResultRow({
+  result,
+  onPress,
+  onShowQr,
+}: {
+  result: SearchResult;
+  onPress: () => void;
+  onShowQr: () => void;
+}) {
   const where =
     [result.binName, result.shelfName, result.locationName].filter(Boolean).join(', ') ||
     'unassigned';
@@ -62,13 +90,19 @@ function ResultRow({ result, onPress }: { result: SearchResult; onPress: () => v
       accessibilityRole="button"
       accessibilityLabel={`${result.quantity > 1 ? `${result.quantity} ` : ''}${result.brand ? `${result.brand} ` : ''}${result.name}, in ${where}${result.checkedOutTo ? `, checked out to ${result.checkedOutTo}` : ''}`}
     >
-      {result.binCoverUri ? (
-        <Image source={{ uri: result.binCoverUri }} style={styles.thumbSm} contentFit="cover" />
-      ) : (
-        <View style={[styles.thumbSm, styles.thumbEmpty]}>
-          <Ionicons name="cube-outline" size={18} color={colors.textFaint} />
-        </View>
-      )}
+      <Pressable
+        onPress={onShowQr}
+        accessibilityRole="button"
+        accessibilityLabel={`Show QR code for the bin holding ${result.name}`}
+      >
+        {result.binCoverUri ? (
+          <Image source={{ uri: result.binCoverUri }} style={styles.thumbSm} contentFit="cover" />
+        ) : (
+          <View style={[styles.thumbSm, styles.thumbEmpty]}>
+            <Ionicons name="cube-outline" size={18} color={colors.textFaint} />
+          </View>
+        )}
+      </Pressable>
       <View style={styles.cardMain}>
         <Text style={styles.resultName} numberOfLines={1}>
           {result.quantity > 1 ? `${result.quantity}× ` : ''}
@@ -139,6 +173,7 @@ export default function HomeScreen() {
   const router = useRouter();
   useFocusTick();
   const [query, setQuery] = useState('');
+  const [qrBin, setQrBin] = useState<BinRow | null>(null);
 
   const [tick, setTick] = useState(0);
   void tick;
@@ -223,6 +258,9 @@ export default function HomeScreen() {
                   result.binId &&
                   router.push({ pathname: '/bin/[id]', params: { id: result.binId } })
                 }
+                onShowQr={() => {
+                  if (result.binId) setQrBin(getBin(db, result.binId));
+                }}
               />
             )}
           />
@@ -275,11 +313,17 @@ export default function HomeScreen() {
               <Text style={styles.empty}>No bins yet — create one in Browse.</Text>
             }
             renderItem={({ item: bin }) => (
-              <BinCard bin={bin} itemCount={countItemsForBin(db, bin.id)} />
+              <BinCard
+                bin={bin}
+                itemCount={countItemsForBin(db, bin.id)}
+                itemPhotoUris={bin.cover_photo_uri ? [] : listItemPhotoUris(db, bin.id)}
+                onShowQr={() => setQrBin(bin)}
+              />
             )}
           />
         </>
       )}
+      <QrModal bin={qrBin} onClose={() => setQrBin(null)} />
     </View>
   );
 }

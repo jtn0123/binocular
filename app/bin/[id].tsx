@@ -15,6 +15,8 @@ import {
   insertItem,
   itemsForBin,
   listAuditHistory,
+  listItemPhotoUris,
+  updateItem,
   renameBin,
   returnItem,
   setItemQuantity,
@@ -54,6 +56,7 @@ export default function BinDetailScreen() {
   const [prompt, setPrompt] = useState<PromptRequest | null>(null);
   const [adding, setAdding] = useState(false);
   const [viewing, setViewing] = useState<ItemRow | null>(null);
+  const [editing, setEditing] = useState<ItemRow | null>(null);
   void tick;
 
   const bin = id ? getBin(db, id) : null;
@@ -67,9 +70,14 @@ export default function BinDetailScreen() {
   const items = itemsForBin(db, bin.id);
   const shelf = bin.shelf_id ? getShelf(db, bin.shelf_id) : null;
   const history = listAuditHistory(db, bin.id);
+  const itemPhotos = bin.cover_photo_uri ? [] : listItemPhotoUris(db, bin.id);
 
   function openItemMenu(item: ItemRow) {
     const buttons = [
+      {
+        text: 'Edit name, tag, quantity…',
+        onPress: () => setEditing(item),
+      },
       item.checked_out_to
         ? {
             text: `Return (out to ${item.checked_out_to})`,
@@ -164,7 +172,24 @@ export default function BinDetailScreen() {
           <View style={styles.header}>
             {bin.cover_photo_uri ? (
               <Image source={{ uri: bin.cover_photo_uri }} style={styles.cover} contentFit="cover" />
-            ) : null}
+            ) : (
+              itemPhotos.length > 0 && (
+                <View style={styles.coverCollage}>
+                  {itemPhotos.map((uri, i) => (
+                    <Image
+                      key={`${uri}-${i}`}
+                      source={{ uri }}
+                      style={[
+                        styles.collageCell,
+                        itemPhotos.length === 1 && styles.collageCellFull,
+                        itemPhotos.length === 2 && styles.collageCellHalf,
+                      ]}
+                      contentFit="cover"
+                    />
+                  ))}
+                </View>
+              )
+            )}
             <Text style={styles.meta}>
               {items.length} item{items.length === 1 ? '' : 's'}
               {shelf ? ` · ${shelf.name}` : ' · unassigned'}
@@ -274,9 +299,46 @@ export default function BinDetailScreen() {
         db={db}
         item={viewing}
         onClose={() => setViewing(null)}
+        onEdit={(item) => {
+          setViewing(null);
+          setEditing(item);
+        }}
         onActions={(item) => {
           setViewing(null);
           openItemMenu(item);
+        }}
+      />
+      <ChipEditor
+        visible={editing !== null}
+        chip={
+          editing
+            ? {
+                key: editing.id,
+                name: editing.name,
+                brand: editing.brand,
+                category: editing.category,
+                quantity: editing.quantity,
+                labelText: editing.label_text,
+                confidence: null,
+                selected: true,
+                matchedExistingId: null,
+              }
+            : null
+        }
+        onCancel={() => setEditing(null)}
+        onDelete={null}
+        onSave={(values) => {
+          if (editing) {
+            updateItem(db, editing.id, {
+              name: values.name,
+              brand: values.brand,
+              category: values.category,
+              quantity: values.quantity,
+              labelText: values.labelText,
+            });
+          }
+          setEditing(null);
+          setTick((t) => t + 1);
         }}
       />
     </View>
@@ -292,11 +354,13 @@ function ItemViewer({
   db,
   item,
   onClose,
+  onEdit,
   onActions,
 }: {
   db: ReturnType<typeof useDb>;
   item: ItemRow | null;
   onClose: () => void;
+  onEdit: (item: ItemRow) => void;
   onActions: (item: ItemRow) => void;
 }) {
   const sourceScan = item?.source_scan_id ? getScan(db, item.source_scan_id) : null;
@@ -329,6 +393,9 @@ function ItemViewer({
                 {sourceScan ? ` · scanned ${sourceScan.created_at.slice(0, 10)}` : ''}
               </Text>
               <View style={styles.viewerActions}>
+                <Pressable onPress={() => onEdit(item)} testID="viewer-edit">
+                  <Text style={styles.viewerLink}>Edit</Text>
+                </Pressable>
                 <Pressable onPress={() => onActions(item)}>
                   <Text style={styles.viewerLink}>Actions…</Text>
                 </Pressable>
@@ -362,6 +429,21 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   meta: { ...type.dim },
+  coverCollage: {
+    width: '100%',
+    height: 190,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSunken,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 2,
+    overflow: 'hidden',
+  },
+  collageCell: { width: '49%', height: 92 },
+  collageCellFull: { width: '100%', height: 186 },
+  collageCellHalf: { height: 186 },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: sp(2) },
   action: {
     flexDirection: 'row',

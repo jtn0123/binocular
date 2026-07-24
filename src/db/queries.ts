@@ -406,6 +406,48 @@ export function setLowStockThreshold(
   ]);
 }
 
+/** Full edit of an item's identity fields (field-test ask: fix tags/names). */
+export function updateItem(
+  db: DbAdapter,
+  itemId: string,
+  input: {
+    name: string;
+    brand: string | null;
+    category: ItemCategory;
+    quantity: number;
+    labelText: string | null;
+  },
+): void {
+  db.runSync(
+    'UPDATE items SET name = ?, brand = ?, category = ?, quantity = ?, label_text = ?, updated_at = ? WHERE id = ?',
+    [
+      input.name,
+      input.brand,
+      input.category,
+      Math.max(0, input.quantity),
+      input.labelText,
+      nowIso(),
+      itemId,
+    ],
+  );
+}
+
+/**
+ * Photos of the scans that cataloged a bin's items, newest first — the
+ * cover-collage fallback for bins that have never had a full audit photo.
+ */
+export function listItemPhotoUris(db: DbAdapter, binId: string, limit = 4): string[] {
+  return db
+    .getAllSync<{ photo_uri: string }>(
+      `SELECT DISTINCT s.photo_uri FROM items i
+       JOIN scans s ON s.id = i.source_scan_id
+       WHERE i.bin_id = ? AND s.photo_uri IS NOT NULL
+       ORDER BY i.created_at DESC LIMIT ?`,
+      [binId, limit],
+    )
+    .map((r) => r.photo_uri);
+}
+
 export function setItemQuantity(db: DbAdapter, itemId: string, quantity: number): void {
   db.runSync('UPDATE items SET quantity = ?, updated_at = ? WHERE id = ?', [
     Math.max(0, quantity),

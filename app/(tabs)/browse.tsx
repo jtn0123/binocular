@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CodeTag } from '@/components/CodeTag';
 import { PromptModal, type PromptRequest } from '@/components/PromptModal';
@@ -65,18 +65,30 @@ export default function BrowseScreen() {
   useFocusTick();
   const [tick, setTick] = useState(0);
   const [prompt, setPrompt] = useState<PromptRequest | null>(null);
+  // Print picker (field-test ask): choose which bins to print, not all-or-nothing.
+  const [printPicking, setPrintPicking] = useState(false);
+  const [printSelected, setPrintSelected] = useState<Record<string, boolean>>({});
   const refresh = () => setTick((t) => t + 1);
   void tick;
 
   const locations = listLocations(db);
   const unassigned = listUnassignedBins(db);
 
-  async function printAllLabels() {
+  function openPrintPicker() {
     const bins = listBins(db);
     if (bins.length === 0) {
       Alert.alert('No bins', 'Create some bins first.');
       return;
     }
+    // Everything pre-selected — "all bins" stays one tap away.
+    setPrintSelected(Object.fromEntries(bins.map((b) => [b.id, true])));
+    setPrintPicking(true);
+  }
+
+  async function printSelectedLabels() {
+    const bins = listBins(db).filter((b) => printSelected[b.id]);
+    setPrintPicking(false);
+    if (bins.length === 0) return;
     try {
       await printLabelSheet(
         bins.map((bin) => ({
@@ -176,7 +188,7 @@ export default function BrowseScreen() {
             <Ionicons name="add" size={16} color={colors.amberInkOn} />
             <Text style={styles.toolbarLabel}>Bin</Text>
           </Pressable>
-          <Pressable style={styles.toolbarButtonAlt} onPress={printAllLabels}>
+          <Pressable style={styles.toolbarButtonAlt} onPress={openPrintPicker}>
             <Ionicons name="print" size={16} color={colors.steel} />
             <Text style={styles.toolbarLabelAlt}>Print bin labels</Text>
           </Pressable>
@@ -300,6 +312,65 @@ export default function BrowseScreen() {
         )}
       </ScrollView>
       <PromptModal request={prompt} onClose={() => setPrompt(null)} />
+      <Modal
+        visible={printPicking}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPrintPicking(false)}
+      >
+        <View style={styles.pickerBackdrop}>
+          <View style={styles.pickerCard}>
+            <Text style={styles.pickerTitle}>Print which labels?</Text>
+            <ScrollView style={styles.pickerList}>
+              {listBins(db).map((bin) => {
+                const checked = printSelected[bin.id] ?? false;
+                return (
+                  <Pressable
+                    key={bin.id}
+                    style={styles.pickerRow}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked }}
+                    onPress={() =>
+                      setPrintSelected((sel) => ({ ...sel, [bin.id]: !(sel[bin.id] ?? false) }))
+                    }
+                  >
+                    <Ionicons
+                      name={checked ? 'checkbox' : 'square-outline'}
+                      size={20}
+                      color={checked ? colors.amber : colors.textFaint}
+                    />
+                    <CodeTag code={bin.short_code} small />
+                    <Text style={styles.pickerName} numberOfLines={1}>
+                      {bin.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.pickerActions}>
+              <Pressable
+                onPress={() => {
+                  const bins = listBins(db);
+                  const allOn = bins.every((b) => printSelected[b.id]);
+                  setPrintSelected(Object.fromEntries(bins.map((b) => [b.id, !allOn])));
+                }}
+              >
+                <Text style={styles.pickerLink}>All / none</Text>
+              </Pressable>
+              <View style={styles.pickerActionsRight}>
+                <Pressable onPress={() => setPrintPicking(false)}>
+                  <Text style={styles.pickerLink}>Cancel</Text>
+                </Pressable>
+                <Pressable onPress={printSelectedLabels}>
+                  <Text style={styles.pickerPrint}>
+                    Print {Object.values(printSelected).filter(Boolean).length}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -354,4 +425,34 @@ const styles = StyleSheet.create({
   },
   binName: { ...type.body, flex: 1 },
   empty: { ...type.dim, paddingVertical: sp(6), textAlign: 'center' },
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    padding: sp(5),
+  },
+  pickerCard: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.xl,
+    padding: sp(4),
+    gap: sp(3),
+    maxHeight: '75%',
+  },
+  pickerTitle: { ...type.h2 },
+  pickerList: { flexGrow: 0 },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(2.5),
+    paddingVertical: sp(2.25),
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  pickerName: { ...type.body, flex: 1 },
+  pickerActions: { flexDirection: 'row', alignItems: 'center' },
+  pickerActionsRight: { flexDirection: 'row', gap: sp(5), marginLeft: 'auto' },
+  pickerLink: { color: colors.steel, fontWeight: '600' },
+  pickerPrint: { color: colors.amber, fontWeight: '800' },
 });

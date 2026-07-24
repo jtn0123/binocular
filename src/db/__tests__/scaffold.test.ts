@@ -1,5 +1,16 @@
 import { createNodeAdapter, type NodeDbAdapter } from '../nodeAdapter';
-import { createLocation, createShelf, getBin, listAllShelves, listLocations } from '../queries';
+import {
+  createLocation,
+  createShelf,
+  getBin,
+  insertItem,
+  insertScan,
+  itemsForBin,
+  listAllShelves,
+  listItemPhotoUris,
+  listLocations,
+  updateItem,
+} from '../queries';
 import { ensureDefaultShelf, quickCreateBin } from '../scaffold';
 import { runMigrations } from '../schema';
 
@@ -43,5 +54,48 @@ describe('first-run scaffolding (field-test finding: no-QR bin creation)', () =>
     expect(second.shelf_id).toBe(first.shelf_id);
     expect(listLocations(db)).toHaveLength(1);
     expect(getBin(db, second.id)).not.toBeNull();
+  });
+});
+
+describe('round-3 field feedback queries', () => {
+  let db: NodeDbAdapter;
+
+  beforeEach(() => {
+    db = createNodeAdapter(':memory:');
+    runMigrations(db);
+  });
+  afterEach(() => {
+    db.close();
+  });
+
+  it('updateItem rewrites identity fields and clamps quantity at zero', () => {
+    const bin = quickCreateBin(db);
+    const item = insertItem(db, { binId: bin.id, name: 'Batteries', category: 'electrical' });
+    updateItem(db, item.id, {
+      name: 'Old batteries',
+      brand: 'Duracell',
+      category: 'other',
+      quantity: -3,
+      labelText: 'AA 24-pack',
+    });
+    const rows = itemsForBin(db, bin.id);
+    expect(rows[0].name).toBe('Old batteries');
+    expect(rows[0].brand).toBe('Duracell');
+    expect(rows[0].category).toBe('other');
+    expect(rows[0].quantity).toBe(0);
+    expect(rows[0].label_text).toBe('AA 24-pack');
+  });
+
+  it('listItemPhotoUris returns distinct source-scan photos, empty when none', () => {
+    const bin = quickCreateBin(db);
+    expect(listItemPhotoUris(db, bin.id)).toEqual([]);
+    const scan = insertScan(db, { mode: 'check_in', photoUri: 'file:///a.jpg' });
+    insertItem(db, { binId: bin.id, name: 'One', category: 'other', sourceScanId: scan.id });
+    insertItem(db, { binId: bin.id, name: 'Two', category: 'other', sourceScanId: scan.id });
+    // Two items from the same scan -> one distinct photo.
+    expect(listItemPhotoUris(db, bin.id)).toEqual(['file:///a.jpg']);
+    // Manual items (no source scan) contribute nothing.
+    insertItem(db, { binId: bin.id, name: 'Manual', category: 'other' });
+    expect(listItemPhotoUris(db, bin.id)).toHaveLength(1);
   });
 });

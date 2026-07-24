@@ -82,6 +82,10 @@ export function labelSheetHtml(labels: LabelSpec[]): string {
     display: flex; align-items: center; gap: 0.15in;
     padding: 0.15in;
     overflow: hidden;
+    /* Cut/fold guide for plain-paper printing; sits inside the sticker
+       edge on Avery 5163 sheets. */
+    border: 1px dashed #999;
+    border-radius: 6px;
   }
   .qr { width: 1.6in; height: 1.6in; flex-shrink: 0; }
   .qr svg { width: 100%; height: 100%; }

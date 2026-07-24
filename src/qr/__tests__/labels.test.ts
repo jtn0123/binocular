@@ -45,3 +45,10 @@ describe('label sheet (blueprint §7, Avery 5163)', () => {
     expect(html).not.toContain('<5mm>');
   });
 });
+
+it('labels carry a dashed cut-line border (field-test ask)', () => {
+  const html = labelSheetHtml([
+    { payload: { type: 'bin', id: 'x' }, code: 'B-001', name: 'Bin B-001' },
+  ]);
+  expect(html).toContain('border: 1px dashed');
+});
