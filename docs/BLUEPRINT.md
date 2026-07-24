@@ -54,6 +54,7 @@ blueprint edits instead.
 | D14 | Cloud engines | Two cloud engines ship in v1 — Anthropic Claude and OpenAI — behind the same `VisionProvider` contract, each isolated in its own provider file with its own API key in Settings | User choice on cost/quality/account; the §6.1 schema and §6.2 prompt are engine-neutral, so a second cloud engine is pure provider code |
 | D16 | Diagnostics | A local, always-on but **bounded** event log (`events` table, 5,000 entries / 30 days) records app lifecycle, scan timings, queue retries, search, and crashes; a global error handler captures otherwise-invisible crashes. Export is **user-initiated only** — no network telemetry, no third-party crash SDK. Disable-able in Settings | Field testing happens on a standalone build with no Metro console, so `__DEV__`-gated logging would record nothing exactly when it is needed. Bounded + local + opt-out keeps it honest with offline-first (I4) and the privacy stance: the workshop photos and usage history never leave the device unless the user shares them |
 | D17 | Deleted items | Deleting an item moves a full snapshot into a `deleted_items` table (migration 005): instantly undoable via snackbar, restorable for 30 days from a Recently-deleted screen, purged on boot after that. Live-item queries and the FTS index are untouched because deletion really deletes from `items` — the snapshot is a copy | Field testing showed early mis-tagged items need cleanup, but §11 forbids silent inventory loss. A copy-table beats a `deleted_at` flag: no query in the app needs a new WHERE clause, and search can never surface a ghost item |
+| D19 | Item tags | The tag vocabulary is **user-managed** (`tags` table, migration 008), not a fixed enum: add, rename and delete from a Settings screen. Items keep storing the tag as **text**, so search, CSV, backup and every existing query are untouched; a rename is one `UPDATE` inside the same transaction, and a delete reassigns its items to `other` rather than orphaning them. `other` cannot be deleted — it is the fallback the AI boundary and every failed lookup resolve to. The vision prompt and the OpenAI response schema are built from the live list | A fixed enum meant "electrical" was as far as the app could describe a bin of wire nuts, and a workshop's real categories are personal — a boat person needs `marine`, nobody else does. Storing text rather than a foreign key is what keeps the change cheap: the FTS index (migration 006), CSV export and the backup format all already carry `category` as a string and need no migration. The cost is accepted deliberately: the model can no longer be held to a closed list, which §6.1 resolves by validating slug *shape* strictly and mapping unknown *vocabulary* to `other` |
 | D18 | Deferred review ("shoot and walk") | Capture may **enqueue** a scan and return straight to the camera instead of blocking on recognition; the scan lands in the normal `queued` → `review` pipeline and is reviewed later from the queue. Chosen per capture mode: `bin_audit` and `check_in` offer it, `find_it` never (its whole point is an answer now). The blocking path stays the default so a single scan still ends on the review screen | The §9 queue already does exactly this when offline, and the field test showed the online case has the same shape: walking a shelf means photographing six bins in a row, and standing still for each cloud round trip breaks the rhythm. Deferring is a *routing* change, not a new pipeline — every §11 invariant is untouched, D6 most of all: queued scans still reach inventory only through the review screen |
 | D15 | Cost transparency | Cloud scans record measured token usage (each API's `usage` field) plus a computed dollar cost per scan; the app shows a pre-scan estimate and cumulative spend in Settings. Estimates use documented tokenizer math (OpenAI 32px patches, Claude ≈px²/750) with a bundled price table; uploads stay capped at 1568px and the OpenAI request pins an explicit `detail` level as a cost ceiling | Same honesty rule as D5: usage is measured, never guessed. On `gpt-5.6`, `detail: auto` means *no auto-downscaling* — a 20MP original would cost ~10× the 1568px upload — so image sizing is a cost policy, not just bandwidth |
 
@@ -198,8 +199,19 @@ CREATE TABLE deleted_items (
   deleted_at TEXT NOT NULL
 );
 
+-- D19: the user-managed tag vocabulary. Items reference a tag by its slug
+-- (items.category), not by id, so renaming rewrites those rows in the same
+-- transaction and nothing else in the schema has to know about tags.
+CREATE TABLE tags (
+  slug TEXT PRIMARY KEY,                  -- 'electrical'; matches §6.1 shape
+  label TEXT NOT NULL,                    -- 'Electrical', shown in the UI
+  sort_order INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE VIRTUAL TABLE item_search USING fts5(
-  name, brand, label_text, notes, content='items', content_rowid='rowid'
+  name, brand, label_text, notes, category, content='items',
+  content_rowid='rowid'                   -- category added by migration 006
 );
 ```
 
@@ -288,11 +300,10 @@ export const Confidence = z.enum(['high', 'medium', 'low']);
 export const DetectedItem = z.object({
   name: z.string().min(1),          // generic name: "Phillips screwdriver"
   brand: z.string().nullable(),     // only if legible in the photo
-  category: z.enum([
-    'hand_tool', 'power_tool', 'fastener', 'electrical', 'plumbing',
-    'adhesive_finish', 'safety', 'measuring', 'bit_blade_accessory',
-    'hardware', 'material', 'other',
-  ]),
+  // A tag *slug*, not a fixed enum (D19). Shape is validated strictly here;
+  // the value is then resolved against the user's tag vocabulary, and
+  // anything unrecognised becomes 'other'.
+  category: z.string().min(1).max(40).regex(/^[a-z0-9_]+$/),
   quantity: z.number().int().min(1),
   label_text: z.string().nullable(), // verbatim text read from packaging
   confidence: Confidence,
@@ -310,6 +321,17 @@ retry **once** with the validation errors appended to the prompt; if it fails
 again, throw `VisionError('invalid_response')` and mark the scan `failed`.
 Never "best-effort" a malformed response into the review screen.
 
+**Tag resolution (D19).** `category` is the one field whose valid values the
+*user* controls, so the boundary splits in two: **shape** is validated by zod
+above and a malformed slug still fails the whole response, but **vocabulary**
+is resolved afterwards against the `tags` table, with an unknown tag mapped
+to `other`. Rejecting an otherwise-good scan of forty items because the model
+named a tag the user deleted last week would be the wrong trade — and unlike
+the shape rule, the vocabulary is not a contract the model can be held to,
+because it changes underneath it. The resolution is not silent: the review
+screen shows the tag it landed on, and the user can change it before saving,
+so D6 still decides what reaches inventory.
+
 ### 6.2 The vision prompt (template)
 
 ```
@@ -325,9 +347,9 @@ Rules:
 - label_text: if the item is packaged (box of screws, tube of adhesive),
   transcribe the key label text verbatim (product name, size, count).
   Otherwise null.
-- category: exactly one of: hand_tool, power_tool, fastener, electrical,
-  plumbing, adhesive_finish, safety, measuring, bit_blade_accessory,
-  hardware, material, other.
+- category: exactly one of: {the current tag vocabulary, listed from the
+  tags table at prompt-build time — D19}. The list always contains `other`,
+  which is the fallback when nothing fits.
 - confidence — use exactly this rubric:
     high:   item type AND its identifying details (size/brand/label) are
             clearly visible and unambiguous.
