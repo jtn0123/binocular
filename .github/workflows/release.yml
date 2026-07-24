@@ -129,20 +129,29 @@ jobs:
       - name: Generate the native project
         run: npx expo prebuild --platform android --no-install
 
+      # Workflow expressions are passed through `env:` rather than pasted into
+      # the shell body: an expression is substituted as text before bash sees
+      # it, so interpolating one directly is how a value ends up executed
+      # instead of used. These values are workflow-controlled, but the habit
+      # is what keeps it that way.
       - name: Assemble release APK
         working-directory: android
-        run: ./gradlew assembleRelease -PreactNativeArchitectures=${{ steps.build.outputs.abis }}
+        env:
+          ABIS: ${{ steps.build.outputs.abis }}
+        run: ./gradlew assembleRelease "-PreactNativeArchitectures=$ABIS"
 
       - name: Collect the APK
         id: apk
+        env:
+          APK: ${{ steps.build.outputs.apk }}
         run: |
           set -euo pipefail
           src=android/app/build/outputs/apk/release/app-release.apk
           mkdir -p dist
-          cp "$src" "dist/${{ steps.build.outputs.apk }}"
-          size=$(du -h "dist/${{ steps.build.outputs.apk }}" | cut -f1)
+          cp "$src" "dist/$APK"
+          size=$(du -h "dist/$APK" | cut -f1)
           echo "size=${size}" >> "$GITHUB_OUTPUT"
-          echo "### 📦 ${{ steps.build.outputs.apk }} (${size})" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 📦 $APK (${size})" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -155,11 +164,14 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         env:
           TAG: ${{ steps.build.outputs.tag }}
+          APK: ${{ steps.build.outputs.apk }}
+          SIZE: ${{ steps.apk.outputs.size }}
+          ABIS: ${{ steps.build.outputs.abis }}
         run: |
           set -euo pipefail
           previous=$(git tag --list 'v*' 'build-*' --sort=-creatordate | grep -v "^${TAG}$" | head -1 || true)
           {
-            echo "**${{ steps.build.outputs.apk }}** · ${{ steps.apk.outputs.size }} · \`${{ steps.build.outputs.abis }}\` · commit \`${GITHUB_SHA:0:7}\`"
+            echo "**${APK}** · ${SIZE} · \`${ABIS}\` · commit \`${GITHUB_SHA:0:7}\`"
             echo
             echo "### Install on the phone"
             echo
@@ -186,12 +198,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.build.outputs.tag }}
+          APK: ${{ steps.build.outputs.apk }}
+          VERSION_NAME: ${{ steps.build.outputs.version_name }}
           PRERELEASE: ${{ inputs.prerelease && '--prerelease' || '' }}
         run: |
           set -euo pipefail
-          gh release create "$TAG" "dist/${{ steps.build.outputs.apk }}" \
+          gh release create "$TAG" "dist/$APK" \
             --target "$GITHUB_SHA" \
-            --title "Binocular ${{ steps.build.outputs.version_name }}" \
+            --title "Binocular $VERSION_NAME" \
             --notes-file release-notes.md \
             $PRERELEASE
           echo "Released: $(gh release view "$TAG" --json url --jq .url)" >> "$GITHUB_STEP_SUMMARY"
