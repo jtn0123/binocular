@@ -291,13 +291,14 @@ export default function SettingsScreen() {
 
       <Text style={styles.sectionTitle}>This build</Text>
       <Text style={styles.hint} testID="build-line">
-        {describeBuild(build)}. Updates are published as GitHub Releases — open the page on this
-        phone and install the APK over the top; your bins, items and photos are kept.
+        {describeBuild(build)}. Builds are published as GitHub Releases. The app does not check
+        for them — compare the build number above against the newest release yourself, then
+        install the APK over the top; your bins, items and photos are kept.
       </Text>
       <Pressable
         style={styles.secondaryButton}
         accessibilityRole="button"
-        accessibilityLabel="Open the releases page to check for a newer build"
+        accessibilityLabel="Open the GitHub releases page in your browser"
         testID="open-releases"
         onPress={() => {
           void Linking.openURL(RELEASES_URL).catch(() =>
@@ -305,7 +306,7 @@ export default function SettingsScreen() {
           );
         }}
       >
-        <Text style={styles.secondaryLabel}>Check for updates</Text>
+        <Text style={styles.secondaryLabel}>Open releases page ↗</Text>
       </Pressable>
 
       <Text style={styles.sectionTitle}>Storage</Text>
