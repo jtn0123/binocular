@@ -84,26 +84,6 @@ export default function ScanScreen() {
         </Pressable>
       )}
       <Text style={styles.title}>What do you want to do?</Text>
-      <Pressable accessibilityRole="button" style={styles.mode} onPress={() => setPicking(true)}>
-        <View style={styles.modeIcon}>
-          <Ionicons name="file-tray" size={24} color={colors.amber} />
-        </View>
-        <View style={styles.modeMain}>
-          <Text style={styles.modeTitle}>Audit bin</Text>
-          <Text style={styles.modeBody}>Photograph an open bin and catalog its contents</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-      </Pressable>
-      <Pressable accessibilityRole="button" style={styles.mode} onPress={() => router.push('/scan-code')}>
-        <View style={styles.modeIcon}>
-          <Ionicons name="qr-code" size={22} color={colors.amber} />
-        </View>
-        <View style={styles.modeMain}>
-          <Text style={styles.modeTitle}>Scan a label</Text>
-          <Text style={styles.modeBody}>Point at a bin or shelf label to jump to it</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-      </Pressable>
       <Pressable
         accessibilityRole="button"
         style={styles.mode}
@@ -118,6 +98,16 @@ export default function ScanScreen() {
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
       </Pressable>
+      <Pressable accessibilityRole="button" style={styles.mode} onPress={() => setPicking(true)}>
+        <View style={styles.modeIcon}>
+          <Ionicons name="file-tray" size={24} color={colors.amber} />
+        </View>
+        <View style={styles.modeMain}>
+          <Text style={styles.modeTitle}>Audit bin</Text>
+          <Text style={styles.modeBody}>Photograph an open bin and catalog its contents</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+      </Pressable>
       <Pressable
         accessibilityRole="button"
         style={styles.mode}
@@ -129,6 +119,16 @@ export default function ScanScreen() {
         <View style={styles.modeMain}>
           <Text style={styles.modeTitle}>Find an item</Text>
           <Text style={styles.modeBody}>Photograph it and see which bin it lives in</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+      </Pressable>
+      <Pressable accessibilityRole="button" style={styles.mode} onPress={() => router.push('/scan-code')}>
+        <View style={styles.modeIcon}>
+          <Ionicons name="qr-code" size={22} color={colors.amber} />
+        </View>
+        <View style={styles.modeMain}>
+          <Text style={styles.modeTitle}>Scan a label</Text>
+          <Text style={styles.modeBody}>Point at a bin or shelf label to jump to it</Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
       </Pressable>

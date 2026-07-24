@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PromptModal, type PromptRequest } from '@/components/PromptModal';
 import { useDb } from '@/db/DbProvider';
@@ -10,7 +10,9 @@ import {
   checkOutItem,
   deleteBinIfEmpty,
   getBin,
+  getScan,
   getShelf,
+  insertItem,
   itemsForBin,
   listAuditHistory,
   renameBin,
@@ -21,6 +23,7 @@ import {
 } from '@/db/queries';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { printLabelSheet } from '@/qr/print';
+import { ChipEditor } from '@/review/ReviewScreen';
 import { colors, mono, radius, sp, type } from '@/theme';
 
 function ActionChip({
@@ -49,6 +52,8 @@ export default function BinDetailScreen() {
   useFocusTick();
   const [tick, setTick] = useState(0);
   const [prompt, setPrompt] = useState<PromptRequest | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [viewing, setViewing] = useState<ItemRow | null>(null);
   void tick;
 
   const bin = id ? getBin(db, id) : null;
@@ -171,6 +176,7 @@ export default function BinDetailScreen() {
                 label="Audit"
                 onPress={() => router.push({ pathname: '/capture', params: { binId: bin.id } })}
               />
+              <ActionChip icon="add" label="Add item" onPress={() => setAdding(true)} />
               <ActionChip
                 icon="pencil"
                 label="Rename"
@@ -219,7 +225,14 @@ export default function BinDetailScreen() {
         }
         ListEmptyComponent={<Text style={styles.empty}>Nothing recorded in this bin yet.</Text>}
         renderItem={({ item }) => (
-          <Pressable style={styles.itemRow} onLongPress={() => openItemMenu(item)} delayLongPress={300}>
+          <Pressable
+            style={styles.itemRow}
+            onPress={() => setViewing(item)}
+            onLongPress={() => openItemMenu(item)}
+            delayLongPress={300}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.name} — view photo and details`}
+          >
             <Text style={styles.itemQty}>{item.quantity}×</Text>
             <View style={styles.itemMain}>
               <Text style={styles.itemName}>
@@ -239,7 +252,95 @@ export default function BinDetailScreen() {
         )}
       />
       <PromptModal request={prompt} onClose={() => setPrompt(null)} />
+      <ChipEditor
+        visible={adding}
+        chip={null}
+        onCancel={() => setAdding(false)}
+        onDelete={null}
+        onSave={(values) => {
+          insertItem(db, {
+            binId: bin.id,
+            name: values.name,
+            brand: values.brand,
+            category: values.category,
+            quantity: values.quantity,
+            labelText: values.labelText,
+          });
+          setAdding(false);
+          setTick((t) => t + 1);
+        }}
+      />
+      <ItemViewer
+        db={db}
+        item={viewing}
+        onClose={() => setViewing(null)}
+        onActions={(item) => {
+          setViewing(null);
+          openItemMenu(item);
+        }}
+      />
     </View>
+  );
+}
+
+/**
+ * Tap an item to see what it looks like: the photo of the scan that
+ * cataloged it (field-test ask), with the item's details and a shortcut to
+ * the existing long-press actions.
+ */
+function ItemViewer({
+  db,
+  item,
+  onClose,
+  onActions,
+}: {
+  db: ReturnType<typeof useDb>;
+  item: ItemRow | null;
+  onClose: () => void;
+  onActions: (item: ItemRow) => void;
+}) {
+  const sourceScan = item?.source_scan_id ? getScan(db, item.source_scan_id) : null;
+  return (
+    <Modal visible={item !== null} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.viewerBackdrop} onPress={onClose}>
+        <Pressable style={styles.viewerCard} onPress={() => {}}>
+          {item && (
+            <>
+              {sourceScan?.photo_uri ? (
+                <Image
+                  source={{ uri: sourceScan.photo_uri }}
+                  style={styles.viewerPhoto}
+                  contentFit="contain"
+                />
+              ) : (
+                <View style={[styles.viewerPhoto, styles.viewerPhotoEmpty]}>
+                  <Ionicons name="image" size={28} color={colors.textFaint} />
+                  <Text style={styles.viewerNoPhoto}>No photo — added manually</Text>
+                </View>
+              )}
+              <Text style={styles.viewerName}>
+                {item.quantity > 1 ? `${item.quantity}× ` : ''}
+                {item.brand ? `${item.brand} ` : ''}
+                {item.name}
+              </Text>
+              <Text style={styles.viewerMeta}>
+                {item.category.replace(/_/g, ' ')}
+                {item.label_text ? ` · ${item.label_text}` : ''}
+                {sourceScan ? ` · scanned ${sourceScan.created_at.slice(0, 10)}` : ''}
+              </Text>
+              <View style={styles.viewerActions}>
+                <Pressable onPress={() => onActions(item)}>
+                  <Text style={styles.viewerLink}>Actions…</Text>
+                </Pressable>
+                <Pressable onPress={onClose}>
+                  <Text style={styles.viewerLink}>Close</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -303,4 +404,35 @@ const styles = StyleSheet.create({
   },
   historyDate: { fontSize: 10, color: colors.textFaint, fontFamily: mono },
   empty: { ...type.dim, paddingVertical: sp(6), textAlign: 'center' },
+  viewerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    padding: sp(5),
+  },
+  viewerCard: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.xl,
+    padding: sp(4),
+    gap: sp(2.5),
+  },
+  viewerPhoto: {
+    width: '100%',
+    height: 300,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSunken,
+  },
+  viewerPhotoEmpty: { alignItems: 'center', justifyContent: 'center', gap: sp(2) },
+  viewerNoPhoto: { ...type.dim, fontSize: 13 },
+  viewerName: { ...type.body, fontSize: 17, fontWeight: '600' },
+  viewerMeta: { color: colors.textFaint, fontSize: 13 },
+  viewerActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: sp(5),
+    marginTop: sp(1),
+  },
+  viewerLink: { color: colors.steel, fontWeight: '700' },
 });

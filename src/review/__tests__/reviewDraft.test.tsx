@@ -2,7 +2,14 @@ import { fireEvent, render } from '@testing-library/react-native';
 
 import { DbProvider } from '../../db/DbProvider';
 import { createNodeAdapter, type NodeDbAdapter } from '../../db/nodeAdapter';
-import { createBin, insertScan, itemsForBin, listBins, updateScanStatus } from '../../db/queries';
+import {
+  createBin,
+  getBin,
+  insertScan,
+  itemsForBin,
+  listBins,
+  updateScanStatus,
+} from '../../db/queries';
 import { runMigrations } from '../../db/schema';
 import { ReviewScreen } from '../ReviewScreen';
 import { loadReviewDraft, saveReviewDraft } from '../reviewDraft';
@@ -137,5 +144,70 @@ describe('review draft persistence (field-test finding: detours lost edits)', ()
     }
     expect(loadReviewDraft('scan-0')).toBeNull();
     expect(loadReviewDraft('scan-29')).not.toBeNull();
+  });
+});
+
+describe('round-2 field feedback: rename in review + demo-engine notice', () => {
+  let db: NodeDbAdapter;
+
+  function makeScan(mode: 'bin_audit' | 'check_in', binId?: string, engine?: string): string {
+    const scan = insertScan(db, { mode, photoUri: 'file:///p.jpg', binId: binId ?? null });
+    updateScanStatus(db, scan.id, 'review', { rawResponse: JSON.stringify(RESULT) });
+    if (engine) db.runSync('UPDATE scans SET engine = ? WHERE id = ?', [engine, scan.id]);
+    return scan.id;
+  }
+
+  beforeEach(() => {
+    db = createNodeAdapter(':memory:');
+    runMigrations(db);
+  });
+  afterEach(() => {
+    db.close();
+  });
+
+  it('shows the demo-engine notice only for fixture scans', async () => {
+    const bin = createBin(db, { name: 'Bits', shortCode: 'B-001' });
+    const fixture = await render(
+      <DbProvider adapter={db}>
+        <ReviewScreen scanId={makeScan('bin_audit', bin.id, 'fixture')} onDone={jest.fn()} />
+      </DbProvider>,
+    );
+    expect(fixture.getByTestId('demo-engine-notice')).toBeTruthy();
+    await fixture.unmount();
+
+    const cloud = await render(
+      <DbProvider adapter={db}>
+        <ReviewScreen scanId={makeScan('bin_audit', bin.id, 'openai')} onDone={jest.fn()} />
+      </DbProvider>,
+    );
+    expect(cloud.queryByTestId('demo-engine-notice')).toBeNull();
+  });
+
+  it('audit review: the bin can be renamed right there', async () => {
+    const bin = createBin(db, { name: 'Bin B-001', shortCode: 'B-001' });
+    const screen = await render(
+      <DbProvider adapter={db}>
+        <ReviewScreen scanId={makeScan('bin_audit', bin.id)} onDone={jest.fn()} />
+      </DbProvider>,
+    );
+    await fireEvent.press(screen.getByTestId('rename-bin'));
+    await fireEvent.changeText(screen.getByTestId('prompt-input'), 'Old batteries');
+    await fireEvent.press(screen.getByTestId('prompt-submit'));
+    expect(getBin(db, bin.id)?.name).toBe('Old batteries');
+    expect(screen.getByText(/Old batteries/)).toBeTruthy();
+  });
+
+  it('check-in review: the selected destination bin can be renamed in place', async () => {
+    const bin = createBin(db, { name: 'Bin B-001', shortCode: 'B-001' });
+    const screen = await render(
+      <DbProvider adapter={db}>
+        <ReviewScreen scanId={makeScan('check_in')} onDone={jest.fn()} />
+      </DbProvider>,
+    );
+    await fireEvent.press(screen.getByTestId(`dest-${bin.id}`));
+    await fireEvent.press(screen.getByTestId(`rename-dest-${bin.id}`));
+    await fireEvent.changeText(screen.getByTestId('prompt-input'), 'Old batteries');
+    await fireEvent.press(screen.getByTestId('prompt-submit'));
+    expect(getBin(db, bin.id)?.name).toBe('Old batteries');
   });
 });

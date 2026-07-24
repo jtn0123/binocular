@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { CodeTag } from '../components/CodeTag';
+import { PromptModal, type PromptRequest } from '../components/PromptModal';
 import { useDb } from '../db/DbProvider';
 import {
   deleteItem,
@@ -20,6 +21,7 @@ import {
   insertItem,
   itemsForBin,
   listRecentBins,
+  renameBin,
   updateBinAfterScan,
   updateScanStatus,
   type ItemRow,
@@ -128,6 +130,9 @@ export function ReviewScreen({
   );
   const [editingKey, setEditingKey] = useState<string | 'new' | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [prompt, setPrompt] = useState<PromptRequest | null>(null);
+  const [renameTick, setRenameTick] = useState(0);
+  void renameTick;
   const [destBinId, setDestBinId] = useState<string | null>(
     initialDestBinId ?? draft?.destBinId ?? null,
   );
@@ -296,10 +301,38 @@ export function ReviewScreen({
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         {bin ? (
-          <Text style={styles.binHeader}>
-            {bin.short_code} · {bin.name}
-          </Text>
+          <View style={styles.binHeaderRow}>
+            <Text style={styles.binHeader}>
+              {bin.short_code} · {bin.name}
+            </Text>
+            <Pressable
+              testID="rename-bin"
+              accessibilityRole="button"
+              accessibilityLabel={`Rename ${bin.name}`}
+              hitSlop={8}
+              onPress={() =>
+                setPrompt({
+                  title: 'Rename bin',
+                  initialValue: bin.name,
+                  onSubmit: (name) => {
+                    renameBin(db, bin.id, name);
+                    setRenameTick((t) => t + 1);
+                  },
+                })
+              }
+            >
+              <Text style={styles.renameLink}>rename</Text>
+            </Pressable>
+          </View>
         ) : null}
+        {scan.engine === 'fixture' && (
+          <View style={styles.demoNotice} testID="demo-engine-notice">
+            <Text style={styles.demoNoticeText}>
+              Demo engine — these are canned results, not a reading of your photo. Pick Local or
+              add a cloud API key in Settings for real recognition.
+            </Text>
+          </View>
+        )}
         {parsed?.scene_notes ? (
           <View style={styles.sceneNotes} testID="scene-notes">
             <Text style={styles.sceneNotesText}>{parsed.scene_notes}</Text>
@@ -400,6 +433,26 @@ export function ReviewScreen({
                 <Text style={styles.destName} numberOfLines={1}>
                   {candidate.name}
                 </Text>
+                {destBinId === candidate.id && (
+                  <Pressable
+                    testID={`rename-dest-${candidate.id}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Rename ${candidate.name}`}
+                    hitSlop={8}
+                    onPress={() =>
+                      setPrompt({
+                        title: 'Rename bin',
+                        initialValue: candidate.name,
+                        onSubmit: (name) => {
+                          renameBin(db, candidate.id, name);
+                          setRenameTick((t) => t + 1);
+                        },
+                      })
+                    }
+                  >
+                    <Text style={styles.renameLink}>rename</Text>
+                  </Pressable>
+                )}
               </Pressable>
             ))}
             <Pressable
@@ -470,6 +523,7 @@ export function ReviewScreen({
           setEditingKey(null);
         }}
       />
+      <PromptModal request={prompt} onClose={() => setPrompt(null)} />
     </View>
   );
 }
@@ -518,7 +572,7 @@ function ChipSection({
   );
 }
 
-function ChipEditor({
+export function ChipEditor({
   visible,
   chip,
   onCancel,
@@ -638,6 +692,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   binHeader: { ...type.dim, fontWeight: '600' },
+  binHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: sp(2.5) },
+  renameLink: { color: colors.steel, fontSize: 12, fontWeight: '600' },
+  demoNotice: {
+    backgroundColor: colors.surfaceSunken,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    padding: sp(3),
+  },
+  demoNoticeText: { color: colors.textDim, fontSize: 13 },
   sceneNotes: {
     backgroundColor: '#2E2A1C',
     borderWidth: 1,

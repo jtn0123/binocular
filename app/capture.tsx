@@ -139,6 +139,11 @@ export default function CaptureScreen() {
             ≈ {formatUsd(estimate.usd)} per scan · {engine === 'openai' ? 'OpenAI' : 'Claude'}
           </Text>
         ) : null}
+        {engine === 'fixture' ? (
+          <Text style={styles.costPill} testID="demo-engine-pill">
+            Demo engine · canned results — pick a real engine in Settings
+          </Text>
+        ) : null}
       </View>
       <View style={styles.overlayBottom}>
         {busy === 'idle' && (

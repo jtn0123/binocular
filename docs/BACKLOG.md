@@ -66,3 +66,14 @@ pre/post-processing around it:
   `eval/corpus/` is the seed dataset for (ties to the fine-tuning-dataset
   idea above). Realistic RN path is a TFLite/ONNX YOLO in a vision-camera
   frame processor, not bundling OpenCV's DNN into the app.
+
+## Ultrawide / lens selection on capture (field-test ask, 2026-07-23)
+
+The zoom stepper tops out at the main lens's range — the field test asked
+for zoom-*out* to the phone's ultrawide (0.5×/0.6×) like the stock camera.
+**expo-camera can't do it on Android**: its `zoom` prop (0–1) maps within
+the active lens only, and lens selection (`selectedLens`) is iOS-only.
+Honest path: migrate capture to `react-native-vision-camera` (physical
+device selection incl. ultrawide, plus frame processors that the custom
+local-detector idea above wants anyway). Sizeable dependency change —
+after key day, not before.
