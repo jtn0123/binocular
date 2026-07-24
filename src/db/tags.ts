@@ -158,6 +158,35 @@ export function deleteTag(db: DbAdapter, slug: string): { reassigned: number } {
   return { reassigned };
 }
 
+export interface TagTally {
+  slug: string;
+  label: string;
+  count: number;
+}
+
+/**
+ * What a bin actually contains, by tag, commonest first (D19).
+ *
+ * A bin's name says what you *meant* to put in it; this says what is in
+ * there now, so a "Fixings" bin that has quietly become half electrical is
+ * visible without opening it. Derived on read — bins carry no tag of their
+ * own to drift out of date.
+ */
+export function binTagTally(db: DbAdapter, binId: string, limit = 3): TagTally[] {
+  return db.getAllSync<TagTally>(
+    `SELECT items.category AS slug,
+            COALESCE(tags.label, items.category) AS label,
+            COUNT(*) AS count
+     FROM items
+     LEFT JOIN tags ON tags.slug = items.category
+     WHERE items.bin_id = ?
+     GROUP BY items.category
+     ORDER BY count DESC, label
+     LIMIT ?`,
+    [binId, limit],
+  );
+}
+
 /**
  * Resolves a slug from outside the app (an AI response, an imported backup)
  * to one this database actually has. Unknown vocabulary becomes `other`

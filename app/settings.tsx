@@ -361,6 +361,15 @@ export default function SettingsScreen() {
         The backup zip holds everything — bins, items, scan history, and photos. CSV is one row
         per item for Excel/Sheets. Import only restores into an empty database.
       </Text>
+      <Link href="/tags" asChild>
+        <Pressable
+          style={styles.secondaryButton}
+          accessibilityRole="button"
+          accessibilityLabel="Manage item tags"
+        >
+          <Text style={styles.secondaryLabel}>Manage tags</Text>
+        </Pressable>
+      </Link>
       <Link href="/trash" asChild>
         <Pressable
           style={styles.secondaryButton}
