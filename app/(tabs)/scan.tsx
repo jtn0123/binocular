@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -19,7 +19,10 @@ export default function ScanScreen() {
   const db = useDb();
   const router = useRouter();
   useFocusTick();
-  const [picking, setPicking] = useState(false);
+  // D18 "Next bin" from the camera lands straight in the picker rather than
+  // making the user re-tap Audit bin between every bin on a shelf.
+  const params = useLocalSearchParams<{ pick?: string }>();
+  const [picking, setPicking] = useState(params.pick === '1');
   const bins = listRecentBins(db, 100);
 
   if (picking) {
