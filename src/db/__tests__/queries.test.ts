@@ -6,6 +6,7 @@ import {
   getBin,
   getScan,
   insertItem,
+  countScansByAttention,
   insertScan,
   itemsForBin,
   listBins,
@@ -74,6 +75,27 @@ describe('typed query helpers', () => {
     expect(done?.resolved_at).toBe('2026-01-02T00:00:00Z');
     // earlier raw_response is preserved by the COALESCE update
     expect(done?.raw_response).toBe('{"items":[]}');
+  });
+
+  it('splits waiting scans by what the user can do about them', () => {
+    const bin = createBin(db, { name: 'Bits', shortCode: 'B-001' });
+    const make = (status: 'queued' | 'processing' | 'failed' | 'review' | 'confirmed') => {
+      const scan = insertScan(db, { mode: 'bin_audit', photoUri: 'file:///p.jpg', binId: bin.id });
+      if (status !== 'queued') updateScanStatus(db, scan.id, status);
+      return scan;
+    };
+
+    expect(countScansByAttention(db)).toEqual({ review: 0, working: 0, failed: 0 });
+
+    make('review');
+    make('review');
+    make('queued');
+    make('processing');
+    make('failed');
+    // A settled scan is not waiting for anything.
+    make('confirmed');
+
+    expect(countScansByAttention(db)).toEqual({ review: 2, working: 2, failed: 1 });
   });
 
   it('orders recent bins by last activity', () => {
