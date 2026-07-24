@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import { CodeTag } from '@/components/CodeTag';
@@ -31,6 +32,8 @@ import {
   type ItemRow,
 } from '@/db/queries';
 import { useFocusTick } from '@/lib/useFocusTick';
+import { newId } from '@/lib/id';
+import { persistPhoto } from '@/scan/photos';
 import { printLabelSheet } from '@/qr/print';
 import { ChipEditor } from '@/review/ReviewScreen';
 import { colors, mono, radius, sp, type } from '@/theme';
@@ -222,7 +225,20 @@ export default function BinDetailScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             {bin.cover_photo_uri ? (
-              <Image source={{ uri: bin.cover_photo_uri }} style={styles.cover} contentFit="cover" />
+              <Pressable
+                onLongPress={() =>
+                  router.push({ pathname: '/bin-photo/[id]', params: { id: bin.id } })
+                }
+                delayLongPress={300}
+                accessibilityRole="imagebutton"
+                accessibilityLabel="Bin cover photo — press and hold to retake"
+              >
+                <Image
+                  source={{ uri: bin.cover_photo_uri }}
+                  style={styles.cover}
+                  contentFit="cover"
+                />
+              </Pressable>
             ) : (
               itemPhotos.length > 0 && (
                 <View style={styles.coverCollage}>
@@ -447,6 +463,7 @@ export default function BinDetailScreen() {
             quantity: values.quantity,
             labelText: values.labelText,
             notes: values.notes,
+            photoUri: values.photoUri ? persistPhoto(values.photoUri, `item-${newId()}`) : null,
           });
           setAdding(false);
           refresh();
@@ -482,6 +499,19 @@ export default function BinDetailScreen() {
           }
         }}
         onDelete={(item) => removeItems([item])}
+        onPhotoTaken={(item, uri) => {
+          updateItem(db, item.id, {
+            name: item.name,
+            brand: item.brand,
+            category: item.category,
+            quantity: item.quantity,
+            labelText: item.label_text,
+            notes: item.notes,
+            photoUri: persistPhoto(uri, `item-${item.id}`),
+          });
+          setSheetItem(null);
+          refresh();
+        }}
       />
       <ChipEditor
         visible={editing !== null}
@@ -495,6 +525,7 @@ export default function BinDetailScreen() {
                 quantity: editing.quantity,
                 labelText: editing.label_text,
                 notes: editing.notes,
+                photoUri: editing.photo_uri,
                 confidence: null,
                 selected: true,
                 matchedExistingId: null,
@@ -505,6 +536,10 @@ export default function BinDetailScreen() {
         onDelete={null}
         onSave={(values) => {
           if (editing) {
+            const photoUri =
+              values.photoUri && values.photoUri !== editing.photo_uri
+                ? persistPhoto(values.photoUri, `item-${editing.id}`)
+                : values.photoUri;
             updateItem(db, editing.id, {
               name: values.name,
               brand: values.brand,
@@ -512,6 +547,7 @@ export default function BinDetailScreen() {
               quantity: values.quantity,
               labelText: values.labelText,
               notes: values.notes,
+              photoUri,
             });
           }
           setEditing(null);
@@ -547,6 +583,7 @@ function ItemSheet({
   onLowStock,
   onCheckoutOrReturn,
   onDelete,
+  onPhotoTaken,
 }: {
   db: ReturnType<typeof useDb>;
   item: ItemRow | null;
@@ -557,20 +594,56 @@ function ItemSheet({
   onLowStock: (item: ItemRow) => void;
   onCheckoutOrReturn: (item: ItemRow) => void;
   onDelete: (item: ItemRow) => void;
+  onPhotoTaken: (item: ItemRow, uri: string) => void;
 }) {
   const sourceScan = item?.source_scan_id ? getScan(db, item.source_scan_id) : null;
+  const [photoMenu, setPhotoMenu] = useState(false);
+  const displayUri = item?.photo_uri ?? sourceScan?.photo_uri ?? null;
   return (
     <Modal visible={item !== null} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.sheetBackdrop} onPress={onClose}>
         <Pressable style={styles.sheetCard} onPress={() => {}}>
           {item && (
             <>
-              {sourceScan?.photo_uri ? (
-                <Image
-                  source={{ uri: sourceScan.photo_uri }}
-                  style={styles.sheetPhoto}
-                  contentFit="contain"
-                />
+              {displayUri ? (
+                <Pressable
+                  onLongPress={() => setPhotoMenu((m) => !m)}
+                  delayLongPress={300}
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel="Item photo — press and hold for options"
+                >
+                  <Image
+                    source={{ uri: displayUri }}
+                    style={styles.sheetPhoto}
+                    contentFit="contain"
+                  />
+                </Pressable>
+              ) : null}
+              {photoMenu && item ? (
+                <>
+                  <SheetRow
+                    icon="camera-outline"
+                    label={item.photo_uri ? 'Retake item photo' : 'Take item photo'}
+                    onPress={async () => {
+                      const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+                      if (!result.canceled && result.assets[0]) {
+                        onPhotoTaken(item, result.assets[0].uri);
+                        setPhotoMenu(false);
+                      }
+                    }}
+                  />
+                  <SheetRow
+                    icon="information-circle-outline"
+                    label={
+                      item.photo_uri
+                        ? 'Photo: taken for this item'
+                        : sourceScan
+                          ? `Photo: from the scan on ${sourceScan.created_at.slice(0, 10)}`
+                          : 'No photo yet'
+                    }
+                    onPress={() => setPhotoMenu(false)}
+                  />
+                </>
               ) : null}
               <Text style={styles.sheetName}>
                 {item.quantity > 1 ? `${item.quantity}× ` : ''}
@@ -585,6 +658,18 @@ function ItemSheet({
                   : ' · added manually'}
               </Text>
               {item.notes ? <Text style={styles.sheetNotes}>{item.notes}</Text> : null}
+              {!displayUri ? (
+                <SheetRow
+                  icon="camera-outline"
+                  label="Take item photo"
+                  onPress={async () => {
+                    const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+                    if (!result.canceled && result.assets[0]) {
+                      onPhotoTaken(item, result.assets[0].uri);
+                    }
+                  }}
+                />
+              ) : null}
               <SheetRow icon="pencil" label="Edit name, tag, notes" onPress={() => onEdit(item)} />
               <SheetRow
                 icon="swap-vertical"

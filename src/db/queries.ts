@@ -418,10 +418,11 @@ export function updateItem(
     quantity: number;
     labelText: string | null;
     notes?: string | null;
+    photoUri?: string | null;
   },
 ): void {
   db.runSync(
-    'UPDATE items SET name = ?, brand = ?, category = ?, quantity = ?, label_text = ?, notes = ?, updated_at = ? WHERE id = ?',
+    'UPDATE items SET name = ?, brand = ?, category = ?, quantity = ?, label_text = ?, notes = ?, photo_uri = ?, updated_at = ? WHERE id = ?',
     [
       input.name,
       input.brand,
@@ -429,6 +430,7 @@ export function updateItem(
       Math.max(0, input.quantity),
       input.labelText,
       input.notes ?? null,
+      input.photoUri ?? null,
       nowIso(),
       itemId,
     ],

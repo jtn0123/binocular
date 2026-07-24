@@ -1,3 +1,5 @@
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -31,6 +33,7 @@ import { logEvent } from '../diagnostics/events';
 import { hapticSuccess, hapticWarning } from '../lib/haptics';
 import { newId } from '../lib/id';
 import { nowIso } from '../lib/time';
+import { persistPhoto } from '../scan/photos';
 import { processScan } from '../scan/scanFlow';
 import { clearReviewDraft, loadReviewDraft, saveReviewDraft } from './reviewDraft';
 import { colors, mono, radius, sp, type } from '../theme';
@@ -51,6 +54,8 @@ export interface DetectedChip {
   quantity: number;
   labelText: string | null;
   notes: string | null;
+  /** Item-specific photo (user-taken); scans provide their own photo. */
+  photoUri: string | null;
   confidence: Confidence | null; // null for manually added chips
   selected: boolean;
   matchedExistingId: string | null;
@@ -82,6 +87,7 @@ function buildDetectedChips(result: RecognitionResult, existing: ItemRow[]): Det
       quantity: item.quantity,
       labelText: item.label_text,
       notes: null,
+      photoUri: null,
       confidence: item.confidence,
       // §6.3: high/medium pre-selected; low requires an explicit tap.
       // A chip matching an existing item defaults to keep regardless.
@@ -294,6 +300,7 @@ export function ReviewScreen({
       quantity: chip.quantity,
       labelText: chip.labelText,
       notes: chip.notes,
+      photoUri: chip.photoUri ? persistPhoto(chip.photoUri, `item-${newId()}`) : null,
       sourceScanId: scanId,
     });
   }
@@ -593,12 +600,14 @@ export function ChipEditor({
     quantity: number;
     labelText: string | null;
     notes: string | null;
+    photoUri: string | null;
   }) => void;
 }) {
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [notes, setNotes] = useState('');
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [category, setCategory] = useState<ItemCategory>('other');
   const [seededFor, setSeededFor] = useState<string | null>(null);
 
@@ -608,6 +617,7 @@ export function ChipEditor({
     setBrand(chip?.brand ?? '');
     setQuantity(String(chip?.quantity ?? 1));
     setNotes(chip?.notes ?? '');
+    setPhotoUri(chip?.photoUri ?? null);
     setCategory(chip?.category ?? 'other');
     setSeededFor(seedKey);
   }
@@ -647,6 +657,26 @@ export function ChipEditor({
             multiline
             testID="editor-notes"
           />
+          <View style={styles.photoRow}>
+            {photoUri ? (
+              <Image source={{ uri: photoUri }} style={styles.photoThumb} contentFit="cover" />
+            ) : null}
+            <Pressable
+              testID="editor-photo"
+              accessibilityRole="button"
+              onPress={async () => {
+                const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+                if (!result.canceled && result.assets[0]) setPhotoUri(result.assets[0].uri);
+              }}
+            >
+              <Text style={styles.photoLink}>{photoUri ? 'Retake photo' : 'Add photo'}</Text>
+            </Pressable>
+            {photoUri ? (
+              <Pressable onPress={() => setPhotoUri(null)}>
+                <Text style={styles.photoLink}>Remove</Text>
+              </Pressable>
+            ) : null}
+          </View>
           <Text style={styles.tagHeading}>Tag</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
             {ItemCategory.options.map((cat) => (
@@ -683,6 +713,7 @@ export function ChipEditor({
                     quantity: qty,
                     labelText: chip?.labelText ?? null,
                     notes: notes.trim() || null,
+                    photoUri,
                   });
                 }}
               >
@@ -842,6 +873,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   tagHeading: { ...type.stamp, marginTop: sp(1) },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: sp(4) },
+  photoThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSunken,
+  },
+  photoLink: { color: colors.steel, fontWeight: '600' },
   catRow: { flexGrow: 0 },
   catChip: {
     paddingHorizontal: sp(3),
