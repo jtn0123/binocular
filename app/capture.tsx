@@ -8,6 +8,13 @@ import { useDb } from '@/db/DbProvider';
 import { getBin, type ScanMode } from '@/db/queries';
 import { logEvent } from '@/diagnostics/events';
 import { hapticShutter } from '@/lib/haptics';
+import { getScanQueue } from '@/queue/scanQueue';
+import {
+  DEFAULT_CAPTURE_FLOW,
+  flowForMode,
+  supportsKeepShooting,
+  type CaptureFlow,
+} from '@/scan/captureMode';
 import { enqueueScan, processScan } from '@/scan/scanFlow';
 import { getProviderChoice, type ProviderChoice } from '@/settings/settings';
 import { colors } from '@/theme';
@@ -35,6 +42,12 @@ export default function CaptureScreen() {
   const [zoom, setZoom] = useState(0);
   const stepZoom = (delta: number) =>
     setZoom((z) => Math.round(Math.min(1, Math.max(0, z + delta)) * 100) / 100);
+  // D18: keep the camera up and let the queue recognize in the background, so
+  // a shelf can be photographed in one pass. Session-scoped count, because
+  // what matters here is "how many did I just shoot", not the queue depth.
+  const [flowPref, setFlowPref] = useState<CaptureFlow>(DEFAULT_CAPTURE_FLOW);
+  const [shotCount, setShotCount] = useState(0);
+  const canKeepShooting = supportsKeepShooting(mode);
 
   useEffect(() => {
     getProviderChoice().then(setEngine, () => setEngine(null));
@@ -60,6 +73,7 @@ export default function CaptureScreen() {
   async function capture() {
     if (!cameraRef.current || busy !== 'idle') return;
     if (mode === 'bin_audit' && !params.binId) return;
+    const flow = flowForMode(mode, flowPref);
     setBusy('capturing');
     hapticShutter();
     try {
@@ -76,8 +90,19 @@ export default function CaptureScreen() {
         kind: 'scan',
         name: 'capture_settings',
         scanId,
-        detail: { torch, zoom, mode, width: photo.width, height: photo.height },
+        detail: { torch, zoom, mode, width: photo.width, height: photo.height, flow },
       });
+
+      if (flow === 'keep_shooting') {
+        // D18: the scan is already durable (enqueueScan wrote photo + row);
+        // hand it to the §9 drain loop and leave the camera up. Nothing
+        // reaches inventory without its own review-screen save.
+        setShotCount((n) => n + 1);
+        setBusy('idle');
+        void getScanQueue()?.drain();
+        return;
+      }
+
       setBusy('recognizing');
       const result = await processScan(db, scanId);
       const target =
@@ -144,6 +169,18 @@ export default function CaptureScreen() {
             Demo engine · canned results — pick a real engine in Settings
           </Text>
         ) : null}
+        {shotCount > 0 ? (
+          <Pressable
+            onPress={() => router.replace('/queue')}
+            accessibilityRole="button"
+            accessibilityLabel={`${shotCount} scan${shotCount === 1 ? '' : 's'} shot, open the queue to review`}
+            testID="shot-count-pill"
+          >
+            <Text style={styles.queuedPill}>
+              {shotCount} shot · recognizing in background — tap to review
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
       <View style={styles.overlayBottom}>
         {busy === 'idle' && (
@@ -188,6 +225,29 @@ export default function CaptureScreen() {
                 <Ionicons name="add" size={18} color={zoom >= 1 ? '#666' : '#fff'} />
               </Pressable>
             </View>
+
+            {canKeepShooting ? (
+              <Pressable
+                style={[styles.control, flowPref === 'keep_shooting' && styles.controlOn]}
+                onPress={() =>
+                  setFlowPref((f) => (f === 'keep_shooting' ? 'review_now' : 'keep_shooting'))
+                }
+                accessibilityRole="button"
+                accessibilityLabel={
+                  flowPref === 'keep_shooting'
+                    ? 'Keep shooting is on — review later from the queue'
+                    : 'Keep shooting is off — review each photo straight away'
+                }
+                accessibilityState={{ selected: flowPref === 'keep_shooting' }}
+                testID="keep-shooting-toggle"
+              >
+                <Ionicons
+                  name={flowPref === 'keep_shooting' ? 'layers' : 'layers-outline'}
+                  size={20}
+                  color={flowPref === 'keep_shooting' ? colors.amberInkOn : '#fff'}
+                />
+              </Pressable>
+            ) : null}
           </View>
         )}
         {busy === 'recognizing' ? (
@@ -202,9 +262,22 @@ export default function CaptureScreen() {
             accessibilityLabel="Take photo"
           />
         )}
-        <Pressable style={styles.cancel} onPress={() => router.back()}>
-          <Text style={styles.cancelLabel}>Cancel</Text>
-        </Pressable>
+        <View style={styles.footerRow}>
+          {mode === 'bin_audit' && flowPref === 'keep_shooting' && busy === 'idle' ? (
+            <Pressable
+              style={styles.cancel}
+              onPress={() => router.replace({ pathname: '/(tabs)/scan', params: { pick: '1' } })}
+              accessibilityRole="button"
+              accessibilityLabel="Move on to the next bin"
+              testID="next-bin"
+            >
+              <Text style={styles.nextBinLabel}>Next bin →</Text>
+            </Pressable>
+          ) : null}
+          <Pressable style={styles.cancel} onPress={() => router.back()}>
+            <Text style={styles.cancelLabel}>{shotCount > 0 ? 'Done' : 'Cancel'}</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -317,8 +390,20 @@ const styles = StyleSheet.create({
   shutterDisabled: { opacity: 0.4 },
   recognizing: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   recognizingLabel: { color: '#fff', fontSize: 16 },
+  footerRow: { flexDirection: 'row', alignItems: 'center', gap: 24 },
   cancel: { padding: 8 },
   cancelLabel: { color: '#fff', fontSize: 15 },
+  nextBinLabel: { color: colors.amber, fontSize: 15, fontWeight: '700' },
+  queuedPill: {
+    color: colors.amberInkOn,
+    backgroundColor: 'rgba(255,196,0,0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    overflow: 'hidden',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   permissionText: { fontSize: 16, textAlign: 'center', color: colors.textDim },
   shutterAlt: {
     backgroundColor: colors.amber,
