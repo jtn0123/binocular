@@ -1,0 +1,184 @@
+name: Android APK
+
+# Builds a standalone field-test APK and publishes it as a GitHub Release, so
+# the phone in the workshop can be updated from anywhere — no laptop, no Metro,
+# no cable. See docs/RELEASES.md for the install/update rules.
+#
+# The APK is signed with the React Native template debug keystore that
+# `expo prebuild` generates (`android/app/debug.keystore`) — the same key that
+# `npx expo run:android --variant release` uses locally. Identical key +
+# identical applicationId is exactly what lets Android install a new build
+# *over* the old one and keep its database. Do not change the signing key
+# without reading docs/RELEASES.md § Changing the signing key first.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      abis:
+        description: 'CPU architectures to build for'
+        type: choice
+        default: arm64-v8a
+        options:
+          - arm64-v8a
+          - arm64-v8a,armeabi-v7a
+          - armeabi-v7a,arm64-v8a,x86,x86_64
+      prerelease:
+        description: 'Mark the GitHub Release as a pre-release'
+        type: boolean
+        default: true
+  # Release-pipeline changes get build-tested before they are merged; PR runs
+  # upload an artifact and publish nothing.
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'scripts/ci/**'
+      - 'plugins/**'
+      - 'app.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # release notes list the commits since the last release
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21' # matches plugins/withGradleDaemonJvm.js (JDK 24+ breaks AGP)
+
+      - uses: android-actions/setup-android@v3
+
+      - run: npm ci
+
+      # A release APK should never ship from red code; this is the same gate
+      # ci.yml applies to main, run again here because tags can point anywhere.
+      - run: npm run typecheck
+      - run: npm test -- --ci
+
+      - name: Work out this build's identity
+        id: build
+        env:
+          ABIS: ${{ inputs.abis || 'arm64-v8a' }}
+        run: |
+          set -euo pipefail
+          # versionCode must increase for every build the phone might install.
+          # The 1000 offset keeps CI builds unambiguously above any local
+          # `expo run:android --variant release` build (which is always 1).
+          version_code=$(( 1000 + GITHUB_RUN_NUMBER ))
+          base=$(node -p "require('./app.json').expo.version")
+
+          if [ "${GITHUB_REF_TYPE}" = 'tag' ]; then
+            version_name="${GITHUB_REF_NAME#v}"
+            tag="${GITHUB_REF_NAME}"
+          else
+            version_name="${base}+ci.${GITHUB_RUN_NUMBER}"
+            tag="build-${GITHUB_RUN_NUMBER}"
+          fi
+
+          # '+' is legal in a versionName but awkward in a filename/URL.
+          apk="binocular-${version_name//+/-}-vc${version_code}.apk"
+
+          {
+            echo "version_name=${version_name}"
+            echo "version_code=${version_code}"
+            echo "tag=${tag}"
+            echo "apk=${apk}"
+            echo "abis=${ABIS}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Building ${apk} (versionName ${version_name}, versionCode ${version_code}, ABIs ${ABIS})"
+
+      - name: Stamp version into app.json
+        env:
+          VERSION_NAME: ${{ steps.build.outputs.version_name }}
+          VERSION_CODE: ${{ steps.build.outputs.version_code }}
+        run: node scripts/ci/stamp-app-version.mjs
+
+      - name: Generate the native project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Assemble release APK
+        working-directory: android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=${{ steps.build.outputs.abis }}
+
+      - name: Collect the APK
+        id: apk
+        run: |
+          set -euo pipefail
+          src=android/app/build/outputs/apk/release/app-release.apk
+          mkdir -p dist
+          cp "$src" "dist/${{ steps.build.outputs.apk }}"
+          size=$(du -h "dist/${{ steps.build.outputs.apk }}" | cut -f1)
+          echo "size=${size}" >> "$GITHUB_OUTPUT"
+          echo "### 📦 ${{ steps.build.outputs.apk }} (${size})" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.apk }}
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Write release notes
+        if: github.event_name != 'pull_request'
+        env:
+          TAG: ${{ steps.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          previous=$(git tag --list 'v*' 'build-*' --sort=-creatordate | grep -v "^${TAG}$" | head -1 || true)
+          {
+            echo "**${{ steps.build.outputs.apk }}** · ${{ steps.apk.outputs.size }} · \`${{ steps.build.outputs.abis }}\` · commit \`${GITHUB_SHA:0:7}\`"
+            echo
+            echo "### Install on the phone"
+            echo
+            echo "1. Open this page on the phone and download the \`.apk\` below."
+            echo "2. Tap the download and allow your browser to install unknown apps if asked."
+            echo "3. Tap **Update** — do *not* uninstall first. Your bins, items and photos are kept."
+            echo
+            echo "Same signing key and same package as the previous build, so this installs"
+            echo "in place. Full rules — and what to do if Android refuses the install — are"
+            echo "in [docs/RELEASES.md](../blob/main/docs/RELEASES.md)."
+            echo
+            echo "### Changes"
+            echo
+            if [ -n "$previous" ]; then
+              git log --no-merges --pretty='- %s' "${previous}..HEAD" | head -50
+            else
+              git log --no-merges --pretty='- %s' -20
+            fi
+          } > release-notes.md
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the GitHub Release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.build.outputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease && '--prerelease' || '' }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" "dist/${{ steps.build.outputs.apk }}" \
+            --target "$GITHUB_SHA" \
+            --title "Binocular ${{ steps.build.outputs.version_name }}" \
+            --notes-file release-notes.md \
+            $PRERELEASE
+          echo "Released: $(gh release view "$TAG" --json url --jq .url)" >> "$GITHUB_STEP_SUMMARY"
