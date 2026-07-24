@@ -206,10 +206,17 @@ end-to-end on the emulator:
   stepper reads 20% after two taps; `capture_settings` logged.
 - **Host findings:** JDK 24 breaks `configureCMakeRelWithDebInfo`
   (react-native-screens/worklets) with a cryptic "restricted method in
-  java.lang.System" error — **build with JDK 17–21**
-  (`JAVA_HOME=$(/usr/libexec/java_home -v 21)`). The Pixel_9_Pro AVD is an
-  empty husk (boots fail); use `galaxy-s24-api36`. Emulator /data needed
-  ~700MB free for the 181MB APK (removed the stale dev client + Expo Go).
+  java.lang.System" error (JEP 472 native-access warnings corrupting AGP's
+  tool-output parsing). **Fixed permanently** via the
+  `plugins/withGradleDaemonJvm.js` config plugin, which writes
+  `android/gradle/gradle-daemon-jvm.properties` (`toolchainVersion=21`) on
+  every prebuild (android/ is generated + gitignored, so the file itself
+  can't be committed) — Gradle runs its daemon on a discovered JDK 21
+  regardless of the shell's default. Verified twice: the failing configure
+  task passes under a JDK 24 shell, and a fresh `expo prebuild` regenerates
+  the pin with the four key gradle files byte-identical. The Pixel_9_Pro AVD is an empty husk (boots fail); use
+  `galaxy-s24-api36`. Emulator /data needed ~700MB free for the 181MB APK
+  (removed the stale dev client + Expo Go).
 - **Black-camera finding refined:** on a *headless* (`-no-window`) emulator
   the camera **preview renders the virtual scene** — only captured stills
   come back black. Round-2's "black frames" applied to windowed mode on this

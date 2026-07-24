@@ -107,16 +107,20 @@ npx expo run:android   # builds + installs the dev client
 npx expo run:ios       # needs an iOS simulator runtime downloaded in Xcode
 ```
 
-> **JDK 17–21 required** — JDK 24 fails the native release build
-> (`configureCMakeRelWithDebInfo`) with a cryptic "restricted method in
-> java.lang.System" error. If `java -version` says 24+:
-> `export JAVA_HOME=$(/usr/libexec/java_home -v 21)` first.
+> **Java:** the build is pinned to a **JDK 21** Gradle daemon by the
+> `plugins/withGradleDaemonJvm.js` config plugin (it writes
+> `android/gradle/gradle-daemon-jvm.properties` on every prebuild, since
+> `android/` is generated and gitignored). Your shell's default `java`
+> doesn't matter — you just need a JDK 17–21 installed for Gradle to
+> discover. (JDK 24+ breaks AGP's native configure step with a cryptic
+> "restricted method in java.lang.System" error; the pin makes that
+> impossible to hit.)
 
 For a **standalone field-test build** (no Metro tether — install, unplug,
 walk around; release is pre-wired to the debug keystore):
 
 ```bash
-JAVA_HOME=$(/usr/libexec/java_home -v 21) npx expo run:android --variant release --device
+npx expo run:android --variant release --device
 ```
 
 Recognition engines are chosen in **Settings**, where each cloud engine's API

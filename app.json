@@ -38,7 +38,8 @@
       "expo-sqlite",
       "expo-secure-store",
       "expo-asset",
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/withGradleDaemonJvm"
     ],
     "experiments": {
       "typedRoutes": true
