@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CodeTag } from '@/components/CodeTag';
@@ -11,6 +11,7 @@ import { nowIso } from '@/lib/time';
 import { searchItems } from '@/search/fts';
 import { colors, radius, sp, type } from '@/theme';
 import { RecognitionResult } from '@/vision/types';
+import { isVisualMemoryAvailable, recall, type Recollection } from '@/vision/visualMemory';
 
 /**
  * Find-it photo path (blueprint §8.3): the model's best identification is
@@ -48,19 +49,87 @@ export default function FindResultScreen() {
   const results =
     byName.length > 0 ? byName : best?.label_text ? searchItems(db, best.label_text) : [];
 
+  // D20: visual memory answers "which of mine looks like this?" without a
+  // network, which is what lets this screen mean something in airplane mode.
+  const photoUri = scan?.photo_uri ?? null;
+  const [recalled, setRecalled] = useState<Recollection[] | null>(null);
+  useEffect(() => {
+    // No encoder or no photo means nothing to recall; leaving the state
+    // untouched (rather than clearing it here) keeps this effect free of a
+    // synchronous setState, which is both a lint rule and a re-render.
+    if (!photoUri || !isVisualMemoryAvailable()) return;
+    let cancelled = false;
+    void recall(db, photoUri).then(
+      (hits) => {
+        if (!cancelled) setRecalled(hits);
+      },
+      () => {
+        if (!cancelled) setRecalled([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [db, photoUri]);
+
+  const openBin = (binId: string | null) => {
+    if (binId) router.push({ pathname: '/bin/[id]', params: { id: binId } });
+  };
+
+  /** Ranked by resemblance; deliberately no score shown (D5/D20). */
+  const recalledRows = (
+    <>
+      {(recalled ?? []).map((hit) => (
+        <Pressable key={hit.itemId} style={styles.resultRow} onPress={() => openBin(hit.binId)}>
+          <View style={[styles.thumb, styles.thumbEmpty]}>
+            <Ionicons name="sparkles-outline" size={18} color={colors.textFaint} />
+          </View>
+          <View style={styles.resultMain}>
+            <Text style={styles.resultName} numberOfLines={1}>
+              {hit.quantity > 1 ? `${hit.quantity}× ` : ''}
+              {hit.name}
+            </Text>
+            <View style={styles.crumbRow}>
+              {hit.binCode ? <CodeTag code={hit.binCode} small /> : null}
+              <Text style={styles.crumb} numberOfLines={1}>
+                {[hit.binName, hit.shelfName, hit.locationName].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+        </Pressable>
+      ))}
+    </>
+  );
+
   if (!scan || (scan.status !== 'review' && scan.status !== 'confirmed')) {
+    // Not recognized — but visual memory may still know what this resembles,
+    // which is the difference between a useful screen and a dead end offline.
+    const hasRecall = (recalled?.length ?? 0) > 0;
     return (
-      <View style={styles.center}>
+      <ScrollView contentContainerStyle={hasRecall ? styles.container : styles.center}>
         <Stack.Screen options={{ title: 'Find it' }} />
-        <Text style={styles.dim}>
-          {scan
-            ? 'This photo has not been recognized — photo lookup needs a connection.'
-            : 'Scan not found.'}
-        </Text>
+        {hasRecall ? (
+          <>
+            <Text style={styles.stamp}>Not recognized — but this looks like</Text>
+            {recalledRows}
+            <Text style={styles.dim}>
+              Matched against your own items on this phone. Recognition itself needs a connection.
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.dim}>
+            {!scan
+              ? 'Scan not found.'
+              : isVisualMemoryAvailable()
+                ? 'Not recognized, and nothing you have catalogued looks like it — try text search.'
+                : 'This photo has not been recognized — photo lookup needs a connection.'}
+          </Text>
+        )}
         <Pressable style={styles.primaryButton} onPress={() => router.back()}>
           <Text style={styles.primaryLabel}>Back</Text>
         </Pressable>
-      </View>
+      </ScrollView>
     );
   }
 
@@ -77,6 +146,12 @@ export default function FindResultScreen() {
           <Text style={styles.stamp}>
             {results.length > 0 ? 'Found in your workshop' : 'No matches in your bins'}
           </Text>
+          {results.length === 0 && (recalled?.length ?? 0) > 0 ? (
+            <>
+              <Text style={styles.stamp}>…but it looks like</Text>
+              {recalledRows}
+            </>
+          ) : null}
           {results.map((r) => (
             <Pressable
               key={r.itemId}

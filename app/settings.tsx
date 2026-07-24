@@ -23,6 +23,7 @@ import {
 import { logEvent } from '@/diagnostics/events';
 import { useDb } from '@/db/DbProvider';
 import { isDatabaseEmpty } from '@/db/backupQueries';
+import { countEmbeddings, countItemsWithPhotos } from '@/db/embeddingQueries';
 import { listSpendTotals, type SpendTotals } from '@/db/queries';
 import { buildInfo, describeBuild, RELEASES_URL } from '@/settings/build';
 import {
@@ -38,6 +39,7 @@ import { colors, radius, sp, type } from '@/theme';
 import { testClaudeConnection } from '@/vision/claudeProvider';
 import { estimateScanCost, formatTokens, formatUsd, PRICES_AS_OF } from '@/vision/cost';
 import { testOpenAiConnection } from '@/vision/openaiProvider';
+import { getEmbedder } from '@/vision/visualMemory';
 
 const ENGINE_LABELS: Record<ProviderChoice, string> = {
   fixture: 'Fixture',
@@ -153,6 +155,14 @@ export default function SettingsScreen() {
   // cleanup, which is the only thing that changes it from here.
   const [storage, setStorage] = useState<StorageReport>(() => readStorageReport(db));
   const build = buildInfo();
+  // D20: the encoder is downloaded on demand, so "not set up" is the normal
+  // resting state and has to read as a capability rather than a fault.
+  const embedder = getEmbedder();
+  const visualMemory = {
+    available: embedder !== null,
+    remembered: embedder ? countEmbeddings(db, embedder.model) : 0,
+    withPhotos: countItemsWithPhotos(db),
+  };
 
   useEffect(() => {
     void (async () => {
@@ -308,6 +318,15 @@ export default function SettingsScreen() {
       >
         <Text style={styles.secondaryLabel}>Open releases page ↗</Text>
       </Pressable>
+
+      <Text style={styles.sectionTitle}>Visual memory</Text>
+      <Text style={styles.hint} testID="visual-memory-line">
+        {visualMemory.available
+          ? `Remembering ${visualMemory.remembered} of ${visualMemory.withPhotos} item${
+              visualMemory.withPhotos === 1 ? '' : 's'
+            } that have a photo. Photograph something and Binocular can tell you which of your own items it resembles — on this phone, with no connection.`
+          : 'Not set up. Binocular can learn what your items look like and match new photos against them offline, once the recognizer has been downloaded. Nothing else changes until then.'}
+      </Text>
 
       <Text style={styles.sectionTitle}>Storage</Text>
       <Text style={styles.hint}>
