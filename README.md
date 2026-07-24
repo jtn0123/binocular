@@ -24,15 +24,18 @@ taps.
 
 ## Status
 
-Stages 0–6 of the roadmap are built, tested (**240 Jest tests**), and
+Stages 0–6 of the roadmap are built, tested (**259 Jest tests**), and
 emulator-verified, plus hardening passes: trust-boundary fuzzing,
 property-based tests, 1,000-item perf assertions, queue chaos coverage, an
-8,000-event monkey run, and an accessibility sweep.
+8,000-event monkey run, and an accessibility sweep. The **standalone release
+build** has been validated end-to-end on the emulator (no Metro): first-run
+flow, scan → review → save, search, diagnostics screen and share-zip export,
+and cold-restart persistence — see `docs/POLISH.md` §Field-test readiness.
 
 Still open: the Stage 7 iOS pass, and the physical-world exit criteria that
 need real hardware — a real-bin recognition audit with a cloud API key and a
 print-then-scan label round-trip. (This machine's emulator captures black
-camera frames, so real-image recognition testing needs a physical device —
+camera stills, so real-image recognition testing needs a physical device —
 see `docs/POLISH.md`.)
 
 ## Development
@@ -100,8 +103,20 @@ Everything except the on-device engine runs in **Expo Go**. The local ML Kit
 engine needs the dev build:
 
 ```bash
-npx expo run:android   # builds + installs the dev client (JDK 17+)
+npx expo run:android   # builds + installs the dev client
 npx expo run:ios       # needs an iOS simulator runtime downloaded in Xcode
+```
+
+> **JDK 17–21 required** — JDK 24 fails the native release build
+> (`configureCMakeRelWithDebInfo`) with a cryptic "restricted method in
+> java.lang.System" error. If `java -version` says 24+:
+> `export JAVA_HOME=$(/usr/libexec/java_home -v 21)` first.
+
+For a **standalone field-test build** (no Metro tether — install, unplug,
+walk around; release is pre-wired to the debug keystore):
+
+```bash
+JAVA_HOME=$(/usr/libexec/java_home -v 21) npx expo run:android --variant release --device
 ```
 
 Recognition engines are chosen in **Settings**, where each cloud engine's API

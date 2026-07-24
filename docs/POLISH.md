@@ -180,3 +180,37 @@ event **with its stack, surviving the app restart** — the gap that mattered
 most. Not visually confirmed on-device: the crash counter rendering and the
 share-sheet zip (both unit-tested; the zip reuses the proven backup path) —
 the dev client stopped reconnecting to Metro before that step.
+*Both gaps closed on the release build the next day — see below.*
+
+## Field-test readiness validation (2026-07-23, release build)
+
+Before handing the app to a physical phone, the exact field configuration —
+`assembleRelease`, installed standalone, **no Metro** — was built and driven
+end-to-end on the emulator:
+
+- **Release APK builds and runs standalone.** Fresh install boots to an
+  empty Home (demo seeds are correctly dev-only), full first-run flow works:
+  create location → shelf → bin, audit scan (fixture), review chips with
+  confidence styling, save, FTS search finds the saved item with its
+  bin/shelf/location breadcrumb, cold force-stop + relaunch keeps all data.
+- **Diagnostics is alive in release** (the D16 always-on rationale, now
+  proven): the screen shows `Binocular 0.1.0 · release`, live event/crash
+  counters, and recent events — searches with query + counts, screen
+  breadcrumbs. **Share diagnostics produced a real
+  `binocular-diagnostics-<date>.zip`** on the share sheet in the release
+  build. Contents weren't byte-inspected there (release is properly
+  non-debuggable; the emulator's share targets are all cloud) — composition
+  is covered by unit tests incl. the no-key-material assertion, and by the
+  dev-build live verification of the same builder.
+- **Torch + zoom verified visually in release**: torch renders amber-on,
+  stepper reads 20% after two taps; `capture_settings` logged.
+- **Host findings:** JDK 24 breaks `configureCMakeRelWithDebInfo`
+  (react-native-screens/worklets) with a cryptic "restricted method in
+  java.lang.System" error — **build with JDK 17–21**
+  (`JAVA_HOME=$(/usr/libexec/java_home -v 21)`). The Pixel_9_Pro AVD is an
+  empty husk (boots fail); use `galaxy-s24-api36`. Emulator /data needed
+  ~700MB free for the 181MB APK (removed the stale dev client + Expo Go).
+- **Black-camera finding refined:** on a *headless* (`-no-window`) emulator
+  the camera **preview renders the virtual scene** — only captured stills
+  come back black. Round-2's "black frames" applied to windowed mode on this
+  host. Still true either way: real captured-image testing needs hardware.
