@@ -79,7 +79,9 @@ export function searchItems(db: DbAdapter, rawQuery: string, limit = 50): Search
      LEFT JOIN shelves ON shelves.id = bins.shelf_id
      LEFT JOIN locations ON locations.id = shelves.location_id
      WHERE item_search MATCH ?
-     ORDER BY bm25(item_search, 10.0, 5.0, 2.0, 1.0)
+     -- name, brand, label_text, notes, category. A tag hit ("fastener")
+     -- outranks a note but never a name.
+     ORDER BY bm25(item_search, 10.0, 5.0, 2.0, 1.0, 3.0)
      LIMIT ?`,
     [match, limit],
   );
