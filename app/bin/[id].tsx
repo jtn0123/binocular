@@ -7,6 +7,15 @@ import * as ImagePicker from 'expo-image-picker';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import { CodeTag } from '@/components/CodeTag';
+import {
+  CONTROLS_THRESHOLD,
+  DEFAULT_FILTER,
+  DEFAULT_SORT,
+  filterCounts,
+  viewItems,
+  type ItemFilter,
+  type ItemSort,
+} from '@/db/itemView';
 import { PromptModal, type PromptRequest } from '@/components/PromptModal';
 import { useDb } from '@/db/DbProvider';
 import {
@@ -87,6 +96,9 @@ export default function BinDetailScreen() {
   // Move picker serves single-item and bulk moves.
   const [moving, setMoving] = useState<ItemRow[] | null>(null);
   // Multi-select mode (field-test ask: batch cleanup).
+  // A bin with forty things in it was an undifferentiated alphabetical wall.
+  const [sort, setSort] = useState<ItemSort>(DEFAULT_SORT);
+  const [filter, setFilter] = useState<ItemFilter>(DEFAULT_FILTER);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   // Deletes go through the D17 trash: instantly undoable here, restorable
@@ -111,7 +123,10 @@ export default function BinDetailScreen() {
       </View>
     );
   }
-  const items = itemsForBin(db, bin.id);
+  const allItems = itemsForBin(db, bin.id);
+  const counts = filterCounts(allItems);
+  const items = viewItems(allItems, sort, filter);
+  const showControls = allItems.length >= CONTROLS_THRESHOLD;
   const shelf = bin.shelf_id ? getShelf(db, bin.shelf_id) : null;
   const history = listAuditHistory(db, bin.id);
   const itemPhotos = bin.cover_photo_uri ? [] : listItemPhotoUris(db, bin.id);
@@ -327,9 +342,73 @@ export default function BinDetailScreen() {
                 />
               </View>
             )}
+            {showControls && !selectMode && (
+              <View style={styles.viewControls}>
+                <View style={styles.viewGroup}>
+                  {(
+                    [
+                      ['name', 'A–Z'],
+                      ['quantity', 'Most'],
+                      ['added', 'Newest'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <Pressable
+                      key={value}
+                      style={[styles.viewChip, sort === value && styles.viewChipOn]}
+                      onPress={() => setSort(value)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: sort === value }}
+                      accessibilityLabel={`Sort by ${label}`}
+                      testID={`sort-${value}`}
+                    >
+                      <Text style={[styles.viewChipLabel, sort === value && styles.viewChipLabelOn]}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <View style={styles.viewGroup}>
+                  {(
+                    [
+                      ['all', 'All', counts.all],
+                      ['checked_out', 'Out', counts.checked_out],
+                      ['low_stock', 'Low', counts.low_stock],
+                    ] as const
+                  )
+                    // A filter that would show nothing is a dead end; only
+                    // offer the ones this bin can actually answer.
+                    .filter(([value, , count]) => value === 'all' || count > 0)
+                    .map(([value, label, count]) => (
+                      <Pressable
+                        key={value}
+                        style={[styles.viewChip, filter === value && styles.viewChipOn]}
+                        onPress={() => setFilter(value)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: filter === value }}
+                        accessibilityLabel={`Show ${label}, ${count} item${count === 1 ? '' : 's'}`}
+                        testID={`filter-${value}`}
+                      >
+                        <Text
+                          style={[styles.viewChipLabel, filter === value && styles.viewChipLabelOn]}
+                        >
+                          {label} {count}
+                        </Text>
+                      </Pressable>
+                    ))}
+                </View>
+              </View>
+            )}
           </View>
         }
-        ListEmptyComponent={<Text style={styles.empty}>Nothing recorded in this bin yet.</Text>}
+        ListEmptyComponent={
+          <Text style={styles.empty}>
+            {allItems.length === 0
+              ? 'Nothing recorded in this bin yet.'
+              : filter === 'checked_out'
+                ? 'Nothing from this bin is checked out.'
+                : 'Nothing in this bin is running low.'}
+          </Text>
+        }
         renderItem={({ item }) =>
           selectMode ? (
             <Pressable
@@ -786,6 +865,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   header: { gap: sp(2.5), marginBottom: sp(2) },
+  viewControls: { flexDirection: 'row', justifyContent: 'space-between', gap: sp(2) },
+  viewGroup: { flexDirection: 'row', gap: sp(1) },
+  viewChip: {
+    paddingHorizontal: sp(2.5),
+    paddingVertical: sp(1.25),
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  viewChipOn: { backgroundColor: colors.chipSelectedBg, borderColor: colors.chipSelectedBorder },
+  viewChipLabel: { ...type.dim, fontSize: 12 },
+  viewChipLabelOn: { color: colors.text, fontWeight: '700' },
   cover: {
     width: '100%',
     height: 190,
