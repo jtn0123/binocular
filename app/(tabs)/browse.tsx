@@ -23,6 +23,7 @@ import {
   type LocationRow,
   type ShelfRow,
 } from '@/db/queries';
+import { quickCreateBin } from '@/db/scaffold';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { printLabelSheet } from '@/qr/print';
 import { colors, radius, sp, type } from '@/theme';
@@ -163,6 +164,18 @@ export default function BrowseScreen() {
             <Ionicons name="add" size={16} color={colors.amberInkOn} />
             <Text style={styles.toolbarLabel}>Location</Text>
           </Pressable>
+          <Pressable
+            style={styles.toolbarButton}
+            accessibilityRole="button"
+            accessibilityLabel="Create a new bin"
+            onPress={() => {
+              quickCreateBin(db);
+              refresh();
+            }}
+          >
+            <Ionicons name="add" size={16} color={colors.amberInkOn} />
+            <Text style={styles.toolbarLabel}>Bin</Text>
+          </Pressable>
           <Pressable style={styles.toolbarButtonAlt} onPress={printAllLabels}>
             <Ionicons name="print" size={16} color={colors.steel} />
             <Text style={styles.toolbarLabelAlt}>Print bin labels</Text>
@@ -170,7 +183,10 @@ export default function BrowseScreen() {
         </View>
 
         {locations.length === 0 && unassigned.length === 0 && (
-          <Text style={styles.empty}>No locations yet — add one to get started.</Text>
+          <Text style={styles.empty}>
+            Empty workshop — tap + Bin for a one-tap start (a default location and shelf are
+            created for you), or + Location to lay out your space first.
+          </Text>
         )}
 
         {locations.map((location) => {
@@ -291,7 +307,7 @@ export default function BrowseScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   container: { padding: sp(4), gap: sp(4), paddingBottom: sp(10) },
-  toolbar: { flexDirection: 'row', gap: sp(2.5) },
+  toolbar: { flexDirection: 'row', gap: sp(2.5), flexWrap: 'wrap' },
   toolbarButton: {
     flexDirection: 'row',
     alignItems: 'center',

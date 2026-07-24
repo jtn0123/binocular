@@ -6,6 +6,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CodeTag } from '@/components/CodeTag';
 import { useDb } from '@/db/DbProvider';
 import { countAttentionScans, listRecentBins } from '@/db/queries';
+import { quickCreateBin } from '@/db/scaffold';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { colors, radius, sp, type } from '@/theme';
 
@@ -30,7 +31,22 @@ export default function ScanScreen() {
           keyExtractor={(bin) => bin.id}
           contentContainerStyle={{ gap: 2 }}
           ListEmptyComponent={
-            <Text style={styles.hint}>No bins yet — create one in Browse.</Text>
+            <Text style={styles.hint}>No bins yet — create one below and start auditing.</Text>
+          }
+          ListFooterComponent={
+            <Pressable
+              style={styles.createRow}
+              accessibilityRole="button"
+              accessibilityLabel="Create a new bin and audit it"
+              onPress={() => {
+                const created = quickCreateBin(db);
+                setPicking(false);
+                router.push({ pathname: '/capture', params: { binId: created.id } });
+              }}
+            >
+              <Ionicons name="add" size={16} color={colors.steel} />
+              <Text style={styles.createLabel}>Create a new bin and audit it</Text>
+            </Pressable>
           }
           renderItem={({ item: bin }) => (
             <Pressable
@@ -168,6 +184,14 @@ const styles = StyleSheet.create({
   },
   binName: { ...type.body, flex: 1 },
   hint: { ...type.dim, paddingVertical: sp(6), textAlign: 'center' },
+  createRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: sp(3),
+  },
+  createLabel: { color: colors.steel, fontWeight: '600' },
   secondaryButton: { alignItems: 'center', padding: sp(3) },
   secondaryLabel: { color: colors.steel, fontWeight: '600' },
 });

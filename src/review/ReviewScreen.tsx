@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -24,11 +24,13 @@ import {
   updateScanStatus,
   type ItemRow,
 } from '../db/queries';
+import { quickCreateBin } from '../db/scaffold';
 import { logEvent } from '../diagnostics/events';
 import { hapticSuccess, hapticWarning } from '../lib/haptics';
 import { newId } from '../lib/id';
 import { nowIso } from '../lib/time';
 import { processScan } from '../scan/scanFlow';
+import { clearReviewDraft, loadReviewDraft, saveReviewDraft } from './reviewDraft';
 import { colors, mono, radius, sp, type } from '../theme';
 import { formatTokens, formatUsd } from '../vision/cost';
 import { ItemCategory, RecognitionResult, type Confidence } from '../vision/types';
@@ -39,7 +41,7 @@ import { ItemCategory, RecognitionResult, type Confidence } from '../vision/type
  * audits of a non-empty bin group chips into new / still here / not seen;
  * removing an existing item always requires an explicit tap.
  */
-interface DetectedChip {
+export interface DetectedChip {
   key: string;
   name: string;
   brand: string | null;
@@ -112,18 +114,29 @@ export function ReviewScreen({
      
   }, [scan?.raw_response]);
 
-  const [chips, setChips] = useState<DetectedChip[]>(() =>
-    parsed ? buildDetectedChips(parsed, existingItems) : [],
+  // Restore any in-progress work from a previous visit (draft survives the
+  // QR-label detour, the queue round-trip, and plain back navigation).
+  const [draft] = useState(() => loadReviewDraft(scanId));
+  const [chips, setChips] = useState<DetectedChip[]>(
+    () => draft?.chips ?? (parsed ? buildDetectedChips(parsed, existingItems) : []),
   );
-  const [keepExisting, setKeepExisting] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(existingItems.map((e) => [e.id, true])),
+  const [keepExisting, setKeepExisting] = useState<Record<string, boolean>>(
+    () => draft?.keepExisting ?? Object.fromEntries(existingItems.map((e) => [e.id, true])),
   );
   const [mode, setMode] = useState<'merge' | 'replace'>(
-    existingItems.length > 0 ? 'merge' : 'replace',
+    () => draft?.mode ?? (existingItems.length > 0 ? 'merge' : 'replace'),
   );
   const [editingKey, setEditingKey] = useState<string | 'new' | null>(null);
   const [retrying, setRetrying] = useState(false);
-  const [destBinId, setDestBinId] = useState<string | null>(initialDestBinId ?? null);
+  const [destBinId, setDestBinId] = useState<string | null>(
+    initialDestBinId ?? draft?.destBinId ?? null,
+  );
+
+  const scanStatus = scan?.status;
+  useEffect(() => {
+    if (scanStatus !== 'review') return;
+    saveReviewDraft(scanId, { chips, keepExisting, mode, destBinId });
+  }, [scanId, scanStatus, chips, keepExisting, mode, destBinId]);
 
   if (!scan) {
     return (
@@ -193,6 +206,7 @@ export function ReviewScreen({
   }
 
   const isCheckIn = scan.mode === 'check_in';
+  const destCandidates = isCheckIn ? listRecentBins(db, 8) : [];
   const isMergeDiff = !isCheckIn && mode === 'merge' && existingItems.length > 0;
   const newChips = chips.filter((c) => c.matchedExistingId === null);
   const stillHere = chips.filter((c) => c.matchedExistingId !== null);
@@ -206,6 +220,7 @@ export function ReviewScreen({
   function discard() {
     hapticWarning();
     updateScanStatus(db, scanId, 'discarded', { resolvedAt: nowIso() });
+    clearReviewDraft(scanId);
     onDone(scan?.bin_id ?? null);
   }
 
@@ -258,6 +273,7 @@ export function ReviewScreen({
       },
     });
     hapticSuccess();
+    clearReviewDraft(scanId);
     onDone(binId);
   }
 
@@ -369,7 +385,10 @@ export function ReviewScreen({
         {isCheckIn && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Save to which bin?</Text>
-            {listRecentBins(db, 8).map((candidate) => (
+            {destCandidates.length === 0 && (
+              <Text style={styles.dim}>No bins yet — create your first one:</Text>
+            )}
+            {destCandidates.map((candidate) => (
               <Pressable
                 key={candidate.id}
                 testID={`dest-${candidate.id}`}
@@ -383,6 +402,18 @@ export function ReviewScreen({
                 </Text>
               </Pressable>
             ))}
+            <Pressable
+              style={styles.addButton}
+              testID="new-bin"
+              accessibilityRole="button"
+              accessibilityLabel="Create a new bin"
+              onPress={() => {
+                const created = quickCreateBin(db);
+                setDestBinId(created.id);
+              }}
+            >
+              <Text style={styles.addLabel}>+ New bin</Text>
+            </Pressable>
             {onScanDestination && (
               <Pressable style={styles.addButton} onPress={onScanDestination}>
                 <Text style={styles.addLabel}>Scan a bin label instead</Text>
