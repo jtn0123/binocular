@@ -1,4 +1,5 @@
 import type { ScanMode } from '../db/queries';
+import type { ProviderChoice } from '../settings/settings';
 
 /**
  * D18 "shoot and walk": a capture can either block on recognition and open
@@ -23,4 +24,16 @@ export function supportsKeepShooting(mode: ScanMode): boolean {
 /** The flow actually used for a capture, after mode restrictions. */
 export function flowForMode(mode: ScanMode, preferred: CaptureFlow): CaptureFlow {
   return supportsKeepShooting(mode) ? preferred : 'review_now';
+}
+
+/**
+ * Whether a shot should be confirmed before it becomes a scan.
+ *
+ * Only the metered engines: a blurry frame sent to Claude or OpenAI buys a
+ * paid round trip and a useless answer (D15 makes that spend visible, this
+ * avoids it), while fixture and local cost nothing and should not pay an
+ * extra tap per photo.
+ */
+export function needsPreview(engine: ProviderChoice | null): boolean {
+  return engine === 'claude' || engine === 'openai';
 }

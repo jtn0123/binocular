@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -12,6 +13,7 @@ import { getScanQueue } from '@/queue/scanQueue';
 import {
   DEFAULT_CAPTURE_FLOW,
   flowForMode,
+  needsPreview,
   supportsKeepShooting,
   type CaptureFlow,
 } from '@/scan/captureMode';
@@ -25,6 +27,12 @@ import {
 import { getProviderChoice, type ProviderChoice } from '@/settings/settings';
 import { colors } from '@/theme';
 import { estimateScanCost, formatUsd } from '@/vision/cost';
+
+interface PendingPhoto {
+  uri: string;
+  width: number;
+  height: number;
+}
 
 const HINTS: Record<ScanMode, string> = {
   bin_audit: 'Fill the frame with the open bin',
@@ -55,7 +63,10 @@ export default function CaptureScreen() {
   const [flowPref, setFlowPref] = useState<CaptureFlow>(DEFAULT_CAPTURE_FLOW);
   const [shotCount, setShotCount] = useState(0);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
+  // A frame taken but not yet committed to a scan (cloud engines only).
+  const [pending, setPending] = useState<PendingPhoto | null>(null);
   const canKeepShooting = supportsKeepShooting(mode);
+  const confirmBeforeSending = needsPreview(engine);
 
   useEffect(() => {
     getProviderChoice().then(setEngine, () => setEngine(null));
@@ -102,24 +113,47 @@ export default function CaptureScreen() {
   async function capture() {
     if (!cameraRef.current || busy !== 'idle') return;
     if (mode === 'bin_audit' && !params.binId) return;
-    const flow = flowForMode(mode, flowPref);
     setBusy('capturing');
     hapticShutter();
     try {
       const photo = await cameraRef.current.takePictureAsync();
+      const shot = { uri: photo.uri, width: photo.width, height: photo.height };
+      if (confirmBeforeSending) {
+        // A blurry frame on a cloud engine costs real money and a round trip
+        // for a useless answer. The photo is not a scan yet — it becomes one
+        // (durably) only when accepted below.
+        setPending(shot);
+        setBusy('idle');
+        return;
+      }
+      await submit(shot);
+    } catch (err) {
+      Alert.alert('Capture failed', err instanceof Error ? err.message : String(err), [
+        { text: 'OK', onPress: () => setBusy('idle') },
+      ]);
+    } finally {
+      setBusy((b) => (b === 'capturing' ? 'idle' : b));
+    }
+  }
+
+  async function submit(shot: PendingPhoto) {
+    const flow = flowForMode(mode, flowPref);
+    setPending(null);
+    setBusy('capturing');
+    try {
       // Photo persisted + scan row queued first — a kill or network loss
       // after this point can never lose the capture (blueprint §8.1 AC).
       const scanId = enqueueScan(db, {
         mode,
         binId: params.binId ?? null,
-        tempPhotoUri: photo.uri,
+        tempPhotoUri: shot.uri,
       });
       // D16: so a dark or badly framed photo is explainable after the fact.
       logEvent(db, {
         kind: 'scan',
         name: 'capture_settings',
         scanId,
-        detail: { torch, zoom, mode, width: photo.width, height: photo.height, flow },
+        detail: { torch, zoom, mode, width: shot.width, height: shot.height, flow },
       });
 
       if (flow === 'keep_shooting') {
@@ -162,13 +196,54 @@ export default function CaptureScreen() {
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (err) {
-      Alert.alert('Capture failed', err instanceof Error ? err.message : String(err), [
+      Alert.alert('Scan failed', err instanceof Error ? err.message : String(err), [
         { text: 'OK', onPress: () => setBusy('idle') },
       ]);
       return;
     } finally {
       setBusy((b) => (b === 'capturing' ? 'idle' : b));
     }
+  }
+
+  if (pending) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <Image source={{ uri: pending.uri }} style={styles.preview} contentFit="contain" />
+        <View style={styles.overlayTop}>
+          <Text style={styles.hint}>Sharp enough to read the labels?</Text>
+          {estimate ? (
+            <Text style={styles.costPill}>
+              ≈ {formatUsd(estimate.usd)} · {engine === 'openai' ? 'OpenAI' : 'Claude'}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.overlayBottom}>
+          <View style={styles.previewRow}>
+            <Pressable
+              style={styles.previewSecondary}
+              onPress={() => setPending(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Discard this photo and take another"
+              testID="preview-retake"
+            >
+              <Ionicons name="refresh" size={18} color="#fff" />
+              <Text style={styles.previewSecondaryLabel}>Retake</Text>
+            </Pressable>
+            <Pressable
+              style={styles.previewPrimary}
+              onPress={() => void submit(pending)}
+              accessibilityRole="button"
+              accessibilityLabel="Use this photo"
+              testID="preview-use"
+            >
+              <Ionicons name="checkmark" size={18} color={colors.amberInkOn} />
+              <Text style={styles.previewPrimaryLabel}>Use photo</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -323,6 +398,30 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   camera: { flex: 1 },
+  preview: { flex: 1, backgroundColor: '#000' },
+  previewRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  previewSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    borderRadius: 28,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  previewSecondaryLabel: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  previewPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 26,
+    paddingVertical: 14,
+    borderRadius: 28,
+    backgroundColor: colors.amber,
+  },
+  previewPrimaryLabel: { color: colors.amberInkOn, fontSize: 15, fontWeight: '700' },
   overlayTop: {
     position: 'absolute',
     top: 60,
