@@ -2,6 +2,7 @@ import { createNodeAdapter, type NodeDbAdapter } from '../nodeAdapter';
 import { createBin, insertItem, itemsForBin, softDeleteItem } from '../queries';
 import { runMigrations } from '../schema';
 import {
+  binTagTally,
   createTag,
   deleteTag,
   FALLBACK_TAG,
@@ -154,6 +155,38 @@ describe('tag vocabulary (D19)', () => {
     insertItem(db, { binId, name: 'Conduit', category: 'electrical' });
     insertItem(db, { binId, name: 'Deck screws', category: 'fastener' });
     expect(tagUsageCounts(db)).toEqual({ electrical: 2, fastener: 1 });
+  });
+
+  describe('what a bin actually holds', () => {
+    it('tallies its tags, commonest first', () => {
+      insertItem(db, { binId, name: 'Wire nuts', category: 'electrical' });
+      insertItem(db, { binId, name: 'Conduit', category: 'electrical' });
+      insertItem(db, { binId, name: 'Junction box', category: 'electrical' });
+      insertItem(db, { binId, name: 'Deck screws', category: 'fastener' });
+
+      expect(binTagTally(db, binId)).toEqual([
+        { slug: 'electrical', label: 'Electrical', count: 3 },
+        { slug: 'fastener', label: 'Fastener', count: 1 },
+      ]);
+    });
+
+    it('shows the tag label, so a rename is reflected immediately', () => {
+      insertItem(db, { binId, name: 'Wire nuts', category: 'electrical' });
+      renameTag(db, 'electrical', 'Sparky bits');
+      expect(binTagTally(db, binId)[0]).toMatchObject({ label: 'Sparky bits' });
+    });
+
+    it('caps the list so a mixed bin does not print a paragraph', () => {
+      for (const category of ['electrical', 'fastener', 'plumbing', 'safety']) {
+        insertItem(db, { binId, name: `${category} thing`, category });
+      }
+      expect(binTagTally(db, binId)).toHaveLength(3);
+      expect(binTagTally(db, binId, 10)).toHaveLength(4);
+    });
+
+    it('is empty for an empty bin', () => {
+      expect(binTagTally(db, binId)).toEqual([]);
+    });
   });
 
   describe('resolving outside input (§6.1)', () => {

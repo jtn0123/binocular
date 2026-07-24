@@ -16,6 +16,7 @@ import {
   type ItemFilter,
   type ItemSort,
 } from '@/db/itemView';
+import { binTagTally } from '@/db/tags';
 import { PromptModal, type PromptRequest } from '@/components/PromptModal';
 import { useDb } from '@/db/DbProvider';
 import {
@@ -130,6 +131,8 @@ export default function BinDetailScreen() {
   const counts = filterCounts(allItems);
   const items = viewItems(allItems, sort, filter);
   const showControls = allItems.length >= CONTROLS_THRESHOLD;
+  // D19: what the bin actually holds, which is not always what its name says.
+  const tally = binTagTally(db, bin.id);
   const shelf = bin.shelf_id ? getShelf(db, bin.shelf_id) : null;
   const history = listAuditHistory(db, bin.id);
   const itemPhotos = bin.cover_photo_uri ? [] : listItemPhotoUris(db, bin.id);
@@ -301,10 +304,21 @@ export default function BinDetailScreen() {
               )
             )}
             <Text style={styles.meta}>
-              {items.length} item{items.length === 1 ? '' : 's'}
+              {allItems.length} item{allItems.length === 1 ? '' : 's'}
               {shelf ? ` · ${shelf.name}` : ' · unassigned'}
               {bin.last_scanned_at ? ` · scanned ${bin.last_scanned_at.slice(0, 10)}` : ''}
             </Text>
+            {tally.length > 0 && (
+              <View style={styles.tallyRow} testID="bin-tag-tally">
+                {tally.map((entry) => (
+                  <View key={entry.slug} style={styles.tallyChip}>
+                    <Text style={styles.tallyLabel}>
+                      {entry.label} {entry.count}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
             <View style={styles.actionsRow}>
               <ActionChip
                 icon="camera"
@@ -895,6 +909,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   header: { gap: sp(2.5), marginBottom: sp(2) },
+  tallyRow: { flexDirection: 'row', flexWrap: 'wrap', gap: sp(1.5) },
+  tallyChip: {
+    paddingHorizontal: sp(2),
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceSunken,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  tallyLabel: { ...type.dim, fontSize: 11 },
   viewControls: { flexDirection: 'row', justifyContent: 'space-between', gap: sp(2) },
   viewGroup: { flexDirection: 'row', gap: sp(1) },
   viewChip: {
