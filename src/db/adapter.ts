@@ -4,7 +4,12 @@
  * in nodeAdapter.ts). Everything in src/db speaks this interface so queries
  * and migrations are testable off-device.
  */
-export type SqlParam = string | number | null;
+/**
+ * `Uint8Array` binds to a SQLite BLOB — used by the D20 visual-memory
+ * vectors, the only binary column in the schema. Both adapters already
+ * accept it; this widening is what lets the type system say so.
+ */
+export type SqlParam = string | number | null | Uint8Array;
 
 export interface DbAdapter {
   /** Execute one or more statements with no result (DDL, pragmas). */

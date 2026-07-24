@@ -229,6 +229,28 @@ INSERT INTO tags (slug, label, sort_order, created_at) VALUES
   ('other',               'Other',          11, '2026-07-24T00:00:00Z');
 `;
 
+/**
+ * D20 visual memory: one vector per item photo, so a new photo can be matched
+ * against what this workshop already holds.
+ *
+ * Everything here is derived. An item losing its row loses a suggestion, not
+ * data, which is why the vector lives in its own table rather than as columns
+ * on `items`: re-encoding after a model change is a DELETE and a backfill,
+ * not a migration, and a database with no encoder ever downloaded simply has
+ * an empty table.
+ */
+const MIGRATION_009_ITEM_EMBEDDINGS = `
+CREATE TABLE item_embeddings (
+  item_id TEXT PRIMARY KEY REFERENCES items(id),
+  vector BLOB NOT NULL,
+  dims INTEGER NOT NULL,
+  model TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX item_embeddings_model ON item_embeddings(model);
+`;
+
 export const MIGRATIONS: readonly string[] = [
   MIGRATION_001_INITIAL_SCHEMA,
   MIGRATION_002_FTS_TRIGGERS,
@@ -238,6 +260,7 @@ export const MIGRATIONS: readonly string[] = [
   MIGRATION_006_FTS_CATEGORY,
   MIGRATION_007_SEARCH_VOCAB,
   MIGRATION_008_TAGS,
+  MIGRATION_009_ITEM_EMBEDDINGS,
 ];
 
 export function getSchemaVersion(db: DbAdapter): number {
