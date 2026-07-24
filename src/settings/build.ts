@@ -13,7 +13,15 @@ import Constants from 'expo-constants';
  * than one tap to the page that already lists every build. Same honesty rule
  * as D5 and D15: show what is known, never a number that was guessed at.
  */
-export const RELEASES_URL = 'https://github.com/jtn0123/binocular/releases/latest';
+/**
+ * The releases *list*, deliberately not `/releases/latest`: that URL resolves
+ * only to the newest **non**-pre-release, and an ad-hoc `Run workflow` build
+ * is published as a pre-release by default. With only pre-releases published
+ * — which is the normal state between named versions — `/latest` is a 404,
+ * so the one button whose whole job is "get me the newest build" would land
+ * on an error page. The list shows every build, newest first.
+ */
+export const RELEASES_URL = 'https://github.com/jtn0123/binocular/releases';
 
 export interface BuildInfo {
   /** Marketing version, e.g. "0.1.0" or "0.1.0+ci.12". */

@@ -23,6 +23,13 @@ describe('build description', () => {
   });
 
   it('points at the releases page rather than a guessed-at version', () => {
-    expect(RELEASES_URL).toMatch(/^https:\/\/github\.com\/[^/]+\/binocular\/releases/);
+    expect(RELEASES_URL).toMatch(/^https:\/\/github\.com\/[^/]+\/binocular\/releases$/);
+  });
+
+  it('does not use /releases/latest, which 404s while only pre-releases exist', () => {
+    // Ad-hoc `Run workflow` builds publish as pre-releases, and /latest
+    // resolves only to the newest non-pre-release. Verified against the live
+    // repository: with build-8 published, /releases/latest returned 404.
+    expect(RELEASES_URL).not.toContain('/latest');
   });
 });
