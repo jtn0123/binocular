@@ -54,6 +54,7 @@ blueprint edits instead.
 | D14 | Cloud engines | Two cloud engines ship in v1 — Anthropic Claude and OpenAI — behind the same `VisionProvider` contract, each isolated in its own provider file with its own API key in Settings | User choice on cost/quality/account; the §6.1 schema and §6.2 prompt are engine-neutral, so a second cloud engine is pure provider code |
 | D16 | Diagnostics | A local, always-on but **bounded** event log (`events` table, 5,000 entries / 30 days) records app lifecycle, scan timings, queue retries, search, and crashes; a global error handler captures otherwise-invisible crashes. Export is **user-initiated only** — no network telemetry, no third-party crash SDK. Disable-able in Settings | Field testing happens on a standalone build with no Metro console, so `__DEV__`-gated logging would record nothing exactly when it is needed. Bounded + local + opt-out keeps it honest with offline-first (I4) and the privacy stance: the workshop photos and usage history never leave the device unless the user shares them |
 | D17 | Deleted items | Deleting an item moves a full snapshot into a `deleted_items` table (migration 005): instantly undoable via snackbar, restorable for 30 days from a Recently-deleted screen, purged on boot after that. Live-item queries and the FTS index are untouched because deletion really deletes from `items` — the snapshot is a copy | Field testing showed early mis-tagged items need cleanup, but §11 forbids silent inventory loss. A copy-table beats a `deleted_at` flag: no query in the app needs a new WHERE clause, and search can never surface a ghost item |
+| D20 | Visual memory | Every confirmed item photo is encoded to a vector (`item_embeddings`, migration 009); a new photo is matched by cosine similarity against them. It is a **memory, not a classifier** — it says "resembles your 10 mm socket", never "this is a socket", and it is *not* a `VisionProvider` (§5). The encoder is **downloaded on first use, never bundled**: the app is fully functional without it and the feature simply reports itself unavailable. Similarity is **never shown as a number** — results are an order, mapped to the §6.3 enum if a strength must be shown at all. Suggestions still pass through the review screen (D6) | The workshop is the training set the cloud does not have: the same bins, the same items, photographed by the same person. Nearest-neighbour over the user's own corrections needs no training, improves with use, and works in airplane mode — which is the only way §8.3's photo path can satisfy I4. Bundling the encoder would roughly double a 67 MB APK for a feature that is useless until items have been catalogued, so it is opt-in. The no-number rule is D5 applied to a new source: a cosine of 0.83 is exactly the kind of false precision the confidence enum exists to prevent |
 | D19 | Item tags | The tag vocabulary is **user-managed** (`tags` table, migration 008), not a fixed enum: add, rename and delete from a Settings screen. Items keep storing the tag as **text**, so search, CSV, backup and every existing query are untouched; a rename is one `UPDATE` inside the same transaction, and a delete reassigns its items to `other` rather than orphaning them. `other` cannot be deleted — it is the fallback the AI boundary and every failed lookup resolve to. The vision prompt and the OpenAI response schema are built from the live list | A fixed enum meant "electrical" was as far as the app could describe a bin of wire nuts, and a workshop's real categories are personal — a boat person needs `marine`, nobody else does. Storing text rather than a foreign key is what keeps the change cheap: the FTS index (migration 006), CSV export and the backup format all already carry `category` as a string and need no migration. The cost is accepted deliberately: the model can no longer be held to a closed list, which §6.1 resolves by validating slug *shape* strictly and mapping unknown *vocabulary* to `other` |
 | D18 | Deferred review ("shoot and walk") | Capture may **enqueue** a scan and return straight to the camera instead of blocking on recognition; the scan lands in the normal `queued` → `review` pipeline and is reviewed later from the queue. Chosen per capture mode: `bin_audit` and `check_in` offer it, `find_it` never (its whole point is an answer now). The blocking path stays the default so a single scan still ends on the review screen | The §9 queue already does exactly this when offline, and the field test showed the online case has the same shape: walking a shelf means photographing six bins in a row, and standing still for each cloud round trip breaks the rhythm. Deferring is a *routing* change, not a new pipeline — every §11 invariant is untouched, D6 most of all: queued scans still reach inventory only through the review screen |
 | D15 | Cost transparency | Cloud scans record measured token usage (each API's `usage` field) plus a computed dollar cost per scan; the app shows a pre-scan estimate and cumulative spend in Settings. Estimates use documented tokenizer math (OpenAI 32px patches, Claude ≈px²/750) with a bundled price table; uploads stay capped at 1568px and the OpenAI request pins an explicit `detail` level as a cost ceiling | Same honesty rule as D5: usage is measured, never guessed. On `gpt-5.6`, `detail: auto` means *no auto-downscaling* — a 20MP original would cost ~10× the 1568px upload — so image sizing is a cost policy, not just bandwidth |
@@ -202,6 +203,18 @@ CREATE TABLE deleted_items (
 -- D19: the user-managed tag vocabulary. Items reference a tag by its slug
 -- (items.category), not by id, so renaming rewrites those rows in the same
 -- transaction and nothing else in the schema has to know about tags.
+-- D20 visual memory: one fingerprint per item photo, so a new photo can be
+-- matched against what this workshop already contains. Derived data — an
+-- item is never harmed by losing its row, and a changed model invalidates
+-- rows by `model` rather than needing a migration.
+CREATE TABLE item_embeddings (
+  item_id TEXT PRIMARY KEY REFERENCES items(id),
+  vector BLOB NOT NULL,                   -- Float32Array bytes, little-endian
+  dims INTEGER NOT NULL,
+  model TEXT NOT NULL,                    -- which encoder produced it
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE tags (
   slug TEXT PRIMARY KEY,                  -- 'electrical'; matches §6.1 shape
   label TEXT NOT NULL,                    -- 'Electrical', shown in the UI
@@ -280,6 +293,15 @@ Four implementations ship in v1:
 Engine selection: a Settings picker (fixture / local / claude / openai);
 `EXPO_PUBLIC_VISION_PROVIDER` sets the build-time default. Switching engines
 must not require an app restart.
+
+**Visual memory is deliberately NOT a provider (D20).** It answers a
+different question — "which of *my* items does this resemble?" rather than
+"what is this?" — so it is retrieval over the user's own confirmed items, not
+recognition, and it never implements `VisionProvider`. It has no vocabulary,
+cannot name a thing it has not been shown, and produces *suggestions* that
+sit beside a recognition result rather than replacing one. Keeping it outside
+the provider abstraction is what stops the §6.1 contract from having to
+describe something that is not a model output.
 
 ---
 
@@ -521,7 +543,10 @@ done only when every AC passes on an Android device/emulator.
    bundled dictionary.
 2. **Photo path:** photograph the item; recognition returns its best
    identification; app runs that name/label through the same search and shows
-   matching bins.
+   matching bins. **Offline (D20):** where a recognition result is
+   unavailable, visual memory ranks the user's own items by resemblance
+   instead, so the photo path degrades to "which of mine looks like this?"
+   rather than to nothing.
 
 **AC**
 - [ ] Text search returns in <100ms on 1,000 items, fully offline.
@@ -532,8 +557,13 @@ done only when every AC passes on an Android device/emulator.
       nothing rather than inventing a match.
 - [ ] The near-miss pass runs only after an exact search returns nothing, so
       the <100ms AC above is unaffected.
-- [ ] Photo path degrades gracefully offline: "search needs a connection for
-      photo lookup — try text search."
+- [ ] Photo path degrades gracefully offline: with visual memory available it
+      returns resembling items from this workshop; without it (no model
+      downloaded, or nothing catalogued yet) it says so and points at text
+      search — never a blank screen.
+- [ ] Visual memory never names an item it has not been shown. An object with
+      no resembling catalogued item returns no suggestions rather than the
+      least-bad one.
 
 ### 8.4 Checkout / return (stage 6)
 
