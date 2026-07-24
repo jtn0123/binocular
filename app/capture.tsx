@@ -16,6 +16,12 @@ import {
   type CaptureFlow,
 } from '@/scan/captureMode';
 import { enqueueScan, processScan } from '@/scan/scanFlow';
+import {
+  DEFAULT_CAPTURE_PREFS,
+  loadCapturePrefs,
+  normalizeZoom,
+  saveCapturePrefs,
+} from '@/settings/capturePrefs';
 import { getProviderChoice, type ProviderChoice } from '@/settings/settings';
 import { colors } from '@/theme';
 import { estimateScanCost, formatUsd } from '@/vision/cost';
@@ -38,20 +44,43 @@ export default function CaptureScreen() {
   const [engine, setEngine] = useState<ProviderChoice | null>(null);
   // Workshops are dim and bins are deep — torch and zoom are the two
   // controls that decide whether a photo is readable at all.
-  const [torch, setTorch] = useState(false);
-  const [zoom, setZoom] = useState(0);
-  const stepZoom = (delta: number) =>
-    setZoom((z) => Math.round(Math.min(1, Math.max(0, z + delta)) * 100) / 100);
+  // Persisted between scans (capturePrefs): re-arming the torch for every bin
+  // on a shelf was the single most repeated action in the field test.
+  const [torch, setTorch] = useState(DEFAULT_CAPTURE_PREFS.torch);
+  const [zoom, setZoom] = useState(DEFAULT_CAPTURE_PREFS.zoom);
+  const stepZoom = (delta: number) => setZoom((z) => normalizeZoom(z + delta));
   // D18: keep the camera up and let the queue recognize in the background, so
   // a shelf can be photographed in one pass. Session-scoped count, because
   // what matters here is "how many did I just shoot", not the queue depth.
   const [flowPref, setFlowPref] = useState<CaptureFlow>(DEFAULT_CAPTURE_FLOW);
   const [shotCount, setShotCount] = useState(0);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const canKeepShooting = supportsKeepShooting(mode);
 
   useEffect(() => {
     getProviderChoice().then(setEngine, () => setEngine(null));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadCapturePrefs().then((prefs) => {
+      if (cancelled) return;
+      setTorch(prefs.torch);
+      setZoom(prefs.zoom);
+      setFlowPref(prefs.flow);
+      setPrefsLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Write-back only after the load has landed, so the initial defaults can't
+  // race ahead and overwrite what was stored.
+  useEffect(() => {
+    if (!prefsLoaded) return;
+    void saveCapturePrefs({ torch, zoom, flow: flowPref });
+  }, [prefsLoaded, torch, zoom, flowPref]);
   // Pre-scan estimate (D15): cloud engines only — fixture/local are free.
   const estimate = engine === 'claude' || engine === 'openai' ? estimateScanCost(engine) : null;
 
