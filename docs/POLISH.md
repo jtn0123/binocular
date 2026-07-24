@@ -62,8 +62,14 @@ not law.
     and the four Scan mode cards. Amber-on-graphite already clears WCAG AA.
 - [ ] **3. Visual identity** — Binocular icon + splash candidates, user
   picks, wire in (replaces Expo template art).
-- [ ] **4. Capture upgrades** — torch toggle, tap-to-focus, pinch-zoom in
-  `app/capture.tsx`.
+- [x] **4. Capture upgrades (shipped)** — torch toggle and a zoom stepper in
+  `app/capture.tsx`, plus a `capture_settings` diagnostics event (torch, zoom,
+  photo dimensions) so a dark or badly framed field photo is explainable.
+  **Dropped tap-to-focus:** expo-camera 57 exposes no focus-point API and its
+  `autofocus` prop is iOS-only (focus-once vs continuous); Android does
+  continuous AF natively. **Buttons, not pinch:** `GestureHandlerRootView` is
+  not wired at the root, and adding that plumbing immediately before a field
+  test is the wrong risk — buttons also work better with gloves.
 - [ ] **5. Recognition-quality groundwork** — ground-truth eval harness
   (labeled photo set, mechanical precision/recall scoring), prototype
   self-consistency voting. No API key needed to build it.

@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -5,6 +6,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'rea
 
 import { useDb } from '@/db/DbProvider';
 import { getBin, type ScanMode } from '@/db/queries';
+import { logEvent } from '@/diagnostics/events';
 import { hapticShutter } from '@/lib/haptics';
 import { enqueueScan, processScan } from '@/scan/scanFlow';
 import { getProviderChoice, type ProviderChoice } from '@/settings/settings';
@@ -27,6 +29,12 @@ export default function CaptureScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [busy, setBusy] = useState<'idle' | 'capturing' | 'recognizing'>('idle');
   const [engine, setEngine] = useState<ProviderChoice | null>(null);
+  // Workshops are dim and bins are deep — torch and zoom are the two
+  // controls that decide whether a photo is readable at all.
+  const [torch, setTorch] = useState(false);
+  const [zoom, setZoom] = useState(0);
+  const stepZoom = (delta: number) =>
+    setZoom((z) => Math.round(Math.min(1, Math.max(0, z + delta)) * 100) / 100);
 
   useEffect(() => {
     getProviderChoice().then(setEngine, () => setEngine(null));
@@ -62,6 +70,13 @@ export default function CaptureScreen() {
         mode,
         binId: params.binId ?? null,
         tempPhotoUri: photo.uri,
+      });
+      // D16: so a dark or badly framed photo is explainable after the fact.
+      logEvent(db, {
+        kind: 'scan',
+        name: 'capture_settings',
+        scanId,
+        detail: { torch, zoom, mode, width: photo.width, height: photo.height },
       });
       setBusy('recognizing');
       const result = await processScan(db, scanId);
@@ -105,7 +120,13 @@ export default function CaptureScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      <CameraView ref={cameraRef} style={styles.camera} facing="back" />
+      <CameraView
+        ref={cameraRef}
+        style={styles.camera}
+        facing="back"
+        enableTorch={torch}
+        zoom={zoom}
+      />
       <View style={styles.overlayTop}>
         <Text style={styles.hint}>{HINTS[mode]}</Text>
         {bin ? (
@@ -120,6 +141,50 @@ export default function CaptureScreen() {
         ) : null}
       </View>
       <View style={styles.overlayBottom}>
+        {busy === 'idle' && (
+          <View style={styles.controlRow}>
+            <Pressable
+              style={[styles.control, torch && styles.controlOn]}
+              onPress={() => setTorch((t) => !t)}
+              accessibilityRole="button"
+              accessibilityLabel={torch ? 'Turn torch off' : 'Turn torch on'}
+              accessibilityState={{ selected: torch }}
+              testID="torch-toggle"
+            >
+              <Ionicons
+                name={torch ? 'flashlight' : 'flashlight-outline'}
+                size={20}
+                color={torch ? colors.amberInkOn : '#fff'}
+              />
+            </Pressable>
+
+            <View style={styles.zoomGroup}>
+              <Pressable
+                style={styles.zoomButton}
+                onPress={() => stepZoom(-0.1)}
+                disabled={zoom <= 0}
+                accessibilityRole="button"
+                accessibilityLabel="Zoom out"
+                testID="zoom-out"
+              >
+                <Ionicons name="remove" size={18} color={zoom <= 0 ? '#666' : '#fff'} />
+              </Pressable>
+              <Text style={styles.zoomLabel} testID="zoom-level">
+                {zoom === 0 ? 'zoom' : `${Math.round(zoom * 100)}%`}
+              </Text>
+              <Pressable
+                style={styles.zoomButton}
+                onPress={() => stepZoom(0.1)}
+                disabled={zoom >= 1}
+                accessibilityRole="button"
+                accessibilityLabel="Zoom in"
+                testID="zoom-in"
+              >
+                <Ionicons name="add" size={18} color={zoom >= 1 ? '#666' : '#fff'} />
+              </Pressable>
+            </View>
+          </View>
+        )}
         {busy === 'recognizing' ? (
           <View style={styles.recognizing}>
             <ActivityIndicator color="#fff" />
@@ -196,6 +261,45 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
     gap: 16,
+  },
+  controlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 4,
+  },
+  control: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  controlOn: { backgroundColor: colors.amber, borderColor: colors.amber },
+  zoomGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 23,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 4,
+  },
+  zoomButton: {
+    width: 38,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zoomLabel: {
+    color: '#fff',
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
+    minWidth: 44,
+    textAlign: 'center',
   },
   shutter: {
     width: 74,
