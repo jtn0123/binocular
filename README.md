@@ -72,6 +72,23 @@ Cloud runs also print measured token usage and cost.
 - Image files are **gitignored**; `scripts/devtest/fetch-pool.sh` rebuilds
   them from the manifest after a clone.
 
+### Diagnostics (field testing)
+
+The app keeps a **local, bounded event log** (blueprint D16) so a problem in
+the workshop can be diagnosed afterwards — app lifecycle, screen
+breadcrumbs, scan timings with the engine used, queue retries, searches, and
+**crashes** (a global handler captures what would otherwise vanish when the
+process exits).
+
+- **Settings → Open diagnostics** shows crash/event counts, build + network
+  context, recent events with durations, and a recording toggle.
+- **Share diagnostics** zips the event log, the full DB dump, device context
+  and photos to the share sheet.
+- Always on (including release builds — a standalone walk-around APK has no
+  Metro console), capped at **5,000 events / 30 days**, pruned on boot.
+- **Nothing is ever uploaded.** No telemetry, no third-party crash SDK, and
+  API keys are never logged or exported — only whether a key exists.
+
 ### Device test scripts
 
 ```bash

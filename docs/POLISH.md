@@ -142,3 +142,35 @@ The images themselves are **gitignored** (30 MB doesn't belong in git);
 `scripts/devtest/fetch-pool.sh` rebuilds them from the manifest after a clone.
 To grow it: re-run the harvest scripts → `bank.py` → commit the updated
 manifest. Distinct from `eval/corpus/` (the small hand-labeled eval set).
+
+## On-device diagnostics (2026-07-23, blueprint D16)
+
+Built ahead of physical-device field testing, because the app had **zero**
+logging infrastructure (no crash reporting, no telemetry, not one
+`console.*` call) — the only forensic trail was the scans table.
+
+`src/diagnostics/` is one shared core: a bounded SQLite event log
+(migration 004, 5,000 entries / 30 days, pruned on boot), a secure-store
+on/off flag, device/build context, a global crash handler, and a bundle
+builder. Export **reuses the backup zip path** (`collectPhotoUris` /
+`addPhotosToZip` / `writeAndShareZip` extracted from `src/backup/backup.ts`)
+so the diagnostics zip is a strict superset — dump + all photos + events +
+context — with one code path to keep correct.
+
+Instrumented: scan lifecycle with durations and engine, queue backoff
+attempts (previously in-memory only), `review_saved` proposed/accepted/
+edited/removed (a real-world accuracy signal needing no labeling), searches,
+screen breadcrumbs, connectivity, app lifecycle. `logEvent` is synchronous
+and swallows every error — diagnostics must never break a user flow.
+
+Always-on rather than `__DEV__`-gated: a walk-around test runs on a
+standalone build where the Metro console does not exist.
+
+**Verified live on the emulator** (evidence read straight from the device
+DB): `scan_settled` recorded `duration_ms = 3709` with `engine: fixture`;
+search events carried query + result counts; screen/app/connectivity
+breadcrumbs logged; and an injected uncaught throw was captured as a `crash`
+event **with its stack, surviving the app restart** — the gap that mattered
+most. Not visually confirmed on-device: the crash counter rendering and the
+share-sheet zip (both unit-tested; the zip reuses the proven backup path) —
+the dev client stopped reconnecting to Metro before that step.
