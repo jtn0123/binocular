@@ -14,9 +14,6 @@ name: Android APK
 on:
   push:
     tags: ['v*']
-    # TEMPORARY (removed before merge): proves the pipeline builds on CI while
-    # the PR that would normally exercise it can't be opened.
-    branches: ['claude/tvid-last-commits-ob0n3q']
   workflow_dispatch:
     inputs:
       abis:
