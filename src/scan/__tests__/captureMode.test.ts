@@ -1,6 +1,7 @@
 import {
   DEFAULT_CAPTURE_FLOW,
   flowForMode,
+  needsPreview,
   supportsKeepShooting,
   type CaptureFlow,
 } from '../captureMode';
@@ -31,5 +32,21 @@ describe('capture flow (D18)', () => {
   it('defaults to the blocking flow, so a single scan still ends on review', () => {
     expect(DEFAULT_CAPTURE_FLOW).toBe('review_now');
     expect(flowForMode('bin_audit', DEFAULT_CAPTURE_FLOW)).toBe('review_now');
+  });
+});
+
+describe('capture preview', () => {
+  it('confirms the frame on the engines that charge for it', () => {
+    expect(needsPreview('claude')).toBe(true);
+    expect(needsPreview('openai')).toBe(true);
+  });
+
+  it('costs the free engines no extra tap', () => {
+    expect(needsPreview('fixture')).toBe(false);
+    expect(needsPreview('local')).toBe(false);
+  });
+
+  it('does not block a capture while the engine is still unknown', () => {
+    expect(needsPreview(null)).toBe(false);
   });
 });
