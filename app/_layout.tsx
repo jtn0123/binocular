@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { DbProvider } from '@/db/DbProvider';
 import { DiagnosticsRunner } from '@/diagnostics/DiagnosticsRunner';
@@ -8,7 +9,8 @@ import { navTheme } from '@/theme';
 
 export default function RootLayout() {
   return (
-    <DbProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <DbProvider>
       <QueueRunner />
       <DiagnosticsRunner />
       <Stack screenOptions={navTheme}>
@@ -22,7 +24,8 @@ export default function RootLayout() {
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         <Stack.Screen name="diagnostics" options={{ title: 'Diagnostics' }} />
       </Stack>
-      <StatusBar style="light" />
-    </DbProvider>
+        <StatusBar style="light" />
+      </DbProvider>
+    </GestureHandlerRootView>
   );
 }

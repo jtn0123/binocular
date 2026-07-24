@@ -1,14 +1,16 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import { PromptModal, type PromptRequest } from '@/components/PromptModal';
 import { useDb } from '@/db/DbProvider';
 import {
   checkOutItem,
   deleteBinIfEmpty,
+  deleteItem,
   getBin,
   getScan,
   getShelf,
@@ -16,11 +18,11 @@ import {
   itemsForBin,
   listAuditHistory,
   listItemPhotoUris,
-  updateItem,
   renameBin,
   returnItem,
   setItemQuantity,
   setLowStockThreshold,
+  updateItem,
   type ItemRow,
 } from '@/db/queries';
 import { useFocusTick } from '@/lib/useFocusTick';
@@ -55,9 +57,22 @@ export default function BinDetailScreen() {
   const [tick, setTick] = useState(0);
   const [prompt, setPrompt] = useState<PromptRequest | null>(null);
   const [adding, setAdding] = useState(false);
-  const [viewing, setViewing] = useState<ItemRow | null>(null);
+  const [sheetItem, setSheetItem] = useState<ItemRow | null>(null);
   const [editing, setEditing] = useState<ItemRow | null>(null);
+  // Delete works via undo, not a blocking confirm (field-test ask): the row
+  // is removed immediately and a snackbar restores it — inventory is never
+  // silently lost (§11), the whole record round-trips.
+  const [undoItem, setUndoItem] = useState<ItemRow | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   void tick;
+  const refresh = () => setTick((t) => t + 1);
+
+  useEffect(
+    () => () => {
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+    },
+    [],
+  );
 
   const bin = id ? getBin(db, id) : null;
   if (!bin) {
@@ -72,65 +87,71 @@ export default function BinDetailScreen() {
   const history = listAuditHistory(db, bin.id);
   const itemPhotos = bin.cover_photo_uri ? [] : listItemPhotoUris(db, bin.id);
 
-  function openItemMenu(item: ItemRow) {
-    const buttons = [
-      {
-        text: 'Edit name, tag, quantity…',
-        onPress: () => setEditing(item),
+  function removeItem(item: ItemRow) {
+    deleteItem(db, item.id);
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndoItem(item);
+    undoTimer.current = setTimeout(() => setUndoItem(null), 6000);
+    setSheetItem(null);
+    refresh();
+  }
+
+  function undoRemove() {
+    if (!undoItem) return;
+    insertItem(db, {
+      id: undoItem.id,
+      binId: undoItem.bin_id,
+      name: undoItem.name,
+      brand: undoItem.brand,
+      category: undoItem.category,
+      quantity: undoItem.quantity,
+      labelText: undoItem.label_text,
+      photoUri: undoItem.photo_uri,
+      notes: undoItem.notes,
+      lowStockThreshold: undoItem.low_stock_threshold,
+      sourceScanId: undoItem.source_scan_id,
+    });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndoItem(null);
+    refresh();
+  }
+
+  function promptQuantity(item: ItemRow) {
+    setPrompt({
+      title: `Quantity of ${item.name}`,
+      initialValue: String(item.quantity),
+      keyboardType: 'number-pad',
+      onSubmit: (value) => {
+        setItemQuantity(db, item.id, Math.max(0, parseInt(value, 10) || 0));
+        refresh();
       },
-      item.checked_out_to
-        ? {
-            text: `Return (out to ${item.checked_out_to})`,
-            onPress: () => {
-              returnItem(db, item.id);
-              setTick((t) => t + 1);
-            },
-          }
-        : {
-            text: 'Check out to…',
-            onPress: () =>
-              setPrompt({
-                title: `Check out ${item.name} to…`,
-                placeholder: 'e.g. Sam',
-                submitLabel: 'Check out',
-                onSubmit: (who) => {
-                  checkOutItem(db, item.id, who);
-                  setTick((t) => t + 1);
-                },
-              }),
-          },
-      {
-        text: 'Adjust quantity…',
-        onPress: () =>
-          setPrompt({
-            title: `Quantity of ${item.name}`,
-            initialValue: String(item.quantity),
-            keyboardType: 'number-pad' as const,
-            onSubmit: (value) => {
-              // Never below zero — "-5 screws" is not inventory.
-              setItemQuantity(db, item.id, Math.max(0, parseInt(value, 10) || 0));
-              setTick((t) => t + 1);
-            },
-          }),
+    });
+  }
+
+  function promptLowStock(item: ItemRow) {
+    setPrompt({
+      title: `Alert when ${item.name} is at or below…`,
+      initialValue: item.low_stock_threshold === null ? '' : String(item.low_stock_threshold),
+      placeholder: '10 (0 clears it)',
+      keyboardType: 'number-pad',
+      onSubmit: (value) => {
+        const threshold = parseInt(value, 10) || 0;
+        setLowStockThreshold(db, item.id, threshold > 0 ? threshold : null);
+        refresh();
       },
-      {
-        text: item.low_stock_threshold === null ? 'Set low-stock alert…' : 'Change low-stock alert…',
-        onPress: () =>
-          setPrompt({
-            title: `Alert when ${item.name} is at or below…`,
-            initialValue: item.low_stock_threshold === null ? '' : String(item.low_stock_threshold),
-            placeholder: '10 (0 clears it)',
-            keyboardType: 'number-pad' as const,
-            onSubmit: (value) => {
-              const threshold = parseInt(value, 10) || 0;
-              setLowStockThreshold(db, item.id, threshold > 0 ? threshold : null);
-              setTick((t) => t + 1);
-            },
-          }),
+    });
+  }
+
+  function promptCheckout(item: ItemRow) {
+    setPrompt({
+      title: `Check out ${item.name} to…`,
+      placeholder: 'e.g. Sam',
+      submitLabel: 'Check out',
+      onSubmit: (who) => {
+        checkOutItem(db, item.id, who);
+        refresh();
       },
-      { text: 'Cancel', style: 'cancel' as const },
-    ];
-    Alert.alert(item.name, undefined, buttons);
+    });
   }
 
   async function printLabel() {
@@ -211,7 +232,7 @@ export default function BinDetailScreen() {
                     initialValue: bin.name,
                     onSubmit: (name) => {
                       renameBin(db, bin.id, name);
-                      setTick((t) => t + 1);
+                      refresh();
                     },
                   })
                 }
@@ -250,32 +271,68 @@ export default function BinDetailScreen() {
         }
         ListEmptyComponent={<Text style={styles.empty}>Nothing recorded in this bin yet.</Text>}
         renderItem={({ item }) => (
-          <Pressable
-            style={styles.itemRow}
-            onPress={() => setViewing(item)}
-            onLongPress={() => openItemMenu(item)}
-            delayLongPress={300}
-            accessibilityRole="button"
-            accessibilityLabel={`${item.name} — view photo and details`}
+          <ReanimatedSwipeable
+            friction={2}
+            rightThreshold={36}
+            overshootRight={false}
+            renderRightActions={() => (
+              <Pressable
+                style={styles.swipeDelete}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete ${item.name}`}
+                onPress={() => removeItem(item)}
+              >
+                <Ionicons name="trash" size={18} color="#fff" />
+                <Text style={styles.swipeDeleteLabel}>Delete</Text>
+              </Pressable>
+            )}
           >
-            <Text style={styles.itemQty}>{item.quantity}×</Text>
-            <View style={styles.itemMain}>
-              <Text style={styles.itemName}>
-                {item.brand ? `${item.brand} ` : ''}
-                {item.name}
-              </Text>
-              {item.label_text ? <Text style={styles.itemLabel}>{item.label_text}</Text> : null}
-              {item.checked_out_to ? (
-                <Text style={styles.itemOut}>checked out to {item.checked_out_to}</Text>
-              ) : null}
-              {item.low_stock_threshold !== null && item.quantity <= item.low_stock_threshold ? (
-                <Text style={styles.itemLow}>running low</Text>
-              ) : null}
+            <View style={styles.itemRow}>
+              {/* Tap the quantity to edit it directly (field-test ask). */}
+              <Pressable
+                onPress={() => promptQuantity(item)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Change quantity of ${item.name}, currently ${item.quantity}`}
+                testID={`qty-${item.id}`}
+              >
+                <Text style={styles.itemQty}>{item.quantity}×</Text>
+              </Pressable>
+              <Pressable
+                style={styles.itemMain}
+                onPress={() => setSheetItem(item)}
+                onLongPress={() => setSheetItem(item)}
+                delayLongPress={300}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.name} — photo and options`}
+              >
+                <Text style={styles.itemName}>
+                  {item.brand ? `${item.brand} ` : ''}
+                  {item.name}
+                </Text>
+                {item.label_text ? <Text style={styles.itemLabel}>{item.label_text}</Text> : null}
+                {item.checked_out_to ? (
+                  <Text style={styles.itemOut}>checked out to {item.checked_out_to}</Text>
+                ) : null}
+                {item.low_stock_threshold !== null && item.quantity <= item.low_stock_threshold ? (
+                  <Text style={styles.itemLow}>running low</Text>
+                ) : null}
+              </Pressable>
+              <Text style={styles.itemCategory}>{item.category.replace(/_/g, ' ')}</Text>
             </View>
-            <Text style={styles.itemCategory}>{item.category.replace(/_/g, ' ')}</Text>
-          </Pressable>
+          </ReanimatedSwipeable>
         )}
       />
+      {undoItem && (
+        <View style={styles.snackbar} testID="undo-snackbar">
+          <Text style={styles.snackbarText} numberOfLines={1}>
+            Deleted {undoItem.name}
+          </Text>
+          <Pressable onPress={undoRemove} hitSlop={8}>
+            <Text style={styles.snackbarUndo}>UNDO</Text>
+          </Pressable>
+        </View>
+      )}
       <PromptModal request={prompt} onClose={() => setPrompt(null)} />
       <ChipEditor
         visible={adding}
@@ -292,21 +349,35 @@ export default function BinDetailScreen() {
             labelText: values.labelText,
           });
           setAdding(false);
-          setTick((t) => t + 1);
+          refresh();
         }}
       />
-      <ItemViewer
+      <ItemSheet
         db={db}
-        item={viewing}
-        onClose={() => setViewing(null)}
+        item={sheetItem}
+        onClose={() => setSheetItem(null)}
         onEdit={(item) => {
-          setViewing(null);
+          setSheetItem(null);
           setEditing(item);
         }}
-        onActions={(item) => {
-          setViewing(null);
-          openItemMenu(item);
+        onQuantity={(item) => {
+          setSheetItem(null);
+          promptQuantity(item);
         }}
+        onLowStock={(item) => {
+          setSheetItem(null);
+          promptLowStock(item);
+        }}
+        onCheckoutOrReturn={(item) => {
+          setSheetItem(null);
+          if (item.checked_out_to) {
+            returnItem(db, item.id);
+            refresh();
+          } else {
+            promptCheckout(item);
+          }
+        }}
+        onDelete={removeItem}
       />
       <ChipEditor
         visible={editing !== null}
@@ -338,7 +409,7 @@ export default function BinDetailScreen() {
             });
           }
           setEditing(null);
-          setTick((t) => t + 1);
+          refresh();
         }}
       />
     </View>
@@ -346,68 +417,108 @@ export default function BinDetailScreen() {
 }
 
 /**
- * Tap an item to see what it looks like: the photo of the scan that
- * cataloged it (field-test ask), with the item's details and a shortcut to
- * the existing long-press actions.
+ * Themed replacement for the old system Alert menu (field-test: "archaic,
+ * can't back off it, doesn't fit the theme"). Tap an item → its photo (from
+ * the scan that cataloged it) plus every action; backdrop tap dismisses.
  */
-function ItemViewer({
+function ItemSheet({
   db,
   item,
   onClose,
   onEdit,
-  onActions,
+  onQuantity,
+  onLowStock,
+  onCheckoutOrReturn,
+  onDelete,
 }: {
   db: ReturnType<typeof useDb>;
   item: ItemRow | null;
   onClose: () => void;
   onEdit: (item: ItemRow) => void;
-  onActions: (item: ItemRow) => void;
+  onQuantity: (item: ItemRow) => void;
+  onLowStock: (item: ItemRow) => void;
+  onCheckoutOrReturn: (item: ItemRow) => void;
+  onDelete: (item: ItemRow) => void;
 }) {
   const sourceScan = item?.source_scan_id ? getScan(db, item.source_scan_id) : null;
   return (
     <Modal visible={item !== null} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.viewerBackdrop} onPress={onClose}>
-        <Pressable style={styles.viewerCard} onPress={() => {}}>
+      <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+        <Pressable style={styles.sheetCard} onPress={() => {}}>
           {item && (
             <>
               {sourceScan?.photo_uri ? (
                 <Image
                   source={{ uri: sourceScan.photo_uri }}
-                  style={styles.viewerPhoto}
+                  style={styles.sheetPhoto}
                   contentFit="contain"
                 />
-              ) : (
-                <View style={[styles.viewerPhoto, styles.viewerPhotoEmpty]}>
-                  <Ionicons name="image" size={28} color={colors.textFaint} />
-                  <Text style={styles.viewerNoPhoto}>No photo — added manually</Text>
-                </View>
-              )}
-              <Text style={styles.viewerName}>
+              ) : null}
+              <Text style={styles.sheetName}>
                 {item.quantity > 1 ? `${item.quantity}× ` : ''}
                 {item.brand ? `${item.brand} ` : ''}
                 {item.name}
               </Text>
-              <Text style={styles.viewerMeta}>
+              <Text style={styles.sheetMeta}>
                 {item.category.replace(/_/g, ' ')}
                 {item.label_text ? ` · ${item.label_text}` : ''}
-                {sourceScan ? ` · scanned ${sourceScan.created_at.slice(0, 10)}` : ''}
+                {sourceScan ? ` · scanned ${sourceScan.created_at.slice(0, 10)}` : ' · added manually'}
               </Text>
-              <View style={styles.viewerActions}>
-                <Pressable onPress={() => onEdit(item)} testID="viewer-edit">
-                  <Text style={styles.viewerLink}>Edit</Text>
-                </Pressable>
-                <Pressable onPress={() => onActions(item)}>
-                  <Text style={styles.viewerLink}>Actions…</Text>
-                </Pressable>
-                <Pressable onPress={onClose}>
-                  <Text style={styles.viewerLink}>Close</Text>
-                </Pressable>
-              </View>
+              <SheetRow icon="pencil" label="Edit name, tag, details" onPress={() => onEdit(item)} />
+              <SheetRow
+                icon="swap-vertical"
+                label={`Adjust quantity (${item.quantity})`}
+                onPress={() => onQuantity(item)}
+              />
+              <SheetRow
+                icon="notifications-outline"
+                label={
+                  item.low_stock_threshold === null
+                    ? 'Set low-stock alert'
+                    : `Low-stock alert (at ${item.low_stock_threshold})`
+                }
+                onPress={() => onLowStock(item)}
+              />
+              <SheetRow
+                icon={item.checked_out_to ? 'arrow-undo' : 'exit-outline'}
+                label={
+                  item.checked_out_to ? `Return (out to ${item.checked_out_to})` : 'Check out to…'
+                }
+                onPress={() => onCheckoutOrReturn(item)}
+              />
+              <SheetRow
+                icon="trash-outline"
+                label="Delete item"
+                danger
+                onPress={() => onDelete(item)}
+              />
+              <Pressable onPress={onClose} style={styles.sheetClose}>
+                <Text style={styles.sheetCloseLabel}>Close</Text>
+              </Pressable>
             </>
           )}
         </Pressable>
       </Pressable>
     </Modal>
+  );
+}
+
+function SheetRow({
+  icon,
+  label,
+  onPress,
+  danger,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <Pressable style={styles.sheetRow} onPress={onPress} accessibilityRole="button">
+      <Ionicons name={icon} size={18} color={danger ? colors.danger : colors.steel} />
+      <Text style={[styles.sheetRowLabel, danger && { color: colors.danger }]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -466,6 +577,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
     alignItems: 'center',
+    backgroundColor: colors.bg,
   },
   itemQty: { fontFamily: mono, color: colors.textDim, minWidth: 34, fontSize: 13 },
   itemMain: { flex: 1 },
@@ -474,6 +586,31 @@ const styles = StyleSheet.create({
   itemCategory: { fontSize: 11, color: colors.textFaint },
   itemOut: { fontSize: 11, color: colors.warn },
   itemLow: { fontSize: 11, color: colors.danger },
+  swipeDelete: {
+    backgroundColor: colors.danger,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 84,
+    gap: 2,
+  },
+  swipeDeleteLabel: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  snackbar: {
+    position: 'absolute',
+    left: sp(4),
+    right: sp(4),
+    bottom: sp(5),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(3),
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.lg,
+    paddingHorizontal: sp(4),
+    paddingVertical: sp(3),
+  },
+  snackbarText: { ...type.body, flex: 1 },
+  snackbarUndo: { color: colors.amber, fontWeight: '800' },
   historyTitle: { ...type.stamp, marginBottom: sp(1.5), marginTop: sp(1) },
   historyCell: { alignItems: 'center', gap: 2 },
   historyThumb: {
@@ -486,35 +623,38 @@ const styles = StyleSheet.create({
   },
   historyDate: { fontSize: 10, color: colors.textFaint, fontFamily: mono },
   empty: { ...type.dim, paddingVertical: sp(6), textAlign: 'center' },
-  viewerBackdrop: {
+  sheetBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    padding: sp(5),
+    justifyContent: 'flex-end',
+    padding: sp(4),
   },
-  viewerCard: {
+  sheetCard: {
     backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderStrong,
     borderRadius: radius.xl,
     padding: sp(4),
-    gap: sp(2.5),
+    gap: sp(1),
   },
-  viewerPhoto: {
+  sheetPhoto: {
     width: '100%',
-    height: 300,
+    height: 220,
     borderRadius: radius.lg,
     backgroundColor: colors.surfaceSunken,
+    marginBottom: sp(2),
   },
-  viewerPhotoEmpty: { alignItems: 'center', justifyContent: 'center', gap: sp(2) },
-  viewerNoPhoto: { ...type.dim, fontSize: 13 },
-  viewerName: { ...type.body, fontSize: 17, fontWeight: '600' },
-  viewerMeta: { color: colors.textFaint, fontSize: 13 },
-  viewerActions: {
+  sheetName: { ...type.body, fontSize: 17, fontWeight: '600' },
+  sheetMeta: { color: colors.textFaint, fontSize: 13, marginBottom: sp(2) },
+  sheetRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: sp(5),
-    marginTop: sp(1),
+    alignItems: 'center',
+    gap: sp(3),
+    paddingVertical: sp(2.75),
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
-  viewerLink: { color: colors.steel, fontWeight: '700' },
+  sheetRowLabel: { ...type.body, fontSize: 15 },
+  sheetClose: { alignItems: 'center', paddingTop: sp(3) },
+  sheetCloseLabel: { color: colors.steel, fontWeight: '700' },
 });
