@@ -1,6 +1,8 @@
 import type { DbAdapter } from '../db/adapter';
 import type { BinRow, ItemCategory } from '../db/queries';
 
+import { correctQuery } from './fuzzy';
+
 /**
  * FTS5 search helpers (blueprint §8.3): prefix matching ("scre" finds
  * screwdrivers), name hits ranked above label_text hits via bm25 column
@@ -28,11 +30,15 @@ export interface SearchResult {
  * user punctuation can't break the query grammar) with a * suffix.
  * Returns null when nothing searchable remains.
  */
-export function toFtsQuery(raw: string): string | null {
-  const tokens = raw
+export function tokenize(raw: string): string[] {
+  return raw
     .split(/[^\p{L}\p{N}]+/u)
     .map((t) => t.trim())
     .filter((t) => t.length > 0);
+}
+
+export function toFtsQuery(raw: string): string | null {
+  const tokens = tokenize(raw);
   if (tokens.length === 0) return null;
   return tokens.map((t) => `"${t.replace(/"/g, '')}"*`).join(' ');
 }
@@ -85,4 +91,34 @@ export function searchItems(db: DbAdapter, rawQuery: string, limit = 50): Search
      LIMIT ?`,
     [match, limit],
   );
+}
+
+export interface SearchOutcome {
+  results: SearchResult[];
+  /**
+   * The spelling actually searched, when what was typed matched nothing and
+   * a near-miss in the index did. Null on an ordinary search — the UI only
+   * says "showing results for…" when it really did substitute something.
+   */
+  corrected: string | null;
+}
+
+/**
+ * Search, then — only if that found nothing — retry against the closest
+ * spellings present in the index (src/search/fuzzy.ts). The fallback never
+ * runs on a query that already matched, so the <100ms AC stands.
+ */
+export function searchItemsWithFallback(
+  db: DbAdapter,
+  rawQuery: string,
+  limit = 50,
+): SearchOutcome {
+  const results = searchItems(db, rawQuery, limit);
+  if (results.length > 0) return { results, corrected: null };
+
+  const corrected = correctQuery(db, tokenize(rawQuery));
+  if (!corrected) return { results, corrected: null };
+
+  const retried = searchItems(db, corrected, limit);
+  return retried.length > 0 ? { results: retried, corrected } : { results: [], corrected: null };
 }

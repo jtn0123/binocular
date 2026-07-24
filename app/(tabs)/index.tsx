@@ -22,7 +22,7 @@ import {
 } from '@/db/queries';
 import { logEvent } from '@/diagnostics/events';
 import { useFocusTick } from '@/lib/useFocusTick';
-import { searchBins, searchItems, type SearchResult } from '@/search/fts';
+import { searchBins, searchItemsWithFallback, type SearchResult } from '@/search/fts';
 import { colors, radius, sp, type } from '@/theme';
 
 function BinCard({
@@ -181,7 +181,9 @@ export default function HomeScreen() {
   const [tick, setTick] = useState(0);
   void tick;
   const trimmed = query.trim();
-  const results = trimmed ? searchItems(db, trimmed, 50) : [];
+  const { results, corrected } = trimmed
+    ? searchItemsWithFallback(db, trimmed, 50)
+    : { results: [] as SearchResult[], corrected: null };
   const binMatches = trimmed ? searchBins(db, trimmed) : [];
   const recentBins = trimmed ? [] : listRecentBins(db, 12);
 
@@ -192,7 +194,12 @@ export default function HomeScreen() {
       logEvent(db, {
         kind: 'search',
         name: 'search',
-        detail: { query: trimmed, items: results.length, bins: binMatches.length },
+        detail: {
+          query: trimmed,
+          items: results.length,
+          bins: binMatches.length,
+          corrected,
+        },
       });
     }, 400);
     return () => clearTimeout(timer);
@@ -255,6 +262,11 @@ export default function HomeScreen() {
           <Text style={styles.stamp}>
             {results.length} match{results.length === 1 ? '' : 'es'}
           </Text>
+          {corrected ? (
+            <Text style={styles.corrected} testID="search-correction">
+              Nothing for “{trimmed}” — showing “{corrected}”
+            </Text>
+          ) : null}
           <FlatList
             data={results}
             keyExtractor={(r) => r.itemId}
@@ -379,6 +391,7 @@ const styles = StyleSheet.create({
   crumbRow: { flexDirection: 'row', alignItems: 'center', gap: sp(2) },
   checkedOut: { fontSize: 11, color: colors.warn },
   empty: { ...type.dim, paddingVertical: sp(6), textAlign: 'center' },
+  corrected: { ...type.dim, fontSize: 12, color: colors.amber, marginTop: -sp(1) },
   binHits: { gap: sp(1.5) },
   binHit: {
     flexDirection: 'row',

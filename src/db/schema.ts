@@ -183,6 +183,20 @@ INSERT INTO item_search(rowid, name, brand, label_text, notes, category)
   SELECT rowid, name, brand, label_text, notes, category FROM items;
 `;
 
+/**
+ * Field-test finding: prefix-only FTS means a misspelling returns silence —
+ * "screwdrver" finds nothing, and the workshop conclusion is "the app
+ * doesn't have it" rather than "I typed it wrong".
+ *
+ * `fts5vocab` exposes the terms already in the index, so a near-miss can be
+ * corrected against words this workshop actually contains — no dictionary
+ * to ship, nothing to keep in sync, and still completely offline (I4). It is
+ * a read-only view over item_search, so it adds no write path and no storage.
+ */
+const MIGRATION_007_SEARCH_VOCAB = `
+CREATE VIRTUAL TABLE item_vocab USING fts5vocab(item_search, 'row');
+`;
+
 export const MIGRATIONS: readonly string[] = [
   MIGRATION_001_INITIAL_SCHEMA,
   MIGRATION_002_FTS_TRIGGERS,
@@ -190,6 +204,7 @@ export const MIGRATIONS: readonly string[] = [
   MIGRATION_004_EVENTS,
   MIGRATION_005_DELETED_ITEMS,
   MIGRATION_006_FTS_CATEGORY,
+  MIGRATION_007_SEARCH_VOCAB,
 ];
 
 export function getSchemaVersion(db: DbAdapter): number {
