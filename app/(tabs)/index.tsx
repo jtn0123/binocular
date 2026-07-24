@@ -11,6 +11,7 @@ import { useDb } from '@/db/DbProvider';
 import {
   countItemsForBin,
   getBin,
+  getBinPlace,
   listCheckedOutItems,
   listItemPhotoUris,
   listLowStockItems,
@@ -28,11 +29,13 @@ function BinCard({
   bin,
   itemCount,
   itemPhotoUris,
+  place,
   onShowQr,
 }: {
   bin: BinRow;
   itemCount: number;
   itemPhotoUris: string[];
+  place: string | null;
   onShowQr: () => void;
 }) {
   return (
@@ -62,7 +65,7 @@ function BinCard({
           </Text>
           <Text style={styles.cardMeta}>
             {itemCount} item{itemCount === 1 ? '' : 's'}
-            {bin.last_scanned_at ? `  ·  scanned ${bin.last_scanned_at.slice(0, 10)}` : ''}
+            {place ? `  ·  ${place}` : ''}
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
@@ -233,9 +236,18 @@ export default function HomeScreen() {
                   onPress={() => router.push({ pathname: '/bin/[id]', params: { id: bin.id } })}
                 >
                   <CodeTag code={bin.short_code} small />
-                  <Text style={styles.binHitName} numberOfLines={1}>
-                    {bin.name}
-                  </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.binHitName} numberOfLines={1}>
+                      {bin.name}
+                    </Text>
+                    {(() => {
+                      const where = getBinPlace(db, bin.id);
+                      const crumb = [where.shelfName, where.locationName]
+                        .filter(Boolean)
+                        .join(' · ');
+                      return crumb ? <Text style={styles.cardMeta}>{crumb}</Text> : null;
+                    })()}
+                  </View>
                 </Pressable>
               ))}
             </View>
@@ -317,6 +329,10 @@ export default function HomeScreen() {
                 bin={bin}
                 itemCount={countItemsForBin(db, bin.id)}
                 itemPhotoUris={bin.cover_photo_uri ? [] : listItemPhotoUris(db, bin.id)}
+                place={(() => {
+                  const where = getBinPlace(db, bin.id);
+                  return [where.shelfName, where.locationName].filter(Boolean).join(' · ') || null;
+                })()}
                 onShowQr={() => setQrBin(bin)}
               />
             )}
@@ -375,7 +391,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: sp(3),
     paddingVertical: sp(2.5),
   },
-  binHitName: { color: colors.text, fontWeight: '600', flex: 1 },
+  binHitName: { color: colors.text, fontWeight: '600' },
   statusBlock: { gap: sp(2) },
   statusRow: {
     flexDirection: 'row',

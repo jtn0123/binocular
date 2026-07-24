@@ -276,6 +276,7 @@ export function createBinsBulk(
   return created;
 }
 
+/** User-set bin cover (also used by dev seeds); audits use updateBinAfterScan. */
 export function setBinCoverPhoto(db: DbAdapter, binId: string, uri: string): void {
   db.runSync('UPDATE bins SET cover_photo_uri = ? WHERE id = ?', [uri, binId]);
 }
@@ -416,20 +417,118 @@ export function updateItem(
     category: ItemCategory;
     quantity: number;
     labelText: string | null;
+    notes?: string | null;
   },
 ): void {
   db.runSync(
-    'UPDATE items SET name = ?, brand = ?, category = ?, quantity = ?, label_text = ?, updated_at = ? WHERE id = ?',
+    'UPDATE items SET name = ?, brand = ?, category = ?, quantity = ?, label_text = ?, notes = ?, updated_at = ? WHERE id = ?',
     [
       input.name,
       input.brand,
       input.category,
       Math.max(0, input.quantity),
       input.labelText,
+      input.notes ?? null,
       nowIso(),
       itemId,
     ],
   );
+}
+
+/** Re-home a single item (field-test ask: items were stuck in their bin). */
+export function moveItemToBin(db: DbAdapter, itemId: string, binId: string): void {
+  db.runSync('UPDATE items SET bin_id = ?, updated_at = ? WHERE id = ?', [
+    binId,
+    nowIso(),
+    itemId,
+  ]);
+}
+
+/** Shelf + location breadcrumb for a bin (Home cards, labels). */
+export function getBinPlace(
+  db: DbAdapter,
+  binId: string,
+): { shelfName: string | null; locationName: string | null } {
+  const row = db.getFirstSync<{ shelf_name: string | null; location_name: string | null }>(
+    `SELECT s.name AS shelf_name, l.name AS location_name
+     FROM bins b
+     LEFT JOIN shelves s ON s.id = b.shelf_id
+     LEFT JOIN locations l ON l.id = s.location_id
+     WHERE b.id = ?`,
+    [binId],
+  );
+  return { shelfName: row?.shelf_name ?? null, locationName: row?.location_name ?? null };
+}
+
+// --- D17: recently-deleted items -----------------------------------------
+
+export interface DeletedItemRow {
+  id: string;
+  bin_id: string | null;
+  name: string;
+  brand: string | null;
+  category: ItemCategory;
+  quantity: number;
+  label_text: string | null;
+  photo_uri: string | null;
+  notes: string | null;
+  low_stock_threshold: number | null;
+  source_scan_id: string | null;
+  created_at: string;
+  deleted_at: string;
+}
+
+/** Delete = snapshot into deleted_items, then really delete (D17). */
+export function softDeleteItem(db: DbAdapter, itemId: string): void {
+  db.withTransactionSync(() => {
+    db.runSync(
+      `INSERT OR REPLACE INTO deleted_items
+       (id, bin_id, name, brand, category, quantity, label_text, photo_uri,
+        notes, low_stock_threshold, source_scan_id, created_at, deleted_at)
+       SELECT id, bin_id, name, brand, category, quantity, label_text, photo_uri,
+              notes, low_stock_threshold, source_scan_id, created_at, ?
+       FROM items WHERE id = ?`,
+      [nowIso(), itemId],
+    );
+    db.runSync('DELETE FROM items WHERE id = ?', [itemId]);
+  });
+}
+
+export function listDeletedItems(db: DbAdapter): DeletedItemRow[] {
+  return db.getAllSync<DeletedItemRow>('SELECT * FROM deleted_items ORDER BY deleted_at DESC');
+}
+
+/**
+ * Restore a snapshot back into items. `targetBinId` overrides the original
+ * bin (the caller handles the original bin having since been deleted).
+ */
+export function restoreDeletedItem(db: DbAdapter, id: string, targetBinId?: string): boolean {
+  const row = db.getFirstSync<DeletedItemRow>('SELECT * FROM deleted_items WHERE id = ?', [id]);
+  if (!row) return false;
+  const binId = targetBinId ?? row.bin_id;
+  if (!binId) return false;
+  db.withTransactionSync(() => {
+    insertItem(db, {
+      id: row.id,
+      binId,
+      name: row.name,
+      brand: row.brand,
+      category: row.category,
+      quantity: row.quantity,
+      labelText: row.label_text,
+      photoUri: row.photo_uri,
+      notes: row.notes,
+      lowStockThreshold: row.low_stock_threshold,
+      sourceScanId: row.source_scan_id,
+    });
+    db.runSync('DELETE FROM deleted_items WHERE id = ?', [id]);
+  });
+  return true;
+}
+
+export function purgeDeletedItems(db: DbAdapter, maxAgeDays = 30): void {
+  const cutoff = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
+  db.runSync('DELETE FROM deleted_items WHERE deleted_at < ?', [cutoff]);
 }
 
 /**

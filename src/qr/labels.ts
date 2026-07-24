@@ -14,6 +14,8 @@ export interface LabelSpec {
   code: string;
   /** Secondary line — bin name, or "Shelf"/"Location". */
   name: string;
+  /** Optional third line — shelf · location breadcrumb (field-test ask). */
+  where?: string;
 }
 
 /** Renders a QR code as an inline SVG sized via viewBox (scales in CSS). */
@@ -51,7 +53,9 @@ function labelHtml(label: LabelSpec): string {
     `<div class="label">` +
     `<div class="qr">${svg}</div>` +
     `<div class="text"><div class="code">${escapeHtml(label.code)}</div>` +
-    `<div class="name">${escapeHtml(label.name)}</div></div>` +
+    `<div class="name">${escapeHtml(label.name)}</div>` +
+    (label.where ? `<div class="where">${escapeHtml(label.where)}</div>` : '') +
+    `</div>` +
     `</div>`
   );
 }
@@ -93,5 +97,54 @@ export function labelSheetHtml(labels: LabelSpec[]): string {
   .code { font-size: 28pt; font-weight: 700; letter-spacing: 0.02em; }
   .name { font-size: 13pt; color: #333; margin-top: 0.06in;
           overflow: hidden; text-overflow: ellipsis; }
+  .where { font-size: 10pt; color: #666; margin-top: 0.04in;
+           overflow: hidden; text-overflow: ellipsis; }
   </style></head><body>${pages.join('')}</body></html>`;
+}
+
+/**
+ * Per-shelf poster (field-test ask): one page with the shelf QR big at the
+ * top and a grid of its bins' mini labels below — tape it to the shelf edge.
+ */
+export function shelfPosterHtml(input: {
+  shelfName: string;
+  locationName: string | null;
+  shelfPayload: QrPayload;
+  bins: { payload: QrPayload; code: string; name: string }[];
+}): string {
+  const shelfQr = buildQrSvg(encodeQrPayload(input.shelfPayload));
+  const cells = input.bins
+    .map(
+      (bin) =>
+        `<div class="cell"><div class="cellqr">${buildQrSvg(encodeQrPayload(bin.payload))}</div>` +
+        `<div class="cellcode">${escapeHtml(bin.code)}</div>` +
+        `<div class="cellname">${escapeHtml(bin.name)}</div></div>`,
+    )
+    .join('');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  @page { size: letter; margin: 0.5in; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, Roboto, 'Segoe UI', sans-serif; }
+  .head { display: flex; align-items: center; gap: 0.3in;
+          border: 1px dashed #999; border-radius: 8px; padding: 0.2in;
+          margin-bottom: 0.25in; }
+  .headqr { width: 1.8in; height: 1.8in; flex-shrink: 0; }
+  .headqr svg { width: 100%; height: 100%; }
+  .shelf { font-size: 30pt; font-weight: 700; }
+  .loc { font-size: 14pt; color: #555; margin-top: 0.08in; }
+  .grid { display: flex; flex-wrap: wrap; gap: 0.15in; }
+  .cell { width: 1.55in; border: 1px dashed #bbb; border-radius: 6px;
+          padding: 0.1in; text-align: center; }
+  .cellqr { width: 1in; height: 1in; margin: 0 auto; }
+  .cellqr svg { width: 100%; height: 100%; }
+  .cellcode { font-size: 13pt; font-weight: 700; margin-top: 0.05in; }
+  .cellname { font-size: 8pt; color: #555; overflow: hidden;
+              text-overflow: ellipsis; white-space: nowrap; }
+  </style></head><body>
+  <div class="head"><div class="headqr">${shelfQr}</div>
+  <div><div class="shelf">${escapeHtml(input.shelfName)}</div>
+  ${input.locationName ? `<div class="loc">${escapeHtml(input.locationName)}</div>` : ''}
+  </div></div>
+  <div class="grid">${cells}</div>
+  </body></html>`;
 }

@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
 import { useDb } from '../db/DbProvider';
+import { purgeDeletedItems } from '../db/queries';
 
 import { initScanQueue, pruneOldScanPhotos, recoverInterruptedScans } from './scanQueue';
 
@@ -20,6 +21,8 @@ export function QueueRunner() {
       const file = new File(uri);
       if (file.exists) file.delete();
     });
+    // D17: recently-deleted items age out after 30 days, same boot cadence.
+    purgeDeletedItems(db);
 
     const queue = initScanQueue(db);
     void queue.drain();

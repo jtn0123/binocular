@@ -119,11 +119,34 @@ CREATE TABLE events (
 CREATE INDEX events_created_at ON events(created_at);
 `;
 
+// D17: recently-deleted safety net. A full snapshot COPY — items really are
+// deleted from `items`, so live queries and the FTS index need no changes
+// and search can never surface a ghost. Purged after 30 days on boot.
+const MIGRATION_005_DELETED_ITEMS = `
+CREATE TABLE deleted_items (
+  id TEXT PRIMARY KEY,
+  bin_id TEXT,
+  name TEXT NOT NULL,
+  brand TEXT,
+  category TEXT NOT NULL,
+  quantity INTEGER NOT NULL,
+  label_text TEXT,
+  photo_uri TEXT,
+  notes TEXT,
+  low_stock_threshold INTEGER,
+  source_scan_id TEXT,
+  created_at TEXT NOT NULL,
+  deleted_at TEXT NOT NULL
+);
+CREATE INDEX deleted_items_deleted_at ON deleted_items(deleted_at);
+`;
+
 export const MIGRATIONS: readonly string[] = [
   MIGRATION_001_INITIAL_SCHEMA,
   MIGRATION_002_FTS_TRIGGERS,
   MIGRATION_003_SCAN_USAGE,
   MIGRATION_004_EVENTS,
+  MIGRATION_005_DELETED_ITEMS,
 ];
 
 export function getSchemaVersion(db: DbAdapter): number {

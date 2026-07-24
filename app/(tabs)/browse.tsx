@@ -9,6 +9,7 @@ import { useDb } from '@/db/DbProvider';
 import {
   createBinsBulk,
   createLocation,
+  getBinPlace,
   createShelf,
   deleteLocation,
   deleteShelf,
@@ -25,7 +26,7 @@ import {
 } from '@/db/queries';
 import { quickCreateBin } from '@/db/scaffold';
 import { useFocusTick } from '@/lib/useFocusTick';
-import { printLabelSheet } from '@/qr/print';
+import { printLabelSheet, printShelfPoster } from '@/qr/print';
 import { colors, radius, sp, type } from '@/theme';
 
 function BinRowLink({ bin }: { bin: BinRow }) {
@@ -91,11 +92,16 @@ export default function BrowseScreen() {
     if (bins.length === 0) return;
     try {
       await printLabelSheet(
-        bins.map((bin) => ({
-          payload: { type: 'bin', id: bin.id },
-          code: bin.short_code,
-          name: bin.name,
-        })),
+        bins.map((bin) => {
+          const place = getBinPlace(db, bin.id);
+          const where = [place.shelfName, place.locationName].filter(Boolean).join(' \u00b7 ');
+          return {
+            payload: { type: 'bin' as const, id: bin.id },
+            code: bin.short_code,
+            name: bin.name,
+            where: where || undefined,
+          };
+        }),
       );
     } catch (err) {
       Alert.alert('Print failed', err instanceof Error ? err.message : String(err));
@@ -270,6 +276,29 @@ export default function BrowseScreen() {
                             },
                           })
                         }
+                      />
+                      <IconButton
+                        icon="grid-outline"
+                        label={`Print poster for ${shelf.name}`}
+                        onPress={async () => {
+                          try {
+                            await printShelfPoster({
+                              shelfName: shelf.name,
+                              locationName: location.name,
+                              shelfPayload: { type: 'shelf', id: shelf.id },
+                              bins: listBinsForShelf(db, shelf.id).map((bin) => ({
+                                payload: { type: 'bin' as const, id: bin.id },
+                                code: bin.short_code,
+                                name: bin.name,
+                              })),
+                            });
+                          } catch (err) {
+                            Alert.alert(
+                              'Print failed',
+                              err instanceof Error ? err.message : String(err),
+                            );
+                          }
+                        }}
                       />
                       <IconButton
                         icon="pencil"

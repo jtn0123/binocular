@@ -5,24 +5,29 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 
+import { CodeTag } from '@/components/CodeTag';
 import { PromptModal, type PromptRequest } from '@/components/PromptModal';
 import { useDb } from '@/db/DbProvider';
 import {
   checkOutItem,
   deleteBinIfEmpty,
-  deleteItem,
   getBin,
   getScan,
   getShelf,
   insertItem,
   itemsForBin,
   listAuditHistory,
+  listBins,
   listItemPhotoUris,
+  moveItemToBin,
   renameBin,
+  restoreDeletedItem,
   returnItem,
   setItemQuantity,
   setLowStockThreshold,
+  softDeleteItem,
   updateItem,
+  type BinRow,
   type ItemRow,
 } from '@/db/queries';
 import { useFocusTick } from '@/lib/useFocusTick';
@@ -35,16 +40,33 @@ function ActionChip({
   label,
   onPress,
   danger,
+  active,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   danger?: boolean;
+  active?: boolean;
 }) {
   return (
-    <Pressable style={[styles.action, danger && styles.actionDanger]} onPress={onPress}>
-      <Ionicons name={icon} size={15} color={danger ? colors.danger : colors.steel} />
-      <Text style={[styles.actionLabel, danger && styles.actionLabelDanger]}>{label}</Text>
+    <Pressable
+      style={[styles.action, danger && styles.actionDanger, active && styles.actionActive]}
+      onPress={onPress}
+    >
+      <Ionicons
+        name={icon}
+        size={15}
+        color={danger ? colors.danger : active ? colors.amberInkOn : colors.steel}
+      />
+      <Text
+        style={[
+          styles.actionLabel,
+          danger && styles.actionLabelDanger,
+          active && styles.actionLabelActive,
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -59,10 +81,14 @@ export default function BinDetailScreen() {
   const [adding, setAdding] = useState(false);
   const [sheetItem, setSheetItem] = useState<ItemRow | null>(null);
   const [editing, setEditing] = useState<ItemRow | null>(null);
-  // Delete works via undo, not a blocking confirm (field-test ask): the row
-  // is removed immediately and a snackbar restores it — inventory is never
-  // silently lost (§11), the whole record round-trips.
-  const [undoItem, setUndoItem] = useState<ItemRow | null>(null);
+  // Move picker serves single-item and bulk moves.
+  const [moving, setMoving] = useState<ItemRow[] | null>(null);
+  // Multi-select mode (field-test ask: batch cleanup).
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  // Deletes go through the D17 trash: instantly undoable here, restorable
+  // for 30 days from Recently deleted.
+  const [undoItems, setUndoItems] = useState<ItemRow[]>([]);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   void tick;
   const refresh = () => setTick((t) => t + 1);
@@ -86,33 +112,31 @@ export default function BinDetailScreen() {
   const shelf = bin.shelf_id ? getShelf(db, bin.shelf_id) : null;
   const history = listAuditHistory(db, bin.id);
   const itemPhotos = bin.cover_photo_uri ? [] : listItemPhotoUris(db, bin.id);
+  const selectedItems = items.filter((i) => selected[i.id]);
 
-  function removeItem(item: ItemRow) {
-    deleteItem(db, item.id);
+  function removeItems(list: ItemRow[]) {
+    for (const item of list) softDeleteItem(db, item.id);
     if (undoTimer.current) clearTimeout(undoTimer.current);
-    setUndoItem(item);
-    undoTimer.current = setTimeout(() => setUndoItem(null), 6000);
+    setUndoItems(list);
+    undoTimer.current = setTimeout(() => setUndoItems([]), 6000);
     setSheetItem(null);
+    setSelectMode(false);
+    setSelected({});
     refresh();
   }
 
   function undoRemove() {
-    if (!undoItem) return;
-    insertItem(db, {
-      id: undoItem.id,
-      binId: undoItem.bin_id,
-      name: undoItem.name,
-      brand: undoItem.brand,
-      category: undoItem.category,
-      quantity: undoItem.quantity,
-      labelText: undoItem.label_text,
-      photoUri: undoItem.photo_uri,
-      notes: undoItem.notes,
-      lowStockThreshold: undoItem.low_stock_threshold,
-      sourceScanId: undoItem.source_scan_id,
-    });
+    for (const item of undoItems) restoreDeletedItem(db, item.id);
     if (undoTimer.current) clearTimeout(undoTimer.current);
-    setUndoItem(null);
+    setUndoItems([]);
+    refresh();
+  }
+
+  function moveItems(list: ItemRow[], targetBinId: string) {
+    for (const item of list) moveItemToBin(db, item.id, targetBinId);
+    setMoving(null);
+    setSelectMode(false);
+    setSelected({});
     refresh();
   }
 
@@ -157,8 +181,14 @@ export default function BinDetailScreen() {
   async function printLabel() {
     if (!bin) return;
     try {
+      const where = [shelf?.name].filter(Boolean).join(' · ');
       await printLabelSheet([
-        { payload: { type: 'bin', id: bin.id }, code: bin.short_code, name: bin.name },
+        {
+          payload: { type: 'bin', id: bin.id },
+          code: bin.short_code,
+          name: bin.name,
+          where: where || undefined,
+        },
       ]);
     } catch (err) {
       Alert.alert('Print failed', err instanceof Error ? err.message : String(err));
@@ -224,6 +254,20 @@ export default function BinDetailScreen() {
               />
               <ActionChip icon="add" label="Add item" onPress={() => setAdding(true)} />
               <ActionChip
+                icon="image"
+                label="Photo"
+                onPress={() => router.push({ pathname: '/bin-photo/[id]', params: { id: bin.id } })}
+              />
+              <ActionChip
+                icon="checkmark-circle-outline"
+                label={selectMode ? 'Done' : 'Select'}
+                active={selectMode}
+                onPress={() => {
+                  setSelectMode((m) => !m);
+                  setSelected({});
+                }}
+              />
+              <ActionChip
                 icon="pencil"
                 label="Rename"
                 onPress={() =>
@@ -270,63 +314,118 @@ export default function BinDetailScreen() {
           </View>
         }
         ListEmptyComponent={<Text style={styles.empty}>Nothing recorded in this bin yet.</Text>}
-        renderItem={({ item }) => (
-          <ReanimatedSwipeable
-            friction={2}
-            rightThreshold={36}
-            overshootRight={false}
-            renderRightActions={() => (
-              <Pressable
-                style={styles.swipeDelete}
-                accessibilityRole="button"
-                accessibilityLabel={`Delete ${item.name}`}
-                onPress={() => removeItem(item)}
-              >
-                <Ionicons name="trash" size={18} color="#fff" />
-                <Text style={styles.swipeDeleteLabel}>Delete</Text>
-              </Pressable>
-            )}
-          >
-            <View style={styles.itemRow}>
-              {/* Tap the quantity to edit it directly (field-test ask). */}
-              <Pressable
-                onPress={() => promptQuantity(item)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={`Change quantity of ${item.name}, currently ${item.quantity}`}
-                testID={`qty-${item.id}`}
-              >
-                <Text style={styles.itemQty}>{item.quantity}×</Text>
-              </Pressable>
-              <Pressable
-                style={styles.itemMain}
-                onPress={() => setSheetItem(item)}
-                onLongPress={() => setSheetItem(item)}
-                delayLongPress={300}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.name} — photo and options`}
-              >
+        renderItem={({ item }) =>
+          selectMode ? (
+            <Pressable
+              style={styles.itemRow}
+              onPress={() => setSelected((sel) => ({ ...sel, [item.id]: !sel[item.id] }))}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: !!selected[item.id] }}
+            >
+              <Ionicons
+                name={selected[item.id] ? 'checkbox' : 'square-outline'}
+                size={20}
+                color={selected[item.id] ? colors.amber : colors.textFaint}
+              />
+              <View style={styles.itemMain}>
                 <Text style={styles.itemName}>
+                  {item.quantity > 1 ? `${item.quantity}× ` : ''}
                   {item.brand ? `${item.brand} ` : ''}
                   {item.name}
                 </Text>
-                {item.label_text ? <Text style={styles.itemLabel}>{item.label_text}</Text> : null}
-                {item.checked_out_to ? (
-                  <Text style={styles.itemOut}>checked out to {item.checked_out_to}</Text>
-                ) : null}
-                {item.low_stock_threshold !== null && item.quantity <= item.low_stock_threshold ? (
-                  <Text style={styles.itemLow}>running low</Text>
-                ) : null}
-              </Pressable>
+              </View>
               <Text style={styles.itemCategory}>{item.category.replace(/_/g, ' ')}</Text>
-            </View>
-          </ReanimatedSwipeable>
-        )}
+            </Pressable>
+          ) : (
+            <ReanimatedSwipeable
+              friction={2}
+              rightThreshold={36}
+              overshootRight={false}
+              renderRightActions={() => (
+                <Pressable
+                  style={styles.swipeDelete}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete ${item.name}`}
+                  onPress={() => removeItems([item])}
+                >
+                  <Ionicons name="trash" size={18} color="#fff" />
+                  <Text style={styles.swipeDeleteLabel}>Delete</Text>
+                </Pressable>
+              )}
+            >
+              <View style={styles.itemRow}>
+                <Pressable
+                  onPress={() => promptQuantity(item)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Change quantity of ${item.name}, currently ${item.quantity}`}
+                  testID={`qty-${item.id}`}
+                >
+                  <Text style={styles.itemQty}>{item.quantity}×</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.itemMain}
+                  onPress={() => setSheetItem(item)}
+                  onLongPress={() => setSheetItem(item)}
+                  delayLongPress={300}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.name} — photo and options`}
+                >
+                  <Text style={styles.itemName}>
+                    {item.brand ? `${item.brand} ` : ''}
+                    {item.name}
+                  </Text>
+                  {item.label_text ? <Text style={styles.itemLabel}>{item.label_text}</Text> : null}
+                  {item.notes ? (
+                    <Text style={styles.itemNotes} numberOfLines={1}>
+                      {item.notes}
+                    </Text>
+                  ) : null}
+                  {item.checked_out_to ? (
+                    <Text style={styles.itemOut}>checked out to {item.checked_out_to}</Text>
+                  ) : null}
+                  {item.low_stock_threshold !== null &&
+                  item.quantity <= item.low_stock_threshold ? (
+                    <Text style={styles.itemLow}>running low</Text>
+                  ) : null}
+                </Pressable>
+                <Text style={styles.itemCategory}>{item.category.replace(/_/g, ' ')}</Text>
+              </View>
+            </ReanimatedSwipeable>
+          )
+        }
       />
-      {undoItem && (
+      {selectMode && (
+        <View style={styles.bulkBar}>
+          <Text style={styles.bulkCount}>{selectedItems.length} selected</Text>
+          <Pressable
+            onPress={() => selectedItems.length > 0 && setMoving(selectedItems)}
+            disabled={selectedItems.length === 0}
+          >
+            <Text style={[styles.bulkAction, selectedItems.length === 0 && styles.bulkDisabled]}>
+              Move
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => selectedItems.length > 0 && removeItems(selectedItems)}
+            disabled={selectedItems.length === 0}
+          >
+            <Text
+              style={[
+                styles.bulkAction,
+                { color: colors.danger },
+                selectedItems.length === 0 && styles.bulkDisabled,
+              ]}
+            >
+              Delete
+            </Text>
+          </Pressable>
+        </View>
+      )}
+      {undoItems.length > 0 && (
         <View style={styles.snackbar} testID="undo-snackbar">
           <Text style={styles.snackbarText} numberOfLines={1}>
-            Deleted {undoItem.name}
+            Deleted {undoItems.length === 1 ? undoItems[0].name : `${undoItems.length} items`}
           </Text>
           <Pressable onPress={undoRemove} hitSlop={8}>
             <Text style={styles.snackbarUndo}>UNDO</Text>
@@ -347,6 +446,7 @@ export default function BinDetailScreen() {
             category: values.category,
             quantity: values.quantity,
             labelText: values.labelText,
+            notes: values.notes,
           });
           setAdding(false);
           refresh();
@@ -364,6 +464,10 @@ export default function BinDetailScreen() {
           setSheetItem(null);
           promptQuantity(item);
         }}
+        onMove={(item) => {
+          setSheetItem(null);
+          setMoving([item]);
+        }}
         onLowStock={(item) => {
           setSheetItem(null);
           promptLowStock(item);
@@ -377,7 +481,7 @@ export default function BinDetailScreen() {
             promptCheckout(item);
           }
         }}
-        onDelete={removeItem}
+        onDelete={(item) => removeItems([item])}
       />
       <ChipEditor
         visible={editing !== null}
@@ -390,6 +494,7 @@ export default function BinDetailScreen() {
                 category: editing.category,
                 quantity: editing.quantity,
                 labelText: editing.label_text,
+                notes: editing.notes,
                 confidence: null,
                 selected: true,
                 matchedExistingId: null,
@@ -406,11 +511,22 @@ export default function BinDetailScreen() {
               category: values.category,
               quantity: values.quantity,
               labelText: values.labelText,
+              notes: values.notes,
             });
           }
           setEditing(null);
           refresh();
         }}
+      />
+      <BinPicker
+        visible={moving !== null}
+        excludeBinId={bin.id}
+        title={
+          moving && moving.length > 1 ? `Move ${moving.length} items to…` : 'Move item to…'
+        }
+        bins={listBins(db)}
+        onClose={() => setMoving(null)}
+        onPick={(target) => moving && moveItems(moving, target.id)}
       />
     </View>
   );
@@ -418,8 +534,8 @@ export default function BinDetailScreen() {
 
 /**
  * Themed replacement for the old system Alert menu (field-test: "archaic,
- * can't back off it, doesn't fit the theme"). Tap an item → its photo (from
- * the scan that cataloged it) plus every action; backdrop tap dismisses.
+ * off-theme, no way back"). Tap an item → its photo (from the scan that
+ * cataloged it) plus every action; backdrop tap dismisses.
  */
 function ItemSheet({
   db,
@@ -427,6 +543,7 @@ function ItemSheet({
   onClose,
   onEdit,
   onQuantity,
+  onMove,
   onLowStock,
   onCheckoutOrReturn,
   onDelete,
@@ -436,6 +553,7 @@ function ItemSheet({
   onClose: () => void;
   onEdit: (item: ItemRow) => void;
   onQuantity: (item: ItemRow) => void;
+  onMove: (item: ItemRow) => void;
   onLowStock: (item: ItemRow) => void;
   onCheckoutOrReturn: (item: ItemRow) => void;
   onDelete: (item: ItemRow) => void;
@@ -462,14 +580,18 @@ function ItemSheet({
               <Text style={styles.sheetMeta}>
                 {item.category.replace(/_/g, ' ')}
                 {item.label_text ? ` · ${item.label_text}` : ''}
-                {sourceScan ? ` · scanned ${sourceScan.created_at.slice(0, 10)}` : ' · added manually'}
+                {sourceScan
+                  ? ` · scanned ${sourceScan.created_at.slice(0, 10)}`
+                  : ' · added manually'}
               </Text>
-              <SheetRow icon="pencil" label="Edit name, tag, details" onPress={() => onEdit(item)} />
+              {item.notes ? <Text style={styles.sheetNotes}>{item.notes}</Text> : null}
+              <SheetRow icon="pencil" label="Edit name, tag, notes" onPress={() => onEdit(item)} />
               <SheetRow
                 icon="swap-vertical"
                 label={`Adjust quantity (${item.quantity})`}
                 onPress={() => onQuantity(item)}
               />
+              <SheetRow icon="arrow-redo" label="Move to another bin…" onPress={() => onMove(item)} />
               <SheetRow
                 icon="notifications-outline"
                 label={
@@ -522,6 +644,54 @@ function SheetRow({
   );
 }
 
+function BinPicker({
+  visible,
+  bins,
+  excludeBinId,
+  title,
+  onClose,
+  onPick,
+}: {
+  visible: boolean;
+  bins: BinRow[];
+  excludeBinId: string;
+  title: string;
+  onClose: () => void;
+  onPick: (bin: BinRow) => void;
+}) {
+  const candidates = bins.filter((b) => b.id !== excludeBinId);
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+        <Pressable style={styles.sheetCard} onPress={() => {}}>
+          <Text style={styles.sheetName}>{title}</Text>
+          {candidates.length === 0 ? (
+            <Text style={styles.sheetMeta}>No other bins yet — create one in Browse first.</Text>
+          ) : (
+            candidates.map((candidate) => (
+              <Pressable
+                key={candidate.id}
+                style={styles.sheetRow}
+                onPress={() => onPick(candidate)}
+                accessibilityRole="button"
+                testID={`move-to-${candidate.short_code}`}
+              >
+                <CodeTag code={candidate.short_code} small />
+                <Text style={styles.sheetRowLabel} numberOfLines={1}>
+                  {candidate.name}
+                </Text>
+              </Pressable>
+            ))
+          )}
+          <Pressable onPress={onClose} style={styles.sheetClose}>
+            <Text style={styles.sheetCloseLabel}>Cancel</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg, padding: sp(4) },
   center: {
@@ -568,8 +738,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   actionDanger: { borderColor: '#5A2F2A', backgroundColor: colors.dangerDim },
+  actionActive: { backgroundColor: colors.amber, borderColor: colors.amber },
   actionLabel: { color: colors.steel, fontWeight: '600', fontSize: 13 },
   actionLabelDanger: { color: colors.danger },
+  actionLabelActive: { color: colors.amberInkOn },
   itemRow: {
     flexDirection: 'row',
     gap: sp(2.5),
@@ -583,6 +755,7 @@ const styles = StyleSheet.create({
   itemMain: { flex: 1 },
   itemName: { ...type.body, fontSize: 16 },
   itemLabel: { fontSize: 12, color: colors.textFaint, fontFamily: mono },
+  itemNotes: { fontSize: 12, color: colors.textDim, fontStyle: 'italic' },
   itemCategory: { fontSize: 11, color: colors.textFaint },
   itemOut: { fontSize: 11, color: colors.warn },
   itemLow: { fontSize: 11, color: colors.danger },
@@ -594,6 +767,18 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   swipeDeleteLabel: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  bulkBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(5),
+    paddingVertical: sp(3),
+    paddingHorizontal: sp(2),
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  bulkCount: { ...type.body, flex: 1, fontWeight: '600' },
+  bulkAction: { color: colors.amber, fontWeight: '800' },
+  bulkDisabled: { opacity: 0.35 },
   snackbar: {
     position: 'absolute',
     left: sp(4),
@@ -646,6 +831,7 @@ const styles = StyleSheet.create({
   },
   sheetName: { ...type.body, fontSize: 17, fontWeight: '600' },
   sheetMeta: { color: colors.textFaint, fontSize: 13, marginBottom: sp(2) },
+  sheetNotes: { color: colors.textDim, fontSize: 13, fontStyle: 'italic', marginBottom: sp(2) },
   sheetRow: {
     flexDirection: 'row',
     alignItems: 'center',

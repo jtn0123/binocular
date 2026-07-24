@@ -1,4 +1,4 @@
-import { buildQrSvg, labelSheetHtml, type LabelSpec } from '../labels';
+import { buildQrSvg, labelSheetHtml, shelfPosterHtml, type LabelSpec } from '../labels';
 
 function makeLabels(n: number): LabelSpec[] {
   return Array.from({ length: n }, (_, i) => ({
@@ -51,4 +51,27 @@ it('labels carry a dashed cut-line border (field-test ask)', () => {
     { payload: { type: 'bin', id: 'x' }, code: 'B-001', name: 'Bin B-001' },
   ]);
   expect(html).toContain('border: 1px dashed');
+});
+
+it('labels render the optional shelf/location line (field-test ask)', () => {
+  const html = labelSheetHtml([
+    { payload: { type: 'bin', id: 'x' }, code: 'B-001', name: 'Bin', where: 'Shelf A · Workshop' },
+  ]);
+  expect(html).toContain('Shelf A · Workshop');
+});
+
+it('shelf poster: big shelf QR header + one mini cell per bin', () => {
+  const html = shelfPosterHtml({
+    shelfName: 'Shelf A',
+    locationName: 'Workshop',
+    shelfPayload: { type: 'shelf', id: 's1' },
+    bins: [
+      { payload: { type: 'bin', id: 'b1' }, code: 'B-001', name: 'Fasteners' },
+      { payload: { type: 'bin', id: 'b2' }, code: 'B-002', name: 'Glue' },
+    ],
+  });
+  expect(html).toContain('Shelf A');
+  expect(html).toContain('Workshop');
+  expect((html.match(/class="cell"/g) ?? []).length).toBe(2);
+  expect(html).toContain('B-002');
 });

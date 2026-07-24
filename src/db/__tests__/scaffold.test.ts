@@ -3,12 +3,19 @@ import {
   createLocation,
   createShelf,
   getBin,
+  getBinPlace,
   insertItem,
   insertScan,
   itemsForBin,
   listAllShelves,
+  listDeletedItems,
   listItemPhotoUris,
   listLocations,
+  moveItemToBin,
+  purgeDeletedItems,
+  restoreDeletedItem,
+  setBinCoverPhoto,
+  softDeleteItem,
   updateItem,
 } from '../queries';
 import { ensureDefaultShelf, quickCreateBin } from '../scaffold';
@@ -97,5 +104,85 @@ describe('round-3 field feedback queries', () => {
     // Manual items (no source scan) contribute nothing.
     insertItem(db, { binId: bin.id, name: 'Manual', category: 'other' });
     expect(listItemPhotoUris(db, bin.id)).toHaveLength(1);
+  });
+});
+
+describe('round-5: trash (D17), move, place, cover', () => {
+  let db: NodeDbAdapter;
+
+  beforeEach(() => {
+    db = createNodeAdapter(':memory:');
+    runMigrations(db);
+  });
+  afterEach(() => {
+    db.close();
+  });
+
+  it('softDeleteItem snapshots then really deletes; restore round-trips', () => {
+    const bin = quickCreateBin(db);
+    const item = insertItem(db, {
+      binId: bin.id,
+      name: 'Old batteries',
+      category: 'electrical',
+      quantity: 4,
+      notes: 'half dead',
+    });
+    softDeleteItem(db, item.id);
+    expect(itemsForBin(db, bin.id)).toHaveLength(0);
+    expect(listDeletedItems(db)).toHaveLength(1);
+
+    expect(restoreDeletedItem(db, item.id)).toBe(true);
+    const restored = itemsForBin(db, bin.id);
+    expect(restored).toHaveLength(1);
+    expect(restored[0].id).toBe(item.id);
+    expect(restored[0].notes).toBe('half dead');
+    expect(listDeletedItems(db)).toHaveLength(0);
+  });
+
+  it('restore into an explicit target bin when the original is gone', () => {
+    const binA = quickCreateBin(db);
+    const binB = quickCreateBin(db);
+    const item = insertItem(db, { binId: binA.id, name: 'Widget', category: 'other' });
+    softDeleteItem(db, item.id);
+    expect(restoreDeletedItem(db, item.id, binB.id)).toBe(true);
+    expect(itemsForBin(db, binB.id)).toHaveLength(1);
+  });
+
+  it('purgeDeletedItems removes only entries older than the cutoff', () => {
+    const bin = quickCreateBin(db);
+    const item = insertItem(db, { binId: bin.id, name: 'Old', category: 'other' });
+    softDeleteItem(db, item.id);
+    db.runSync('UPDATE deleted_items SET deleted_at = ? WHERE id = ?', [
+      '2020-01-01T00:00:00.000Z',
+      item.id,
+    ]);
+    const fresh = insertItem(db, { binId: bin.id, name: 'Fresh', category: 'other' });
+    softDeleteItem(db, fresh.id);
+    purgeDeletedItems(db, 30);
+    const remaining = listDeletedItems(db);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].id).toBe(fresh.id);
+  });
+
+  it('moveItemToBin re-homes an item', () => {
+    const binA = quickCreateBin(db);
+    const binB = quickCreateBin(db);
+    const item = insertItem(db, { binId: binA.id, name: 'Wrench', category: 'hand_tool' });
+    moveItemToBin(db, item.id, binB.id);
+    expect(itemsForBin(db, binA.id)).toHaveLength(0);
+    expect(itemsForBin(db, binB.id).map((i) => i.id)).toEqual([item.id]);
+  });
+
+  it('getBinPlace returns the shelf and location names', () => {
+    const bin = quickCreateBin(db);
+    expect(getBinPlace(db, bin.id)).toEqual({ shelfName: 'Shelf A', locationName: 'Workshop' });
+  });
+
+  it('setBinCoverPhoto sets the cover without touching last_scanned_at', () => {
+    const bin = quickCreateBin(db);
+    setBinCoverPhoto(db, bin.id, 'file:///cover.jpg');
+    const fresh = getBin(db, bin.id);
+    expect(fresh?.cover_photo_uri).toBe('file:///cover.jpg');
+    expect(fresh?.last_scanned_at).toBeNull();
   });
 });

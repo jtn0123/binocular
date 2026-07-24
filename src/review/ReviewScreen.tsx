@@ -50,6 +50,7 @@ export interface DetectedChip {
   category: ItemCategory;
   quantity: number;
   labelText: string | null;
+  notes: string | null;
   confidence: Confidence | null; // null for manually added chips
   selected: boolean;
   matchedExistingId: string | null;
@@ -80,6 +81,7 @@ function buildDetectedChips(result: RecognitionResult, existing: ItemRow[]): Det
       category: item.category,
       quantity: item.quantity,
       labelText: item.label_text,
+      notes: null,
       confidence: item.confidence,
       // §6.3: high/medium pre-selected; low requires an explicit tap.
       // A chip matching an existing item defaults to keep regardless.
@@ -291,6 +293,7 @@ export function ReviewScreen({
       category: chip.category,
       quantity: chip.quantity,
       labelText: chip.labelText,
+      notes: chip.notes,
       sourceScanId: scanId,
     });
   }
@@ -589,11 +592,13 @@ export function ChipEditor({
     category: ItemCategory;
     quantity: number;
     labelText: string | null;
+    notes: string | null;
   }) => void;
 }) {
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [quantity, setQuantity] = useState('1');
+  const [notes, setNotes] = useState('');
   const [category, setCategory] = useState<ItemCategory>('other');
   const [seededFor, setSeededFor] = useState<string | null>(null);
 
@@ -602,6 +607,7 @@ export function ChipEditor({
     setName(chip?.name ?? '');
     setBrand(chip?.brand ?? '');
     setQuantity(String(chip?.quantity ?? 1));
+    setNotes(chip?.notes ?? '');
     setCategory(chip?.category ?? 'other');
     setSeededFor(seedKey);
   }
@@ -632,6 +638,14 @@ export function ChipEditor({
             onChangeText={setQuantity}
             keyboardType="number-pad"
             testID="editor-quantity"
+          />
+          <TextInput
+            style={[styles.input, styles.inputMultiline]}
+            placeholder="Notes (optional) — e.g. half used, borrowed from Dave"
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+            testID="editor-notes"
           />
           <Text style={styles.tagHeading}>Tag</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
@@ -668,6 +682,7 @@ export function ChipEditor({
                     category,
                     quantity: qty,
                     labelText: chip?.labelText ?? null,
+                    notes: notes.trim() || null,
                   });
                 }}
               >
@@ -816,6 +831,7 @@ const styles = StyleSheet.create({
     gap: sp(2.5),
   },
   modalTitle: { ...type.h2 },
+  inputMultiline: { minHeight: 56, textAlignVertical: 'top' },
   input: {
     borderWidth: 1,
     borderColor: colors.borderStrong,
