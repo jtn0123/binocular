@@ -54,6 +54,7 @@ blueprint edits instead.
 | D14 | Cloud engines | Two cloud engines ship in v1 — Anthropic Claude and OpenAI — behind the same `VisionProvider` contract, each isolated in its own provider file with its own API key in Settings | User choice on cost/quality/account; the §6.1 schema and §6.2 prompt are engine-neutral, so a second cloud engine is pure provider code |
 | D16 | Diagnostics | A local, always-on but **bounded** event log (`events` table, 5,000 entries / 30 days) records app lifecycle, scan timings, queue retries, search, and crashes; a global error handler captures otherwise-invisible crashes. Export is **user-initiated only** — no network telemetry, no third-party crash SDK. Disable-able in Settings | Field testing happens on a standalone build with no Metro console, so `__DEV__`-gated logging would record nothing exactly when it is needed. Bounded + local + opt-out keeps it honest with offline-first (I4) and the privacy stance: the workshop photos and usage history never leave the device unless the user shares them |
 | D17 | Deleted items | Deleting an item moves a full snapshot into a `deleted_items` table (migration 005): instantly undoable via snackbar, restorable for 30 days from a Recently-deleted screen, purged on boot after that. Live-item queries and the FTS index are untouched because deletion really deletes from `items` — the snapshot is a copy | Field testing showed early mis-tagged items need cleanup, but §11 forbids silent inventory loss. A copy-table beats a `deleted_at` flag: no query in the app needs a new WHERE clause, and search can never surface a ghost item |
+| D18 | Deferred review ("shoot and walk") | Capture may **enqueue** a scan and return straight to the camera instead of blocking on recognition; the scan lands in the normal `queued` → `review` pipeline and is reviewed later from the queue. Chosen per capture mode: `bin_audit` and `check_in` offer it, `find_it` never (its whole point is an answer now). The blocking path stays the default so a single scan still ends on the review screen | The §9 queue already does exactly this when offline, and the field test showed the online case has the same shape: walking a shelf means photographing six bins in a row, and standing still for each cloud round trip breaks the rhythm. Deferring is a *routing* change, not a new pipeline — every §11 invariant is untouched, D6 most of all: queued scans still reach inventory only through the review screen |
 | D15 | Cost transparency | Cloud scans record measured token usage (each API's `usage` field) plus a computed dollar cost per scan; the app shows a pre-scan estimate and cumulative spend in Settings. Estimates use documented tokenizer math (OpenAI 32px patches, Claude ≈px²/750) with a bundled price table; uploads stay capped at 1568px and the OpenAI request pins an explicit `detail` level as a cost ceiling | Same honesty rule as D5: usage is measured, never guessed. On `gpt-5.6`, `detail: auto` means *no auto-downscaling* — a 20MP original would cost ~10× the 1568px upload — so image sizing is a cost policy, not just bandwidth |
 
 ---
@@ -444,7 +445,10 @@ done only when every AC passes on an Android device/emulator.
    the only path).
 3. Camera screen with a "fill the frame with the open bin" hint. Capture.
 4. Scan row created (`status=queued`), photo saved locally, recognition runs
-   (`processing`), then review screen opens (`review`).
+   (`processing`), then review screen opens (`review`). Per D18 the capture
+   screen may instead **stay on the camera** and let the scan drain through
+   the queue, for photographing a run of bins in one pass; the review screen
+   is then reached from the queue rather than automatically.
 5. Review screen: detected items as editable chips per §6.3. User can edit
    name/quantity/category inline, delete, or add-manually.
 6. User picks **Replace contents** or **Merge with existing** (default:
@@ -467,6 +471,9 @@ done only when every AC passes on an Android device/emulator.
       tap — a scan can never silently delete inventory.
 - [ ] Discard leaves inventory tables untouched (scan `discarded`).
 - [ ] Whole flow ≤ 4 taps between shutter and saved (excluding chip edits).
+- [ ] Deferred review (D18): several bins photographed back-to-back all
+      arrive in the queue, each reviewable in turn, and none reaches
+      inventory without its own review-screen save.
 
 ### 8.2 Check-in ("these go in that bin")
 
