@@ -52,6 +52,7 @@ blueprint edits instead.
 | D12 | Export | CSV export of all items (Excel-compatible) ships in v1 | The whole inventory belongs in a spreadsheet too; one row per item with location/shelf/bin breadcrumb columns |
 | D13 | QR payload | Typed: `binoc:v1:<type>:<uuid>`, type ∈ `bin \| shelf \| location` | Shelf/location labels enable move mode (§8.5); typing the payload costs nothing before any label is printed |
 | D14 | Cloud engines | Two cloud engines ship in v1 — Anthropic Claude and OpenAI — behind the same `VisionProvider` contract, each isolated in its own provider file with its own API key in Settings | User choice on cost/quality/account; the §6.1 schema and §6.2 prompt are engine-neutral, so a second cloud engine is pure provider code |
+| D16 | Diagnostics | A local, always-on but **bounded** event log (`events` table, 5,000 entries / 30 days) records app lifecycle, scan timings, queue retries, search, and crashes; a global error handler captures otherwise-invisible crashes. Export is **user-initiated only** — no network telemetry, no third-party crash SDK. Disable-able in Settings | Field testing happens on a standalone build with no Metro console, so `__DEV__`-gated logging would record nothing exactly when it is needed. Bounded + local + opt-out keeps it honest with offline-first (I4) and the privacy stance: the workshop photos and usage history never leave the device unless the user shares them |
 | D15 | Cost transparency | Cloud scans record measured token usage (each API's `usage` field) plus a computed dollar cost per scan; the app shows a pre-scan estimate and cumulative spend in Settings. Estimates use documented tokenizer math (OpenAI 32px patches, Claude ≈px²/750) with a bundled price table; uploads stay capped at 1568px and the OpenAI request pins an explicit `detail` level as a cost ceiling | Same honesty rule as D5: usage is measured, never guessed. On `gpt-5.6`, `detail: auto` means *no auto-downscaling* — a 20MP original would cost ~10× the 1568px upload — so image sizing is a cost policy, not just bandwidth |
 
 ---
@@ -155,7 +156,24 @@ CREATE TABLE scans (
   raw_response TEXT,                      -- exact JSON the provider returned
   error TEXT,
   created_at TEXT NOT NULL,
-  resolved_at TEXT
+  resolved_at TEXT,
+  engine TEXT,                            -- D15: which engine ran this scan
+  input_tokens INTEGER,                   -- D15: measured usage, never estimated
+  output_tokens INTEGER,
+  cost_usd REAL
+);
+
+-- D16: local diagnostics. Bounded (5,000 rows / 30 days) and pruned on boot.
+-- No FK on scan_id: events must outlive the scans they describe.
+CREATE TABLE events (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,                     -- 'app' | 'screen' | 'scan' | 'queue'
+                                          -- | 'search' | 'net' | 'crash' | 'settings'
+  name TEXT NOT NULL,                     -- e.g. 'scan_settled'
+  detail TEXT,                            -- JSON blob; never API keys
+  duration_ms INTEGER,
+  scan_id TEXT,                           -- correlation only, not a foreign key
+  created_at TEXT NOT NULL
 );
 
 CREATE VIRTUAL TABLE item_search USING fts5(
