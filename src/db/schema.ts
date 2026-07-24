@@ -100,10 +100,30 @@ ALTER TABLE scans ADD COLUMN output_tokens INTEGER;
 ALTER TABLE scans ADD COLUMN cost_usd REAL;
 `;
 
+/**
+ * D16 local diagnostics: a bounded event log (see src/diagnostics/events.ts).
+ * No FK on scan_id — events must outlive the scans they describe, and a
+ * diagnostics write must never fail because of referential integrity.
+ */
+const MIGRATION_004_EVENTS = `
+CREATE TABLE events (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  detail TEXT,
+  duration_ms INTEGER,
+  scan_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX events_created_at ON events(created_at);
+`;
+
 export const MIGRATIONS: readonly string[] = [
   MIGRATION_001_INITIAL_SCHEMA,
   MIGRATION_002_FTS_TRIGGERS,
   MIGRATION_003_SCAN_USAGE,
+  MIGRATION_004_EVENTS,
 ];
 
 export function getSchemaVersion(db: DbAdapter): number {

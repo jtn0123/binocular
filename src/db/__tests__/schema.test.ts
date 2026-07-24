@@ -71,6 +71,22 @@ describe('migration runner', () => {
     expect(row).toEqual({ engine: null, input_tokens: null, output_tokens: null, cost_usd: null });
   });
 
+  it('migration 004 adds the D16 events table on upgrade from version 3', () => {
+    // A database stopped at version 3 (pre-diagnostics)...
+    db.withTransactionSync(() => {
+      db.execSync(MIGRATIONS[0]);
+      db.execSync(MIGRATIONS[1]);
+      db.execSync(MIGRATIONS[2]);
+      db.execSync('PRAGMA user_version = 3');
+    });
+    expect(() => db.getAllSync('SELECT * FROM events')).toThrow();
+
+    runMigrations(db);
+    // ...gains an empty, queryable events table.
+    expect(db.getAllSync('SELECT * FROM events')).toEqual([]);
+    expect(getSchemaVersion(db)).toBe(MIGRATIONS.length);
+  });
+
   it('backfills the FTS index for items that predate migration 002', () => {
     // Apply only migration 001, insert an item, then run the rest.
     db.withTransactionSync(() => {
