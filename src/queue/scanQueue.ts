@@ -5,6 +5,7 @@ import {
   listQueuedScans,
   resetInterruptedScans,
 } from '../db/queries';
+import { logEvent } from '../diagnostics/events';
 import { processScan, type ScanFlowResult } from '../scan/scanFlow';
 
 /**
@@ -39,21 +40,35 @@ export class ScanQueue {
   async drain(): Promise<void> {
     if (this.draining) return;
     this.draining = true;
+    let processed = 0;
     try {
       for (;;) {
         const next = this.nextEligible();
         if (!next) break;
         const result = await this.deps.process(this.db, next);
+        processed += 1;
         if (result.outcome === 'queued') {
           // Retryable failure — back off; anything else settles the scan.
           const n = (this.attempts.get(next) ?? 0) + 1;
           this.attempts.set(next, n);
+          const exhausted = n > BACKOFF_MS.length;
           this.eligibleAt.set(
             next,
-            n <= BACKOFF_MS.length
-              ? this.deps.now() + BACKOFF_MS[n - 1]
-              : Number.POSITIVE_INFINITY,
+            exhausted ? Number.POSITIVE_INFINITY : this.deps.now() + BACKOFF_MS[n - 1],
           );
+          // D16: attempts live in memory only, so without this the retry
+          // history of an overnight backoff would be invisible.
+          logEvent(this.db, {
+            kind: 'queue',
+            name: 'scan_backoff',
+            scanId: next,
+            detail: {
+              attempt: n,
+              waitMs: exhausted ? null : BACKOFF_MS[n - 1],
+              manualOnly: exhausted,
+              error: result.error,
+            },
+          });
         } else {
           this.attempts.delete(next);
           this.eligibleAt.delete(next);
@@ -62,6 +77,9 @@ export class ScanQueue {
     } finally {
       this.draining = false;
     }
+    if (processed > 0) {
+      logEvent(this.db, { kind: 'queue', name: 'drain', detail: { processed } });
+    }
     this.scheduleNextWake();
   }
 
@@ -69,6 +87,7 @@ export class ScanQueue {
   async retryNow(scanId: string): Promise<void> {
     this.attempts.delete(scanId);
     this.eligibleAt.delete(scanId);
+    logEvent(this.db, { kind: 'queue', name: 'retry_now', scanId });
     await this.drain();
   }
 

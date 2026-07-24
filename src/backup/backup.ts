@@ -13,11 +13,12 @@ import { inventoryCsv } from './csv';
  * plus every referenced photo, shared through the system share sheet.
  * Import only ever restores into an empty database.
  */
-function basename(uri: string): string {
+export function basename(uri: string): string {
   return uri.split('/').pop() ?? uri;
 }
 
-function collectPhotoUris(dump: BackupDump): string[] {
+/** Every photo referenced by a dump — shared by backup and diagnostics. */
+export function collectPhotoUris(dump: BackupDump): string[] {
   const uris = new Set<string>();
   for (const bin of dump.bins) if (bin.cover_photo_uri) uris.add(bin.cover_photo_uri);
   for (const item of dump.items) if (item.photo_uri) uris.add(item.photo_uri);
@@ -25,26 +26,38 @@ function collectPhotoUris(dump: BackupDump): string[] {
   return [...uris];
 }
 
+/** Adds photos under `photos/`; a missing file never blocks the export. */
+export function addPhotosToZip(zip: JSZip, uris: string[]): number {
+  let added = 0;
+  for (const uri of uris) {
+    try {
+      const file = new File(uri);
+      if (file.exists) {
+        zip.file(`photos/${basename(uri)}`, file.bytes());
+        added += 1;
+      }
+    } catch {
+      // Skip unreadable photos.
+    }
+  }
+  return added;
+}
+
+/** Writes the zip to cache and hands it to the system share sheet. */
+export async function writeAndShareZip(zip: JSZip, filename: string): Promise<void> {
+  const bytes = await zip.generateAsync({ type: 'uint8array' });
+  const out = new File(Paths.cache, filename);
+  if (out.exists) out.delete();
+  out.write(bytes);
+  await Sharing.shareAsync(out.uri, { mimeType: 'application/zip' });
+}
+
 export async function exportBackupZip(db: DbAdapter): Promise<void> {
   const dump = dumpAll(db, nowIso());
   const zip = new JSZip();
   zip.file('binocular.json', JSON.stringify(dump, null, 2));
-
-  for (const uri of collectPhotoUris(dump)) {
-    try {
-      const file = new File(uri);
-      if (file.exists) zip.file(`photos/${basename(uri)}`, file.bytes());
-    } catch {
-      // A missing photo never blocks the backup of the data itself.
-    }
-  }
-
-  const bytes = await zip.generateAsync({ type: 'uint8array' });
-  const stamp = nowIso().slice(0, 10);
-  const out = new File(Paths.cache, `binocular-backup-${stamp}.zip`);
-  if (out.exists) out.delete();
-  out.write(bytes);
-  await Sharing.shareAsync(out.uri, { mimeType: 'application/zip' });
+  addPhotosToZip(zip, collectPhotoUris(dump));
+  await writeAndShareZip(zip, `binocular-backup-${nowIso().slice(0, 10)}.zip`);
 }
 
 export async function exportInventoryCsv(db: DbAdapter): Promise<void> {

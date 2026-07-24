@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import * as DocumentPicker from 'expo-document-picker';
+import { Link } from 'expo-router';
 
 import { exportBackupZip, exportInventoryCsv, importBackupZip } from '@/backup/backup';
+import { logEvent } from '@/diagnostics/events';
 import { useDb } from '@/db/DbProvider';
 import { isDatabaseEmpty } from '@/db/backupQueries';
 import { listSpendTotals, type SpendTotals } from '@/db/queries';
@@ -156,6 +158,7 @@ export default function SettingsScreen() {
             onPress={async () => {
               setProvider(choice);
               await setProviderChoice(choice);
+              logEvent(db, { kind: 'settings', name: 'engine_changed', detail: { to: choice } });
             }}
           >
             <Text style={[styles.providerLabel, provider === choice && styles.providerLabelActive]}>
@@ -182,7 +185,10 @@ export default function SettingsScreen() {
         hasStoredKey={hasAnthropicKey}
         onSave={async (key) => {
           await setApiKey(key);
-          setHasAnthropicKey(key.trim().length > 0);
+          const present = key.trim().length > 0;
+          setHasAnthropicKey(present);
+          // Boolean only — key material never touches the log.
+          logEvent(db, { kind: 'settings', name: 'key_changed', detail: { engine: 'claude', present } });
           Alert.alert('Saved', 'Anthropic key updated in the secure store.');
         }}
         onTest={async (entered) => {
@@ -198,7 +204,10 @@ export default function SettingsScreen() {
         hasStoredKey={hasOpenAiKey}
         onSave={async (key) => {
           await setOpenAiApiKey(key);
-          setHasOpenAiKey(key.trim().length > 0);
+          const present = key.trim().length > 0;
+          setHasOpenAiKey(present);
+          // Boolean only — key material never touches the log.
+          logEvent(db, { kind: 'settings', name: 'key_changed', detail: { engine: 'openai', present } });
           Alert.alert('Saved', 'OpenAI key updated in the secure store.');
         }}
         onTest={async (entered) => {
@@ -242,6 +251,22 @@ export default function SettingsScreen() {
           </Text>
         </View>
       )}
+
+      <Text style={styles.sectionTitle}>Diagnostics</Text>
+      <Text style={styles.hint}>
+        A local event log records app lifecycle, scan timings, queue retries and crashes so a
+        problem in the field can be diagnosed afterwards. Nothing is ever uploaded — you share
+        it only when you choose to.
+      </Text>
+      <Link href="/diagnostics" asChild>
+        <Pressable
+          style={styles.secondaryButton}
+          accessibilityRole="button"
+          accessibilityLabel="Open diagnostics"
+        >
+          <Text style={styles.secondaryLabel}>Open diagnostics</Text>
+        </Pressable>
+      </Link>
 
       <Text style={styles.sectionTitle}>Data</Text>
       <Text style={styles.hint}>

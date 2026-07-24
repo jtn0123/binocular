@@ -24,6 +24,7 @@ import {
   updateScanStatus,
   type ItemRow,
 } from '../db/queries';
+import { logEvent } from '../diagnostics/events';
 import { hapticSuccess, hapticWarning } from '../lib/haptics';
 import { newId } from '../lib/id';
 import { nowIso } from '../lib/time';
@@ -48,6 +49,8 @@ interface DetectedChip {
   confidence: Confidence | null; // null for manually added chips
   selected: boolean;
   matchedExistingId: string | null;
+  /** User corrected the AI's values in the editor (D16 accuracy signal). */
+  edited?: boolean;
 }
 
 export interface ReviewScreenProps {
@@ -240,6 +243,20 @@ export function ReviewScreen({
         });
       }
     });
+    // D16: the real-world accuracy signal — what the AI proposed versus what
+    // the user actually confirmed. No labeling required.
+    logEvent(db, {
+      kind: 'scan',
+      name: 'review_saved',
+      scanId,
+      detail: {
+        mode: isCheckIn ? 'check_in' : mode,
+        proposed: chips.length,
+        accepted: chips.filter((c) => c.selected).length,
+        edited: chips.filter((c) => c.edited).length,
+        existingRemoved: notSeen.filter((i) => !keepExisting[i.id]).length,
+      },
+    });
     hapticSuccess();
     onDone(binId);
   }
@@ -415,7 +432,9 @@ export function ReviewScreen({
               },
             ]);
           } else if (editingKey) {
-            setChips((cs) => cs.map((c) => (c.key === editingKey ? { ...c, ...values } : c)));
+            setChips((cs) =>
+              cs.map((c) => (c.key === editingKey ? { ...c, ...values, edited: true } : c)),
+            );
           }
           setEditingKey(null);
         }}

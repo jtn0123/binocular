@@ -8,6 +8,7 @@ import {
   updateScanStatus,
   type ScanMode,
 } from '../db/queries';
+import { logEvent } from '../diagnostics/events';
 import { newId } from '../lib/id';
 import { nowIso } from '../lib/time';
 import { getProviderChoice } from '../settings/settings';
@@ -39,6 +40,12 @@ export function enqueueScan(
   const scanId = newId();
   const photoUri = persistPhoto(input.tempPhotoUri, scanId);
   insertScan(db, { id: scanId, mode: input.mode, binId: input.binId ?? null, photoUri });
+  logEvent(db, {
+    kind: 'scan',
+    name: 'scan_enqueued',
+    scanId,
+    detail: { mode: input.mode, hasBin: Boolean(input.binId) },
+  });
   return scanId;
 }
 
@@ -52,6 +59,7 @@ export async function processScan(db: DbAdapter, scanId: string): Promise<ScanFl
   }
 
   updateScanStatus(db, scanId, 'processing');
+  const startedAt = Date.now();
   try {
     const bin = scan.bin_id ? getBin(db, scan.bin_id) : null;
     const existingItems = scan.bin_id ? itemsForBin(db, scan.bin_id).map((i) => i.name) : [];
@@ -74,15 +82,39 @@ export async function processScan(db: DbAdapter, scanId: string): Promise<ScanFl
           ? costForUsage(engine, usage)
           : null,
     });
+    // D16: how long recognition actually took, and on which engine.
+    logEvent(db, {
+      kind: 'scan',
+      name: 'scan_settled',
+      scanId,
+      durationMs: Date.now() - startedAt,
+      detail: { outcome: 'review', engine, mode: scan.mode, items: result.items.length },
+    });
     return { scanId, outcome: 'review' };
   } catch (err) {
+    const durationMs = Date.now() - startedAt;
+    const kind = err instanceof VisionError ? err.kind : 'unknown';
     if (err instanceof VisionError && (err.kind === 'network' || err.kind === 'rate_limit')) {
       // Retryable: back to queued so the photo survives offline (§9).
       updateScanStatus(db, scanId, 'queued');
+      logEvent(db, {
+        kind: 'scan',
+        name: 'scan_settled',
+        scanId,
+        durationMs,
+        detail: { outcome: 'queued', errorKind: kind, mode: scan.mode },
+      });
       return { scanId, outcome: 'queued', error: err.message };
     }
     const message = err instanceof Error ? err.message : String(err);
     updateScanStatus(db, scanId, 'failed', { error: message, resolvedAt: nowIso() });
+    logEvent(db, {
+      kind: 'scan',
+      name: 'scan_settled',
+      scanId,
+      durationMs,
+      detail: { outcome: 'failed', errorKind: kind, mode: scan.mode, message },
+    });
     return { scanId, outcome: 'failed', error: message };
   }
 }

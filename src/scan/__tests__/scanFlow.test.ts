@@ -1,6 +1,7 @@
 import { createNodeAdapter, type NodeDbAdapter } from '../../db/nodeAdapter';
 import { createBin, getScan, insertItem, insertScan } from '../../db/queries';
 import { runMigrations } from '../../db/schema';
+import { listEvents } from '../../diagnostics/events';
 import { getProviderChoice } from '../../settings/settings';
 import { resolveVisionProvider } from '../../vision';
 import { VisionError, type VisionProvider, type VisionUsage } from '../../vision/provider';
@@ -163,6 +164,42 @@ describe('scan lifecycle (blueprint §9 shape)', () => {
     expect(scan?.input_tokens).toBeNull();
     expect(scan?.output_tokens).toBeNull();
     expect(scan?.cost_usd).toBeNull();
+  });
+
+  it('logs scan_enqueued and a timed scan_settled with the engine (D16)', async () => {
+    const bin = createBin(db, { name: 'A', shortCode: 'B-001' });
+    const scanId = enqueueScan(db, { mode: 'bin_audit', binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
+    mockChoice.mockResolvedValue('fixture');
+    mockResolve.mockResolvedValue(providerReturning(RESULT));
+
+    await processScan(db, scanId);
+
+    const events = listEvents(db);
+    const enqueued = events.find((e) => e.name === 'scan_enqueued');
+    expect(enqueued?.scan_id).toBe(scanId);
+
+    const settled = events.find((e) => e.name === 'scan_settled');
+    expect(settled?.scan_id).toBe(scanId);
+    expect(settled?.duration_ms).toBeGreaterThanOrEqual(0);
+    expect(JSON.parse(settled?.detail ?? '{}')).toMatchObject({
+      outcome: 'review',
+      engine: 'fixture',
+      mode: 'bin_audit',
+    });
+  });
+
+  it('logs the error kind when recognition fails (D16)', async () => {
+    const bin = createBin(db, { name: 'A', shortCode: 'B-002' });
+    const scanId = enqueueScan(db, { mode: 'bin_audit', binId: bin.id, tempPhotoUri: 'file:///t.jpg' });
+    mockResolve.mockResolvedValue(providerThrowing(new VisionError('bad key', 'auth')));
+
+    await processScan(db, scanId);
+
+    const settled = listEvents(db).find((e) => e.name === 'scan_settled');
+    expect(JSON.parse(settled?.detail ?? '{}')).toMatchObject({
+      outcome: 'failed',
+      errorKind: 'auth',
+    });
   });
 
   it('processScan on a missing scan fails without touching the db', async () => {

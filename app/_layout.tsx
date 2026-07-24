@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { DbProvider } from '@/db/DbProvider';
+import { DiagnosticsRunner } from '@/diagnostics/DiagnosticsRunner';
 import { QueueRunner } from '@/queue/QueueRunner';
 import { navTheme } from '@/theme';
 
@@ -9,6 +10,7 @@ export default function RootLayout() {
   return (
     <DbProvider>
       <QueueRunner />
+      <DiagnosticsRunner />
       <Stack screenOptions={navTheme}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="bin/[id]" options={{ title: 'Bin' }} />
@@ -18,6 +20,7 @@ export default function RootLayout() {
         <Stack.Screen name="move/[binId]" options={{ title: 'Move bin' }} />
         <Stack.Screen name="queue" options={{ title: 'Scan queue' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+        <Stack.Screen name="diagnostics" options={{ title: 'Diagnostics' }} />
       </Stack>
       <StatusBar style="light" />
     </DbProvider>

@@ -47,3 +47,6 @@ dev.db
 
 # Pending image pool: manifest committed, the CC images are re-fetchable via scripts/devtest/fetch-bank.sh
 eval/pool/*.jpg
+
+# Exported diagnostics bundles
+binocular-diagnostics-*.zip

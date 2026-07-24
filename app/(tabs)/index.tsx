@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CodeTag } from '@/components/CodeTag';
@@ -15,6 +15,7 @@ import {
   type BinRow,
   type ItemWithBin,
 } from '@/db/queries';
+import { logEvent } from '@/diagnostics/events';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { searchBins, searchItems, type SearchResult } from '@/search/fts';
 import { colors, radius, sp, type } from '@/theme';
@@ -145,6 +146,22 @@ export default function HomeScreen() {
   const results = trimmed ? searchItems(db, trimmed, 50) : [];
   const binMatches = trimmed ? searchBins(db, trimmed) : [];
   const recentBins = trimmed ? [] : listRecentBins(db, 12);
+
+  // D16: log the settled query, not every keystroke.
+  useEffect(() => {
+    if (!trimmed) return;
+    const timer = setTimeout(() => {
+      logEvent(db, {
+        kind: 'search',
+        name: 'search',
+        detail: { query: trimmed, items: results.length, bins: binMatches.length },
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+    // Intentionally keyed on the query alone: result counts are derived from
+    // it, and including them would re-fire the timer on unrelated renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [db, trimmed]);
   const checkedOut = trimmed ? [] : listCheckedOutItems(db);
   const lowStock = trimmed ? [] : listLowStockItems(db);
 
