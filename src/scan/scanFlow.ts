@@ -8,6 +8,7 @@ import {
   updateScanStatus,
   type ScanMode,
 } from '../db/queries';
+import { listTagSlugs } from '../db/tags';
 import { logEvent } from '../diagnostics/events';
 import { newId } from '../lib/id';
 import { nowIso } from '../lib/time';
@@ -69,6 +70,9 @@ export async function processScan(db: DbAdapter, scanId: string): Promise<ScanFl
       mode: scan.mode,
       binName: bin?.name,
       existingItems: existingItems.length > 0 ? existingItems : undefined,
+      // D19: the vocabulary as it stands right now, so the prompt and the
+      // response schema offer the tags this workshop actually has.
+      tags: listTagSlugs(db),
     });
     updateScanStatus(db, scanId, 'review', { rawResponse: JSON.stringify(result) });
     // D15: record which engine ran and, when the API metered it, the spend.

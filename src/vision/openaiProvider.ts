@@ -1,4 +1,4 @@
-import { RECOGNITION_JSON_SCHEMA } from './jsonSchema';
+import { recognitionJsonSchema } from './jsonSchema';
 import { buildVisionPrompt } from './prompt';
 import { VisionError, type ScanContext, type VisionProvider } from './provider';
 import { RecognitionResult } from './types';
@@ -76,7 +76,11 @@ function errorFromStatus(status: number, detail: string): VisionError {
   return new VisionError(`OpenAI request rejected (${status}): ${detail}`, 'invalid_response');
 }
 
-export function buildOpenAiRequestBody(photosBase64: string[], promptText: string): object {
+export function buildOpenAiRequestBody(
+  photosBase64: string[],
+  promptText: string,
+  tags: readonly string[],
+): object {
   return {
     model: VISION_MODEL,
     max_output_tokens: MAX_OUTPUT_TOKENS,
@@ -100,7 +104,7 @@ export function buildOpenAiRequestBody(photosBase64: string[], promptText: strin
       format: {
         type: 'json_schema',
         name: 'recognition_result',
-        schema: RECOGNITION_JSON_SCHEMA,
+        schema: recognitionJsonSchema(tags),
         strict: true,
       },
     },
@@ -150,8 +154,9 @@ export function createOpenAiProvider(
     apiKey: string,
     photosBase64: string[],
     promptText: string,
+    tags: readonly string[],
   ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
-    const body = buildOpenAiRequestBody(photosBase64, promptText);
+    const body = buildOpenAiRequestBody(photosBase64, promptText, tags);
     const responseBody = await postResponses(fetchFn, apiKey, body);
     return {
       text: extractOpenAiOutputText(responseBody),
@@ -171,7 +176,7 @@ export function createOpenAiProvider(
       let inputTokens = 0;
       let outputTokens = 0;
       const usage = () => ({ inputTokens, outputTokens, model: VISION_MODEL });
-      const first = await requestText(apiKey, photosBase64, prompt);
+      const first = await requestText(apiKey, photosBase64, prompt, ctx.tags);
       inputTokens += first.inputTokens;
       outputTokens += first.outputTokens;
       try {
@@ -186,6 +191,7 @@ export function createOpenAiProvider(
           photosBase64,
           `${prompt}\n\nYour previous response was invalid: ${firstFailure.message}\n` +
             'Respond again with ONLY a corrected JSON object.',
+          ctx.tags,
         );
         inputTokens += repaired.inputTokens;
         outputTokens += repaired.outputTokens;

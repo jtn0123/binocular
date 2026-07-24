@@ -7,6 +7,9 @@ import {
 } from '../openaiProvider';
 import { VisionError } from '../provider';
 
+/** D19: providers are handed the vocabulary; tests supply a small one. */
+const TEST_TAGS = ['hand_tool', 'fastener', 'electrical', 'other'];
+
 const VALID_RESULT = {
   items: [
     {
@@ -57,7 +60,7 @@ async function kindOf(promise: Promise<unknown>): Promise<string> {
 
 describe('buildOpenAiRequestBody', () => {
   it('shapes a Responses API request with image, prompt, and strict schema', () => {
-    const body = buildOpenAiRequestBody(['AAAA'], 'prompt text') as Record<string, any>;
+    const body = buildOpenAiRequestBody(['AAAA'], 'prompt text', TEST_TAGS) as Record<string, any>;
     expect(body.model).toBe('gpt-5.6');
     const content = body.input[0].content;
     expect(content[0]).toEqual({
@@ -73,7 +76,7 @@ describe('buildOpenAiRequestBody', () => {
   });
 
   it('carries multiple photos in order before the prompt (D11 array contract)', () => {
-    const body = buildOpenAiRequestBody(['one', 'two'], 'p') as Record<string, any>;
+    const body = buildOpenAiRequestBody(['one', 'two'], 'p', TEST_TAGS) as Record<string, any>;
     const types = body.input[0].content.map((c: { type: string }) => c.type);
     expect(types).toEqual(['input_image', 'input_image', 'input_text']);
   });
@@ -108,7 +111,7 @@ describe('createOpenAiProvider', () => {
       }),
     );
     const provider = createOpenAiProvider(getKey, fetchFn);
-    const { result, usage } = await provider.recognize(['img'], { mode: 'bin_audit' });
+    const { result, usage } = await provider.recognize(['img'], { mode: 'bin_audit', tags: TEST_TAGS });
     expect(result.items[0].name).toBe('Phillips screwdriver');
     expect(usage).toEqual({ inputTokens: 2100, outputTokens: 480, model: 'gpt-5.6' });
     expect(fetchFn).toHaveBeenCalledTimes(1);
@@ -136,7 +139,7 @@ describe('createOpenAiProvider', () => {
         }),
       );
     const provider = createOpenAiProvider(getKey, fetchFn);
-    const { result, usage } = await provider.recognize(['img'], { mode: 'bin_audit' });
+    const { result, usage } = await provider.recognize(['img'], { mode: 'bin_audit', tags: TEST_TAGS });
     expect(result.items).toHaveLength(1);
     // The scan's true spend includes the failed first attempt.
     expect(usage).toEqual({ inputTokens: 4200, outputTokens: 550, model: 'gpt-5.6' });
@@ -150,7 +153,7 @@ describe('createOpenAiProvider', () => {
       fakeResponse({ ok: true, json: messageBody('still bad') }),
     );
     const provider = createOpenAiProvider(getKey, fetchFn);
-    await expect(kindOf(provider.recognize(['img'], { mode: 'bin_audit' }))).resolves.toBe(
+    await expect(kindOf(provider.recognize(['img'], { mode: 'bin_audit', tags: TEST_TAGS }))).resolves.toBe(
       'invalid_response',
     );
     expect(fetchFn).toHaveBeenCalledTimes(2);
@@ -167,7 +170,7 @@ describe('createOpenAiProvider', () => {
     for (const [status, kind] of cases) {
       const fetchFn: FetchLike = async () => fakeResponse({ ok: false, status, text: 'detail' });
       const provider = createOpenAiProvider(getKey, fetchFn);
-      await expect(kindOf(provider.recognize(['img'], { mode: 'bin_audit' }))).resolves.toBe(kind);
+      await expect(kindOf(provider.recognize(['img'], { mode: 'bin_audit', tags: TEST_TAGS }))).resolves.toBe(kind);
     }
   });
 
@@ -176,7 +179,7 @@ describe('createOpenAiProvider', () => {
       throw new Error('offline');
     };
     const provider = createOpenAiProvider(getKey, fetchFn);
-    await expect(kindOf(provider.recognize(['img'], { mode: 'bin_audit' }))).resolves.toBe(
+    await expect(kindOf(provider.recognize(['img'], { mode: 'bin_audit', tags: TEST_TAGS }))).resolves.toBe(
       'network',
     );
   });
@@ -184,7 +187,7 @@ describe('createOpenAiProvider', () => {
   it('throws auth immediately when no key is stored (no request made)', async () => {
     const fetchFn = jest.fn();
     const provider = createOpenAiProvider(async () => null, fetchFn as unknown as FetchLike);
-    await expect(kindOf(provider.recognize(['img'], { mode: 'bin_audit' }))).resolves.toBe('auth');
+    await expect(kindOf(provider.recognize(['img'], { mode: 'bin_audit', tags: TEST_TAGS }))).resolves.toBe('auth');
     expect(fetchFn).not.toHaveBeenCalled();
   });
 });

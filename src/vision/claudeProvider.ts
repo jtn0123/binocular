@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-import { RECOGNITION_JSON_SCHEMA } from './jsonSchema';
+import { recognitionJsonSchema } from './jsonSchema';
 import { buildVisionPrompt } from './prompt';
 import { VisionError, type ScanContext, type VisionProvider } from './provider';
 import { RecognitionResult } from './types';
@@ -64,12 +64,13 @@ export function createClaudeProvider(getApiKey: () => Promise<string | null>): V
     client: Anthropic,
     photosBase64: string[],
     promptText: string,
+    tags: readonly string[],
   ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
     const msg = await client.messages.create({
       model: VISION_MODEL,
       max_tokens: MAX_TOKENS,
       output_config: {
-        format: { type: 'json_schema', schema: RECOGNITION_JSON_SCHEMA },
+        format: { type: 'json_schema', schema: recognitionJsonSchema(tags) },
       },
       messages: [
         {
@@ -110,7 +111,7 @@ export function createClaudeProvider(getApiKey: () => Promise<string | null>): V
       let outputTokens = 0;
       const usage = () => ({ inputTokens, outputTokens, model: VISION_MODEL });
       try {
-        const first = await request(client, photosBase64, prompt);
+        const first = await request(client, photosBase64, prompt, ctx.tags);
         inputTokens += first.inputTokens;
         outputTokens += first.outputTokens;
         try {
@@ -126,6 +127,7 @@ export function createClaudeProvider(getApiKey: () => Promise<string | null>): V
             photosBase64,
             `${prompt}\n\nYour previous response was invalid: ${firstFailure.message}\n` +
               'Respond again with ONLY a corrected JSON object.',
+            ctx.tags,
           );
           inputTokens += repaired.inputTokens;
           outputTokens += repaired.outputTokens;

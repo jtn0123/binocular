@@ -2,6 +2,7 @@ import { newId } from '../lib/id';
 import { nowIso } from '../lib/time';
 
 import type { DbAdapter } from './adapter';
+import type { ItemCategory } from '../vision/types';
 
 /** Row shapes mirror the schema in schema.ts (blueprint §4) verbatim. */
 export interface LocationRow {
@@ -27,19 +28,12 @@ export interface BinRow {
   created_at: string;
 }
 
-export type ItemCategory =
-  | 'hand_tool'
-  | 'power_tool'
-  | 'fastener'
-  | 'electrical'
-  | 'plumbing'
-  | 'adhesive_finish'
-  | 'safety'
-  | 'measuring'
-  | 'bit_blade_accessory'
-  | 'hardware'
-  | 'material'
-  | 'other';
+/**
+ * A tag slug (D19). The vocabulary lives in the `tags` table and is the
+ * user's to change, so this is deliberately a string rather than a closed
+ * union — re-exported from the vision contract so there is one definition.
+ */
+export type { ItemCategory };
 
 export interface ItemRow {
   id: string;

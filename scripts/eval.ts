@@ -8,6 +8,7 @@ import { createClaudeProvider } from '../src/vision/claudeProvider';
 import { createFixtureProvider } from '../src/vision/fixtureProvider';
 import { createOpenAiProvider } from '../src/vision/openaiProvider';
 import type { VisionProvider, VisionUsage } from '../src/vision/provider';
+import { SEEDED_TAG_SLUGS } from '../src/db/tags';
 
 /**
  * Ground-truth eval harness (dogfood #2, POLISH.md pass 5):
@@ -72,6 +73,8 @@ async function main() {
     const { result, usage } = await provider.recognize([photoBase64], {
       mode: 'bin_audit',
       binName: evalCase.binName,
+      // No database here — score against the tags a fresh install ships with.
+      tags: [...SEEDED_TAG_SLUGS],
     });
     const elapsed = Date.now() - started;
     const score = scoreCase(evalCase, result);
