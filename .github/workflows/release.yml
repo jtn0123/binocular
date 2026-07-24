@@ -14,6 +14,9 @@ name: Android APK
 on:
   push:
     tags: ['v*']
+    # TEMPORARY (removed before merge): proves the pipeline builds on CI while
+    # the PR that would normally exercise it can't be opened.
+    branches: ['claude/tvid-last-commits-ob0n3q']
   workflow_dispatch:
     inputs:
       abis:
@@ -139,7 +142,7 @@ jobs:
           retention-days: 30
 
       - name: Write release notes
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         env:
           TAG: ${{ steps.build.outputs.tag }}
         run: |
@@ -169,7 +172,7 @@ jobs:
           cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish the GitHub Release
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.build.outputs.tag }}
