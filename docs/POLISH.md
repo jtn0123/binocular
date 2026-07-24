@@ -217,6 +217,18 @@ end-to-end on the emulator:
   the pin with the four key gradle files byte-identical. The Pixel_9_Pro AVD is an empty husk (boots fail); use
   `galaxy-s24-api36`. Emulator /data needed ~700MB free for the 181MB APK
   (removed the stale dev client + Expo Go).
+- **Remote release delivery (2026-07-24):** field testing continues away from
+  the build machine, so `.github/workflows/release.yml` now builds the same
+  `assembleRelease` APK on CI and publishes it as a GitHub Release the phone
+  installs directly. The update is **in place** — same `applicationId`, same
+  key (`expo prebuild` writes the RN template `debug.keystore`, which is what
+  the local release variant already signed with), and a monotonic
+  `versionCode` of `1000 + run number` stamped into `app.json` at build time.
+  Database, photo store and secure-store survive untouched; migrations run on
+  boot as they do on any launch. Default build is arm64-v8a only (~60 MB vs
+  181 MB for four ABIs). Rules, failure modes and the cost of moving to a
+  private signing key: `docs/RELEASES.md`.
+
 - **Black-camera finding refined:** on a *headless* (`-no-window`) emulator
   the camera **preview renders the virtual scene** — only captured stills
   come back black. Round-2's "black frames" applied to windowed mode on this

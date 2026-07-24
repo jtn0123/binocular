@@ -123,6 +123,11 @@ walk around; release is pre-wired to the debug keystore):
 npx expo run:android --variant release --device
 ```
 
+Away from the laptop, the same build comes from CI instead: Actions →
+**Android APK** → *Run workflow* (or push a `v*` tag) publishes a signed APK
+as a GitHub Release the phone can download and install **over** the existing
+app, keeping its bins, items and photos — see [`docs/RELEASES.md`](docs/RELEASES.md).
+
 Recognition engines are chosen in **Settings**, where each cloud engine's API
 key is stored in `expo-secure-store` (never in the repo or bundle). The
 whole app is demo-able on the fixture engine with seeded data and bundled
@@ -136,4 +141,5 @@ demo photos (`assets/demo/`, dev only).
 | [`docs/PLAN.md`](docs/PLAN.md) | Execution plan: file-level task checklists per stage, exit criteria, dependencies, testing strategy, risk register |
 | [`docs/POLISH.md`](docs/POLISH.md) | Living post-stage polish plan: pass order, cost/tokenizer notes, image resource ideas |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Parked post-v1 ideas and the long-term list |
+| [`docs/RELEASES.md`](docs/RELEASES.md) | Shipping a build to the field-test phone: CI release APKs, install rules, why an update keeps your data |
 | [`CLAUDE.md`](CLAUDE.md) | Standing orders for AI coding agents: blueprint is law, work in plan order |
