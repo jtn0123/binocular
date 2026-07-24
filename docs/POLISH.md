@@ -217,6 +217,32 @@ end-to-end on the emulator:
   the pin with the four key gradle files byte-identical. The Pixel_9_Pro AVD is an empty husk (boots fail); use
   `galaxy-s24-api36`. Emulator /data needed ~700MB free for the 181MB APK
   (removed the stale dev client + Expo Go).
+## Round 7 (2026-07-24) — remote field-test batch
+
+Eleven fixes agreed in one go, each landing as its own commit so a
+regression is bisectable to a single change. Two needed the blueprint moved
+first, by their own `blueprint:` commits: **D18** (deferred review) and the
+§8.3 rewrite (tags + near-miss search).
+
+| # | Change | Notes |
+|---|---|---|
+| 1 | Shoot and walk | Capture hands the scan to the §9 queue and stays live (D18); `find_it` excluded |
+| 2 | Sticky camera controls | Torch, zoom and shooting mode persist (`capturePrefs`, zod-parsed) |
+| 3 | Frame preview | Cloud engines confirm before a paid round trip; free engines skip the tap |
+| 4 | Tags searchable | Migration 006 rebuilds `item_search` with `category`; bm25 10/5/2/1/3 |
+| 5 | Typo tolerance | Migration 007 adds `item_vocab`; fallback only after an exact miss |
+| 6 | Places searchable | Shelves and locations, landing on a focused Browse card |
+| 7 | Home queue banner | Waiting scans split into review / working / failed |
+| 8 | Bin sort + filter | Pure helpers in `db/itemView.ts`; controls appear past six items |
+| 9 | Undo parity | Move, quantity and check-out join delete on the one snackbar |
+| 10 | Storage + reclaim | Orphan-only cleanup; `deleted_items` photos are protected (D17) |
+| 11 | Build identity | Version + build number, and a link to the releases page — no polling |
+
+Open from this round: the capture preview is the *eye* as blur detector —
+the automatic quality gate in BACKLOG is still unbuilt; and one pre-existing
+flake was seen once in `reviewDraft.test.tsx` under full-suite parallelism
+(green on every re-run since, including CI).
+
 - **Remote release delivery (2026-07-24):** field testing continues away from
   the build machine, so `.github/workflows/release.yml` now builds the same
   `assembleRelease` APK on CI and publishes it as a GitHub Release the phone
