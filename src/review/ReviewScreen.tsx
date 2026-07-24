@@ -30,6 +30,7 @@ import {
 } from '../db/queries';
 import { quickCreateBin } from '../db/scaffold';
 import { FALLBACK_TAG, listTags } from '../db/tags';
+import { findDuplicate, suggestTag } from '../db/tagSuggest';
 import { logEvent } from '../diagnostics/events';
 import { hapticSuccess, hapticWarning } from '../lib/haptics';
 import { newId } from '../lib/id';
@@ -75,15 +76,17 @@ export interface ReviewScreenProps {
 
 const norm = (s: string) => s.trim().toLowerCase();
 
-function buildDetectedChips(
+export function buildDetectedChips(
   result: RecognitionResult,
   existing: ItemRow[],
   known: ReadonlySet<string>,
+  suggest: (name: string, brand: string | null) => string | null = () => null,
 ): DetectedChip[] {
   const remaining = [...existing];
   return result.items.map((item, i) => {
     const matchIdx = remaining.findIndex((e) => norm(e.name) === norm(item.name));
     const matched = matchIdx >= 0 ? remaining.splice(matchIdx, 1)[0] : null;
+    const resolved = known.has(item.category) ? item.category : FALLBACK_TAG;
     return {
       key: `detected-${i}`,
       name: item.name,
@@ -92,7 +95,10 @@ function buildDetectedChips(
       // is the user's and may have changed since the scan was queued. An
       // unknown tag becomes the fallback rather than failing the whole scan
       // — and it is visible on the chip, so it can be corrected before save.
-      category: known.has(item.category) ? item.category : FALLBACK_TAG,
+      //
+      // Where that leaves us on `other` — routinely, with the on-device
+      // engine — this workshop's own history gets a say before we give up.
+      category: resolved === FALLBACK_TAG ? (suggest(item.name, item.brand) ?? resolved) : resolved,
       quantity: item.quantity,
       labelText: item.label_text,
       notes: null,
@@ -130,19 +136,22 @@ export function ReviewScreen({
     } catch {
       return null;
     }
-     
   }, [scan?.raw_response]);
 
   // D19: the vocabulary as it stands now — used both to resolve what the
   // model returned and to render the Tag picker.
   const tags = listTags(db);
   const knownTags = useMemo(() => new Set(tags.map((t) => t.slug)), [tags]);
+  const suggestFromHistory = (name: string, brand: string | null) =>
+    suggestTag(db, name, brand)?.slug ?? null;
 
   // Restore any in-progress work from a previous visit (draft survives the
   // QR-label detour, the queue round-trip, and plain back navigation).
   const [draft] = useState(() => loadReviewDraft(scanId));
   const [chips, setChips] = useState<DetectedChip[]>(
-    () => draft?.chips ?? (parsed ? buildDetectedChips(parsed, existingItems, knownTags) : []),
+    () =>
+      draft?.chips ??
+      (parsed ? buildDetectedChips(parsed, existingItems, knownTags, suggestFromHistory) : []),
   );
   const [keepExisting, setKeepExisting] = useState<Record<string, boolean>>(
     () => draft?.keepExisting ?? Object.fromEntries(existingItems.map((e) => [e.id, true])),
@@ -192,7 +201,9 @@ export function ReviewScreen({
                 if (fresh?.raw_response) {
                   try {
                     const result = RecognitionResult.parse(JSON.parse(fresh.raw_response));
-                    setChips(buildDetectedChips(result, existingItems, knownTags));
+                    setChips(
+                      buildDetectedChips(result, existingItems, knownTags, suggestFromHistory),
+                    );
                   } catch {
                     // fall through to failed state on next render
                   }
@@ -352,8 +363,8 @@ export function ReviewScreen({
         {scan.engine === 'fixture' && (
           <View style={styles.demoNotice} testID="demo-engine-notice">
             <Text style={styles.demoNoticeText}>
-              Demo engine — these are canned results, not a reading of your photo. Pick Local or
-              add a cloud API key in Settings for real recognition.
+              Demo engine — these are canned results, not a reading of your photo. Pick Local or add
+              a cloud API key in Settings for real recognition.
             </Text>
           </View>
         )}
@@ -389,13 +400,13 @@ export function ReviewScreen({
 
         {isMergeDiff ? (
           <>
-            <ChipSection title="New" chips={newChips} onToggle={toggleChip} onEdit={setEditingKey} />
             <ChipSection
-              title="Still here"
-              chips={stillHere}
+              title="New"
+              chips={newChips}
               onToggle={toggleChip}
-              onEdit={null}
+              onEdit={setEditingKey}
             />
+            <ChipSection title="Still here" chips={stillHere} onToggle={toggleChip} onEdit={null} />
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Not seen in this photo</Text>
               {notSeen.length === 0 ? (
@@ -624,9 +635,14 @@ export function ChipEditor({
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [category, setCategory] = useState<ItemCategory>(FALLBACK_TAG);
   const [seededFor, setSeededFor] = useState<string | null>(null);
+  // Once the user picks a tag, autofill stops second-guessing them.
+  const [tagTouched, setTagTouched] = useState(false);
+  const [tagSuggested, setTagSuggested] = useState(false);
   // D19: read straight from the vocabulary rather than taking a prop, so all
   // three places that open this editor stay unchanged.
-  const editorTags = listTags(useDb());
+  const db = useDb();
+  const editorTags = listTags(db);
+  const duplicate = findDuplicate(db, name, chip?.matchedExistingId ?? null);
 
   const seedKey = chip?.key ?? 'new';
   if (visible && seededFor !== seedKey) {
@@ -636,6 +652,9 @@ export function ChipEditor({
     setNotes(chip?.notes ?? '');
     setPhotoUri(chip?.photoUri ?? null);
     setCategory(chip?.category ?? FALLBACK_TAG);
+    // An existing chip already carries a decided tag; a fresh one does not.
+    setTagTouched(chip != null);
+    setTagSuggested(false);
     setSeededFor(seedKey);
   }
   if (!visible && seededFor !== null) setSeededFor(null);
@@ -649,9 +668,26 @@ export function ChipEditor({
             style={styles.input}
             placeholder="Name"
             value={name}
-            onChangeText={setName}
+            onChangeText={(next) => {
+              setName(next);
+              // Autofill the tag from this workshop's own history, until the
+              // user picks one — then their choice always wins.
+              if (!tagTouched) {
+                const suggested = suggestTag(db, next, brand || null);
+                setCategory(suggested?.slug ?? FALLBACK_TAG);
+                setTagSuggested(suggested !== null);
+              }
+            }}
             testID="editor-name"
           />
+          {duplicate ? (
+            <Text style={styles.duplicateHint} testID="duplicate-hint">
+              You already have {duplicate.quantity > 1 ? `${duplicate.quantity}× ` : ''}
+              {duplicate.name}
+              {duplicate.binCode ? ` in ${duplicate.binCode}` : ''}
+              {duplicate.binName ? ` · ${duplicate.binName}` : ''}
+            </Text>
+          ) : null}
           <TextInput
             style={styles.input}
             placeholder="Brand (optional)"
@@ -694,13 +730,19 @@ export function ChipEditor({
               </Pressable>
             ) : null}
           </View>
-          <Text style={styles.tagHeading}>Tag</Text>
+          <Text style={styles.tagHeading}>
+            Tag{tagSuggested && !tagTouched ? ' · from your past items' : ''}
+          </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
             {editorTags.map((tag) => (
               <Pressable
                 key={tag.slug}
                 style={[styles.catChip, category === tag.slug && styles.catChipActive]}
-                onPress={() => setCategory(tag.slug)}
+                onPress={() => {
+                  setCategory(tag.slug);
+                  setTagTouched(true);
+                  setTagSuggested(false);
+                }}
                 accessibilityRole="button"
                 accessibilityState={{ selected: category === tag.slug }}
               >
@@ -892,6 +934,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   tagHeading: { ...type.stamp, marginTop: sp(1) },
+  duplicateHint: { ...type.dim, fontSize: 12, color: colors.amber, marginTop: -sp(1) },
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: sp(4) },
   photoThumb: {
     width: 52,
