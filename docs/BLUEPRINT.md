@@ -491,8 +491,12 @@ done only when every AC passes on an Android device/emulator.
 ### 8.3 Find it ("where is my …?")
 
 1. **Text path:** home-screen search box, FTS5 across name/brand/label_text/
-   notes, results show item -> bin -> shelf -> location breadcrumb + bin
-   cover photo.
+   notes/**category** (the UI calls it Tag, so it must be searchable),
+   results show item -> bin -> shelf -> location breadcrumb + bin cover
+   photo. A query that matches nothing is retried once against the closest
+   spellings **already in the index** (`fts5vocab`), and the UI says which
+   spelling it fell back to — never a silent substitution, and never a
+   bundled dictionary.
 2. **Photo path:** photograph the item; recognition returns its best
    identification; app runs that name/label through the same search and shows
    matching bins.
@@ -501,6 +505,11 @@ done only when every AC passes on an Android device/emulator.
 - [ ] Text search returns in <100ms on 1,000 items, fully offline.
 - [ ] Fuzzy-ish behavior: prefix matching ("scre" finds screwdrivers) via FTS5
       prefix queries.
+- [ ] A misspelling ("screwdrver") still finds the item, with the substituted
+      spelling shown; a word the workshop genuinely lacks still reports
+      nothing rather than inventing a match.
+- [ ] The near-miss pass runs only after an exact search returns nothing, so
+      the <100ms AC above is unaffected.
 - [ ] Photo path degrades gracefully offline: "search needs a connection for
       photo lookup — try text search."
 
