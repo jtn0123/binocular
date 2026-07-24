@@ -103,7 +103,10 @@ export default function BinDetailScreen() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   // Deletes go through the D17 trash: instantly undoable here, restorable
   // for 30 days from Recently deleted.
-  const [undoItems, setUndoItems] = useState<ItemRow[]>([]);
+  // One undo slot for every reversible action on this screen, not just
+  // delete: a mistaken Move or a fat-fingered quantity is exactly as easy to
+  // do and was exactly as unrecoverable.
+  const [undo, setUndo] = useState<{ label: string; revert: () => void } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   void tick;
   const refresh = () => setTick((t) => t + 1);
@@ -132,26 +135,43 @@ export default function BinDetailScreen() {
   const itemPhotos = bin.cover_photo_uri ? [] : listItemPhotoUris(db, bin.id);
   const selectedItems = items.filter((i) => selected[i.id]);
 
+  /** Shows the snackbar for 6s; a second action replaces the first. */
+  function offerUndo(label: string, revert: () => void) {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndo({ label, revert });
+    undoTimer.current = setTimeout(() => setUndo(null), 6000);
+  }
+
+  function runUndo() {
+    undo?.revert();
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndo(null);
+    refresh();
+  }
+
+  function describe(list: ItemRow[]): string {
+    return list.length === 1 ? list[0].name : `${list.length} items`;
+  }
+
   function removeItems(list: ItemRow[]) {
     for (const item of list) softDeleteItem(db, item.id);
-    if (undoTimer.current) clearTimeout(undoTimer.current);
-    setUndoItems(list);
-    undoTimer.current = setTimeout(() => setUndoItems([]), 6000);
+    offerUndo(`Deleted ${describe(list)}`, () => {
+      for (const item of list) restoreDeletedItem(db, item.id);
+    });
     setSheetItem(null);
     setSelectMode(false);
     setSelected({});
     refresh();
   }
 
-  function undoRemove() {
-    for (const item of undoItems) restoreDeletedItem(db, item.id);
-    if (undoTimer.current) clearTimeout(undoTimer.current);
-    setUndoItems([]);
-    refresh();
-  }
-
   function moveItems(list: ItemRow[], targetBinId: string) {
+    // Captured before the move: each item goes back where it came from, which
+    // matters for a multi-select spanning more than one origin.
+    const origins = list.map((item) => ({ id: item.id, binId: item.bin_id }));
     for (const item of list) moveItemToBin(db, item.id, targetBinId);
+    offerUndo(`Moved ${describe(list)}`, () => {
+      for (const origin of origins) moveItemToBin(db, origin.id, origin.binId);
+    });
     setMoving(null);
     setSelectMode(false);
     setSelected({});
@@ -164,7 +184,14 @@ export default function BinDetailScreen() {
       initialValue: String(item.quantity),
       keyboardType: 'number-pad',
       onSubmit: (value) => {
-        setItemQuantity(db, item.id, Math.max(0, parseInt(value, 10) || 0));
+        const previous = item.quantity;
+        const next = Math.max(0, parseInt(value, 10) || 0);
+        setItemQuantity(db, item.id, next);
+        if (next !== previous) {
+          offerUndo(`${item.name}: ${previous} → ${next}`, () =>
+            setItemQuantity(db, item.id, previous),
+          );
+        }
         refresh();
       },
     });
@@ -191,6 +218,7 @@ export default function BinDetailScreen() {
       submitLabel: 'Check out',
       onSubmit: (who) => {
         checkOutItem(db, item.id, who);
+        offerUndo(`${item.name} checked out to ${who}`, () => returnItem(db, item.id));
         refresh();
       },
     });
@@ -517,12 +545,12 @@ export default function BinDetailScreen() {
           </Pressable>
         </View>
       )}
-      {undoItems.length > 0 && (
+      {undo && (
         <View style={styles.snackbar} testID="undo-snackbar">
           <Text style={styles.snackbarText} numberOfLines={1}>
-            Deleted {undoItems.length === 1 ? undoItems[0].name : `${undoItems.length} items`}
+            {undo.label}
           </Text>
-          <Pressable onPress={undoRemove} hitSlop={8}>
+          <Pressable onPress={runUndo} hitSlop={8} accessibilityRole="button">
             <Text style={styles.snackbarUndo}>UNDO</Text>
           </Pressable>
         </View>
@@ -571,7 +599,9 @@ export default function BinDetailScreen() {
         onCheckoutOrReturn={(item) => {
           setSheetItem(null);
           if (item.checked_out_to) {
+            const holder = item.checked_out_to;
             returnItem(db, item.id);
+            offerUndo(`${item.name} returned`, () => checkOutItem(db, item.id, holder));
             refresh();
           } else {
             promptCheckout(item);
