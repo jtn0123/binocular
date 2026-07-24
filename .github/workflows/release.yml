@@ -38,8 +38,12 @@ on:
       - 'app.json'
       - 'package-lock.json'
 
+# Least privilege by default. Only the publish job — which never runs for a
+# pull request — is granted write, so the job that builds PR code cannot
+# write to the repository even on a same-repo PR where the token would
+# otherwise be writable.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: android-apk-${{ github.ref }}
@@ -50,10 +54,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
+    outputs:
+      tag: ${{ steps.build.outputs.tag }}
+      apk: ${{ steps.build.outputs.apk }}
+      abis: ${{ steps.build.outputs.abis }}
+      version_name: ${{ steps.build.outputs.version_name }}
+      size: ${{ steps.apk.outputs.size }}
+
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # release notes list the commits since the last release
+          # The build needs the code, not the ability to push it.
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -160,13 +172,31 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  publish:
+    needs: build
+    # Never for a pull request: the PR path build-tests the pipeline and
+    # publishes nothing.
+    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # release notes list the commits since the last release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.apk }}
+          path: dist
+
       - name: Write release notes
-        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         env:
-          TAG: ${{ steps.build.outputs.tag }}
-          APK: ${{ steps.build.outputs.apk }}
-          SIZE: ${{ steps.apk.outputs.size }}
-          ABIS: ${{ steps.build.outputs.abis }}
+          TAG: ${{ needs.build.outputs.tag }}
+          APK: ${{ needs.build.outputs.apk }}
+          SIZE: ${{ needs.build.outputs.size }}
+          ABIS: ${{ needs.build.outputs.abis }}
         run: |
           set -euo pipefail
           previous=$(git tag --list 'v*' 'build-*' --sort=-creatordate | grep -v "^${TAG}$" | head -1 || true)
@@ -194,12 +224,11 @@ jobs:
           cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish the GitHub Release
-        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.build.outputs.tag }}
-          APK: ${{ steps.build.outputs.apk }}
-          VERSION_NAME: ${{ steps.build.outputs.version_name }}
+          TAG: ${{ needs.build.outputs.tag }}
+          APK: ${{ needs.build.outputs.apk }}
+          VERSION_NAME: ${{ needs.build.outputs.version_name }}
           PRERELEASE: ${{ inputs.prerelease && '--prerelease' || '' }}
         run: |
           set -euo pipefail
