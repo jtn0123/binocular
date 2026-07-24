@@ -7,6 +7,12 @@ export interface ScanContext {
   binName?: string;
   /** bin_audit merge mode: names already recorded in the bin. */
   existingItems?: string[];
+  /**
+   * The tag vocabulary to offer the model (D19). Passed in rather than
+   * imported so providers stay free of database access, and so the prompt
+   * always reflects the tags that exist right now.
+   */
+  tags: string[];
 }
 
 /** Token usage measured by the API's `usage` field — never estimated (D15). */

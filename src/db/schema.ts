@@ -197,6 +197,38 @@ const MIGRATION_007_SEARCH_VOCAB = `
 CREATE VIRTUAL TABLE item_vocab USING fts5vocab(item_search, 'row');
 `;
 
+/**
+ * D19: the tag vocabulary becomes the user's, not the enum's.
+ *
+ * Seeded with the twelve tags that were hardcoded until now, so an existing
+ * database keeps working unchanged — every `items.category` value already in
+ * the wild is one of these. Items still store the slug as text, which is why
+ * this migration touches nothing but the new table: search, CSV and backups
+ * all carry `category` as a string already.
+ */
+const MIGRATION_008_TAGS = `
+CREATE TABLE tags (
+  slug TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  sort_order INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+INSERT INTO tags (slug, label, sort_order, created_at) VALUES
+  ('hand_tool',           'Hand tool',      0,  '2026-07-24T00:00:00Z'),
+  ('power_tool',          'Power tool',     1,  '2026-07-24T00:00:00Z'),
+  ('fastener',            'Fastener',       2,  '2026-07-24T00:00:00Z'),
+  ('electrical',          'Electrical',     3,  '2026-07-24T00:00:00Z'),
+  ('plumbing',            'Plumbing',       4,  '2026-07-24T00:00:00Z'),
+  ('adhesive_finish',     'Adhesive/finish', 5, '2026-07-24T00:00:00Z'),
+  ('safety',              'Safety',         6,  '2026-07-24T00:00:00Z'),
+  ('measuring',           'Measuring',      7,  '2026-07-24T00:00:00Z'),
+  ('bit_blade_accessory', 'Bit/blade',      8,  '2026-07-24T00:00:00Z'),
+  ('hardware',            'Hardware',       9,  '2026-07-24T00:00:00Z'),
+  ('material',            'Material',       10, '2026-07-24T00:00:00Z'),
+  ('other',               'Other',          11, '2026-07-24T00:00:00Z');
+`;
+
 export const MIGRATIONS: readonly string[] = [
   MIGRATION_001_INITIAL_SCHEMA,
   MIGRATION_002_FTS_TRIGGERS,
@@ -205,6 +237,7 @@ export const MIGRATIONS: readonly string[] = [
   MIGRATION_005_DELETED_ITEMS,
   MIGRATION_006_FTS_CATEGORY,
   MIGRATION_007_SEARCH_VOCAB,
+  MIGRATION_008_TAGS,
 ];
 
 export function getSchemaVersion(db: DbAdapter): number {

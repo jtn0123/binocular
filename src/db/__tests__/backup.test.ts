@@ -8,6 +8,7 @@ import {
   createShelf,
   insertItem,
   insertScan,
+  itemsForBin,
   listCheckedOutItems,
   listLowStockItems,
   setItemQuantity,
@@ -15,6 +16,7 @@ import {
   updateScanStatus,
 } from '../queries';
 import { runMigrations } from '../schema';
+import { createTag, FALLBACK_TAG, getTag } from '../tags';
 
 describe('backup dump/restore (stage 6 exit criteria)', () => {
   let source: NodeDbAdapter;
@@ -60,6 +62,46 @@ describe('backup dump/restore (stage 6 exit criteria)', () => {
     const restored = dumpAll(target, '2026-07-22T00:00:00Z');
 
     expect(restored).toEqual(dump);
+  });
+
+  it('carries custom tags through a round trip, items included (D19)', () => {
+    const { bin } = populate();
+    createTag(source, 'Marine');
+    insertItem(source, { binId: bin.id, name: 'Shackle', category: 'marine' });
+
+    restoreAll(target, dumpAll(source, '2026-07-22T00:00:00Z'));
+
+    // The vocabulary came back...
+    expect(getTag(target, 'marine')?.label).toBe('Marine');
+    // ...so the item that used it kept its tag rather than falling back.
+    const restored = itemsForBin(target, bin.id).find((i) => i.name === 'Shackle');
+    expect(restored?.category).toBe('marine');
+  });
+
+  it('resolves a tag the backup used but did not define, rather than orphaning it', () => {
+    const { bin } = populate();
+    const dump = dumpAll(source, '2026-07-22T00:00:00Z') as ReturnType<typeof dumpAll> & {
+      items: { category: string }[];
+    };
+    // A hand-edited or truncated backup: an item references a tag that the
+    // dump's own vocabulary does not contain.
+    dump.items[0].category = 'ghost_tag';
+
+    restoreAll(target, dump);
+
+    const restored = itemsForBin(target, bin.id);
+    expect(restored.some((i) => i.category === 'ghost_tag')).toBe(false);
+    expect(restored.some((i) => i.category === FALLBACK_TAG)).toBe(true);
+  });
+
+  it('imports a pre-D19 backup that has no tags key at all', () => {
+    populate();
+    const dump = dumpAll(source, '2026-07-22T00:00:00Z');
+    delete (dump as { tags?: unknown }).tags;
+
+    expect(() => restoreAll(target, dump)).not.toThrow();
+    // Migration 008 already seeded the built-ins, so nothing is orphaned.
+    expect(itemsForBin(target, dump.bins[0].id).length).toBeGreaterThan(0);
   });
 
   it('refuses to import into a non-empty database — imports never merge', () => {
@@ -200,9 +242,22 @@ describe('import manifest validation (D9 trust boundary, dogfood fuzz)', () => {
     expect(() => parseBackupDump(dump2)).toThrow(/not a valid Binocular backup/i);
   });
 
-  it('rejects an unknown item category instead of writing it to the db', () => {
+  it('rejects a malformed item category — slug shape is still enforced', () => {
+    // validDump() writes rows, so build one and copy it per case.
+    const base = JSON.stringify(validDump());
+    for (const category of ['', 'Contraband Goods', 'contra-band', 42]) {
+      const dump = JSON.parse(base) as { items: Record<string, unknown>[] };
+      dump.items[0].category = category;
+      expect(() => parseBackupDump(dump)).toThrow(/category/);
+    }
+  });
+
+  it('accepts a well-formed tag it does not know, and resolves it on restore (D19)', () => {
+    // The vocabulary is the user's, so a backup can legitimately carry tags
+    // this install has never seen. Refusing the whole import over one would
+    // be the wrong trade — the item lands on `other` instead.
     const dump = validDump() as { items: Record<string, unknown>[] };
     dump.items[0].category = 'contraband';
-    expect(() => parseBackupDump(dump)).toThrow(/category/);
+    expect(() => parseBackupDump(dump)).not.toThrow();
   });
 });

@@ -18,9 +18,10 @@ export function buildVisionPrompt(ctx: ScanContext): string {
     '- label_text: if the item is packaged (box of screws, tube of adhesive),',
     '  transcribe the key label text verbatim (product name, size, count).',
     '  Otherwise null.',
-    '- category: exactly one of: hand_tool, power_tool, fastener, electrical,',
-    '  plumbing, adhesive_finish, safety, measuring, bit_blade_accessory,',
-    '  hardware, material, other.',
+    // D19: the vocabulary is the user's, so it is listed from the tags table
+    // at build time rather than hardcoded here.
+    `- category: exactly one of: ${ctx.tags.join(', ')}.`,
+    '  Use "other" when none of them fits — do not invent a category.',
     '- confidence — use exactly this rubric:',
     '    high:   item type AND its identifying details (size/brand/label) are',
     '            clearly visible and unambiguous.',

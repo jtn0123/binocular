@@ -6,6 +6,7 @@ import { getProviderChoice } from '../../settings/settings';
 import { resolveVisionProvider } from '../../vision';
 import { VisionError, type VisionProvider, type VisionUsage } from '../../vision/provider';
 import { enqueueScan, processScan } from '../scanFlow';
+import { listTagSlugs } from '../../db/tags';
 
 jest.mock('../photos', () => ({
   persistPhoto: jest.fn(() => 'file:///photos/stored.jpg'),
@@ -95,6 +96,8 @@ describe('scan lifecycle (blueprint §9 shape)', () => {
       mode: 'bin_audit',
       binName: 'Hand tools',
       existingItems: ['Hammer'],
+      // D19: the live vocabulary travels with every scan.
+      tags: listTagSlugs(db),
     });
   });
 
@@ -229,6 +232,7 @@ describe('scan lifecycle (blueprint §9 shape)', () => {
       mode: 'find_it',
       binName: undefined,
       existingItems: undefined,
+      tags: listTagSlugs(db),
     });
   });
 });

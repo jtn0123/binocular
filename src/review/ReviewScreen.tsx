@@ -29,6 +29,7 @@ import {
   type ItemRow,
 } from '../db/queries';
 import { quickCreateBin } from '../db/scaffold';
+import { FALLBACK_TAG, listTags } from '../db/tags';
 import { logEvent } from '../diagnostics/events';
 import { hapticSuccess, hapticWarning } from '../lib/haptics';
 import { newId } from '../lib/id';
@@ -38,7 +39,7 @@ import { processScan } from '../scan/scanFlow';
 import { clearReviewDraft, loadReviewDraft, saveReviewDraft } from './reviewDraft';
 import { colors, mono, radius, sp, type } from '../theme';
 import { formatTokens, formatUsd } from '../vision/cost';
-import { ItemCategory, RecognitionResult, type Confidence } from '../vision/types';
+import { RecognitionResult, type Confidence, type ItemCategory } from '../vision/types';
 
 /**
  * Recognition review (blueprint §6.3 + §8.1 step 6). Confidence maps to
@@ -74,7 +75,11 @@ export interface ReviewScreenProps {
 
 const norm = (s: string) => s.trim().toLowerCase();
 
-function buildDetectedChips(result: RecognitionResult, existing: ItemRow[]): DetectedChip[] {
+function buildDetectedChips(
+  result: RecognitionResult,
+  existing: ItemRow[],
+  known: ReadonlySet<string>,
+): DetectedChip[] {
   const remaining = [...existing];
   return result.items.map((item, i) => {
     const matchIdx = remaining.findIndex((e) => norm(e.name) === norm(item.name));
@@ -83,7 +88,11 @@ function buildDetectedChips(result: RecognitionResult, existing: ItemRow[]): Det
       key: `detected-${i}`,
       name: item.name,
       brand: item.brand,
-      category: item.category,
+      // §6.1 tag resolution (D19): the shape passed zod, but the vocabulary
+      // is the user's and may have changed since the scan was queued. An
+      // unknown tag becomes the fallback rather than failing the whole scan
+      // — and it is visible on the chip, so it can be corrected before save.
+      category: known.has(item.category) ? item.category : FALLBACK_TAG,
       quantity: item.quantity,
       labelText: item.label_text,
       notes: null,
@@ -124,11 +133,16 @@ export function ReviewScreen({
      
   }, [scan?.raw_response]);
 
+  // D19: the vocabulary as it stands now — used both to resolve what the
+  // model returned and to render the Tag picker.
+  const tags = listTags(db);
+  const knownTags = useMemo(() => new Set(tags.map((t) => t.slug)), [tags]);
+
   // Restore any in-progress work from a previous visit (draft survives the
   // QR-label detour, the queue round-trip, and plain back navigation).
   const [draft] = useState(() => loadReviewDraft(scanId));
   const [chips, setChips] = useState<DetectedChip[]>(
-    () => draft?.chips ?? (parsed ? buildDetectedChips(parsed, existingItems) : []),
+    () => draft?.chips ?? (parsed ? buildDetectedChips(parsed, existingItems, knownTags) : []),
   );
   const [keepExisting, setKeepExisting] = useState<Record<string, boolean>>(
     () => draft?.keepExisting ?? Object.fromEntries(existingItems.map((e) => [e.id, true])),
@@ -178,7 +192,7 @@ export function ReviewScreen({
                 if (fresh?.raw_response) {
                   try {
                     const result = RecognitionResult.parse(JSON.parse(fresh.raw_response));
-                    setChips(buildDetectedChips(result, existingItems));
+                    setChips(buildDetectedChips(result, existingItems, knownTags));
                   } catch {
                     // fall through to failed state on next render
                   }
@@ -608,8 +622,11 @@ export function ChipEditor({
   const [quantity, setQuantity] = useState('1');
   const [notes, setNotes] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
-  const [category, setCategory] = useState<ItemCategory>('other');
+  const [category, setCategory] = useState<ItemCategory>(FALLBACK_TAG);
   const [seededFor, setSeededFor] = useState<string | null>(null);
+  // D19: read straight from the vocabulary rather than taking a prop, so all
+  // three places that open this editor stay unchanged.
+  const editorTags = listTags(useDb());
 
   const seedKey = chip?.key ?? 'new';
   if (visible && seededFor !== seedKey) {
@@ -618,7 +635,7 @@ export function ChipEditor({
     setQuantity(String(chip?.quantity ?? 1));
     setNotes(chip?.notes ?? '');
     setPhotoUri(chip?.photoUri ?? null);
-    setCategory(chip?.category ?? 'other');
+    setCategory(chip?.category ?? FALLBACK_TAG);
     setSeededFor(seedKey);
   }
   if (!visible && seededFor !== null) setSeededFor(null);
@@ -679,14 +696,16 @@ export function ChipEditor({
           </View>
           <Text style={styles.tagHeading}>Tag</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
-            {ItemCategory.options.map((cat) => (
+            {editorTags.map((tag) => (
               <Pressable
-                key={cat}
-                style={[styles.catChip, category === cat && styles.catChipActive]}
-                onPress={() => setCategory(cat)}
+                key={tag.slug}
+                style={[styles.catChip, category === tag.slug && styles.catChipActive]}
+                onPress={() => setCategory(tag.slug)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: category === tag.slug }}
               >
-                <Text style={[styles.catLabel, category === cat && styles.catLabelActive]}>
-                  {cat.replace(/_/g, ' ')}
+                <Text style={[styles.catLabel, category === tag.slug && styles.catLabelActive]}>
+                  {tag.label}
                 </Text>
               </Pressable>
             ))}

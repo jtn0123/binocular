@@ -1,9 +1,10 @@
 import { z } from 'zod';
 
-import { ItemCategory } from '../vision/types';
+import { TagSlug } from '../vision/types';
 
 import type { DbAdapter } from './adapter';
 import type { BinRow, ItemRow, LocationRow, ScanRow, ShelfRow } from './queries';
+import { FALLBACK_TAG, type TagRow } from './tags';
 
 /**
  * Full-fidelity dump/restore for backup (blueprint Stage 6). Rows are
@@ -18,6 +19,8 @@ export interface BackupDump {
   bins: BinRow[];
   items: ItemRow[];
   scans: ScanRow[];
+  /** D19; optional so a backup taken before the tag vocabulary still imports. */
+  tags?: TagRow[];
 }
 
 // ------------------------------------------------- import trust boundary
@@ -52,7 +55,9 @@ const ItemRowSchema = z.object({
   bin_id: z.string().min(1),
   name: z.string(),
   brand: z.string().nullable(),
-  category: ItemCategory,
+  // D19: the vocabulary is the user's, so an import validates slug shape
+  // and resolves the value against this database's tags on restore.
+  category: TagSlug,
   quantity: z.number().int(),
   label_text: z.string().nullable(),
   photo_uri: z.string().nullable(),
@@ -81,9 +86,22 @@ const ScanRowSchema = z.object({
   cost_usd: z.number().nullable().default(null),
 });
 
+const TagRowSchema = z.object({
+  slug: TagSlug,
+  label: z.string().min(1),
+  sort_order: z.number().int(),
+  created_at: z.string(),
+});
+
 const BackupDumpSchema = z.object({
   version: z.literal(1),
   exported_at: z.string(),
+  /**
+   * D19. Optional: a backup taken before the tag vocabulary existed has no
+   * tags key, and must still import — its items all carry one of the twelve
+   * slugs migration 008 seeds, so they resolve cleanly anyway.
+   */
+  tags: z.array(TagRowSchema).optional(),
   locations: z.array(LocationRowSchema),
   shelves: z.array(ShelfRowSchema),
   bins: z.array(BinRowSchema),
@@ -114,6 +132,9 @@ export function dumpAll(db: DbAdapter, exportedAt: string): BackupDump {
     bins: db.getAllSync<BinRow>('SELECT * FROM bins ORDER BY id'),
     items: db.getAllSync<ItemRow>('SELECT * FROM items ORDER BY id'),
     scans: db.getAllSync<ScanRow>('SELECT * FROM scans ORDER BY id'),
+    // D19: without this a restore silently loses every custom tag, and each
+    // item using one lands on `other`.
+    tags: db.getAllSync<TagRow>('SELECT * FROM tags ORDER BY sort_order, slug'),
   };
 }
 
@@ -194,6 +215,20 @@ export function restoreAll(
         ],
       );
     }
+    // D19: the vocabulary first, so items can be resolved against it. Any
+    // tag the backup carries that this database lacks is created; anything an
+    // item references that still cannot be found lands on `other` rather than
+    // pointing at a tag that does not exist.
+    for (const t of dump.tags ?? []) {
+      db.runSync(
+        'INSERT OR IGNORE INTO tags (slug, label, sort_order, created_at) VALUES (?, ?, ?, ?)',
+        [t.slug, t.label, t.sort_order, t.created_at],
+      );
+    }
+    const knownTags = new Set(
+      db.getAllSync<{ slug: string }>('SELECT slug FROM tags').map((row) => row.slug),
+    );
+
     for (const i of dump.items) {
       db.runSync(
         `INSERT INTO items (id, bin_id, name, brand, category, quantity, label_text, photo_uri,
@@ -205,7 +240,7 @@ export function restoreAll(
           i.bin_id,
           i.name,
           i.brand,
-          i.category,
+          knownTags.has(i.category) ? i.category : FALLBACK_TAG,
           i.quantity,
           i.label_text,
           rewriteUri(i.photo_uri),
