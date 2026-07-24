@@ -5,6 +5,12 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Link } from 'expo-router';
 
 import { exportBackupZip, exportInventoryCsv, importBackupZip } from '@/backup/backup';
+import {
+  formatBytes,
+  readStorageReport,
+  reclaimOrphanPhotos,
+  type StorageReport,
+} from '@/backup/storage';
 import { logEvent } from '@/diagnostics/events';
 import { useDb } from '@/db/DbProvider';
 import { isDatabaseEmpty } from '@/db/backupQueries';
@@ -132,6 +138,10 @@ export default function SettingsScreen() {
   }
   const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
   const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
+  // Touches the filesystem, so unlike the SQLite-derived numbers below it is
+  // read once on mount rather than on every render — and re-read after a
+  // cleanup, which is the only thing that changes it from here.
+  const [storage, setStorage] = useState<StorageReport>(() => readStorageReport(db));
 
   useEffect(() => {
     void (async () => {
@@ -267,6 +277,53 @@ export default function SettingsScreen() {
           <Text style={styles.secondaryLabel}>Open diagnostics</Text>
         </Pressable>
       </Link>
+
+      <Text style={styles.sectionTitle}>Storage</Text>
+      <Text style={styles.hint}>
+        {storage.files === 0
+          ? 'No photos stored yet.'
+          : `${storage.files} photo${storage.files === 1 ? '' : 's'} · ${formatBytes(storage.bytes)}.`}
+        {storage.orphanFiles > 0
+          ? ` ${formatBytes(storage.orphanBytes)} belongs to ${storage.orphanFiles} file${
+              storage.orphanFiles === 1 ? '' : 's'
+            } nothing points at any more — usually retakes and discarded scans.`
+          : ' Every file is still referenced by a bin, item or scan.'}
+      </Text>
+      {storage.orphanFiles > 0 && (
+        <Pressable
+          style={styles.secondaryButton}
+          accessibilityRole="button"
+          accessibilityLabel={`Reclaim ${formatBytes(storage.orphanBytes)} of unused photos`}
+          testID="reclaim-photos"
+          onPress={() =>
+            Alert.alert(
+              'Delete unused photos?',
+              `${storage.orphanFiles} file${storage.orphanFiles === 1 ? '' : 's'} (${formatBytes(
+                storage.orphanBytes,
+              )}) that nothing in your inventory points at. Photos still attached to a bin, an item, a scan, or a recently deleted item are never touched.`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: () => {
+                    const freed = reclaimOrphanPhotos(db);
+                    setStorage(readStorageReport(db));
+                    Alert.alert(
+                      'Cleaned up',
+                      `Freed ${formatBytes(freed.bytes)} across ${freed.files} file${
+                        freed.files === 1 ? '' : 's'
+                      }.`,
+                    );
+                  },
+                },
+              ],
+            )
+          }
+        >
+          <Text style={styles.secondaryLabel}>Reclaim {formatBytes(storage.orphanBytes)}</Text>
+        </Pressable>
+      )}
 
       <Text style={styles.sectionTitle}>Data</Text>
       <Text style={styles.hint}>
