@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Link } from 'expo-router';
-import { useState } from 'react';
+import { Link, useLocalSearchParams } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CodeTag } from '@/components/CodeTag';
@@ -71,6 +71,25 @@ export default function BrowseScreen() {
   const [printSelected, setPrintSelected] = useState<Record<string, boolean>>({});
   const refresh = () => setTick((t) => t + 1);
   void tick;
+  // Searching a shelf or location from Home lands here; highlight and scroll
+  // to it, otherwise the tree is a wall of identical cards to hunt through.
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  const scrollRef = useRef<ScrollView>(null);
+  // A shelf lays out relative to its location card, so the scroll position is
+  // the sum of the two. Kept apart because the two onLayout callbacks fire
+  // independently and in no guaranteed order.
+  const focusParentY = useRef(0);
+  const focusY = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!focus) return;
+    const timer = setTimeout(() => {
+      if (focusY.current === null) return;
+      const y = focusParentY.current + focusY.current;
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [focus]);
 
   const locations = listLocations(db);
   const unassigned = listUnassignedBins(db);
@@ -164,7 +183,7 @@ export default function BrowseScreen() {
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.container}>
         <View style={styles.toolbar}>
           <Pressable
             style={styles.toolbarButton}
@@ -210,7 +229,18 @@ export default function BrowseScreen() {
         {locations.map((location) => {
           const shelves = listShelves(db, location.id);
           return (
-            <View key={location.id} style={styles.locationCard}>
+            <View
+              key={location.id}
+              style={[styles.locationCard, focus === location.id && styles.focused]}
+              onLayout={(e) => {
+                if (focus === location.id) {
+                  focusParentY.current = 0;
+                  focusY.current = e.nativeEvent.layout.y;
+                } else if (shelves.some((shelf) => shelf.id === focus)) {
+                  focusParentY.current = e.nativeEvent.layout.y;
+                }
+              }}
+            >
               <View style={styles.headerRow}>
                 <Text style={styles.locationName}>{location.name}</Text>
                 <View style={styles.headerActions}>
@@ -256,7 +286,13 @@ export default function BrowseScreen() {
                 </View>
               </View>
               {shelves.map((shelf) => (
-                <View key={shelf.id} style={styles.shelf}>
+                <View
+                  key={shelf.id}
+                  style={[styles.shelf, focus === shelf.id && styles.focused]}
+                  onLayout={(e) => {
+                    if (focus === shelf.id) focusY.current = e.nativeEvent.layout.y;
+                  }}
+                >
                   <View style={styles.headerRow}>
                     <Text style={styles.shelfName}>{shelf.name}</Text>
                     <View style={styles.headerActions}>
@@ -442,6 +478,8 @@ const styles = StyleSheet.create({
   iconButton: { padding: sp(1.5) },
   locationName: { ...type.title, fontSize: 19 },
   shelf: { marginTop: sp(2), gap: 2 },
+  // Where a search for a shelf or location lands.
+  focused: { borderWidth: 1, borderColor: colors.amber, borderRadius: radius.md, padding: sp(2) },
   shelfName: { ...type.stamp },
   binRow: {
     flexDirection: 'row',

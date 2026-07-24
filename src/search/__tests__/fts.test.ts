@@ -1,7 +1,7 @@
 import { createNodeAdapter, type NodeDbAdapter } from '../../db/nodeAdapter';
 import { createBin, createLocation, createShelf, insertItem } from '../../db/queries';
 import { runMigrations } from '../../db/schema';
-import { searchItems, toFtsQuery } from '../fts';
+import { searchItems, searchPlaces, toFtsQuery } from '../fts';
 
 describe('FTS search (blueprint §8.3)', () => {
   let db: NodeDbAdapter;
@@ -60,6 +60,59 @@ describe('FTS search (blueprint §8.3)', () => {
     // An item actually *named* for the term still comes first.
     insertItem(db, { binId: bin.id, name: 'Fastener assortment box', category: 'hardware' });
     expect(searchItems(db, 'fastener')[0].name).toBe('Fastener assortment box');
+  });
+
+  describe('shelves and locations', () => {
+    beforeEach(() => {
+      const garage = createLocation(db, { name: 'Garage' });
+      const shed = createLocation(db, { name: 'Garden shed' });
+      createShelf(db, { locationId: garage.id, name: 'Workbench shelf' });
+      createShelf(db, { locationId: shed.id, name: 'Top shelf' });
+    });
+
+    it('finds a shelf by name, with the location it sits in', () => {
+      expect(searchPlaces(db, 'workbench')).toEqual([
+        {
+          kind: 'shelf',
+          id: expect.any(String),
+          name: 'Workbench shelf',
+          parentName: 'Garage',
+        },
+      ]);
+    });
+
+    it('finds a location by name', () => {
+      expect(searchPlaces(db, 'garden')).toEqual([
+        { kind: 'location', id: expect.any(String), name: 'Garden shed', parentName: null },
+      ]);
+    });
+
+    it('lists locations before shelves when both match', () => {
+      const benchArea = createLocation(db, { name: 'Bench area' });
+      createShelf(db, { locationId: benchArea.id, name: 'Bench shelf' });
+
+      const hits = searchPlaces(db, 'bench');
+      expect(hits[0]).toMatchObject({ kind: 'location', name: 'Bench area' });
+      expect(
+        hits
+          .slice(1)
+          .map((h) => h.name)
+          .sort(),
+      ).toEqual(['Bench shelf', 'Workbench shelf']);
+    });
+
+    it('is case-insensitive and matches mid-name', () => {
+      expect(searchPlaces(db, 'BENCH').map((h) => h.name)).toEqual(['Workbench shelf']);
+    });
+
+    it('treats user wildcards as text, not operators', () => {
+      expect(searchPlaces(db, '%')).toEqual([]);
+      expect(searchPlaces(db, '_')).toEqual([]);
+    });
+
+    it('returns nothing for a place that does not exist', () => {
+      expect(searchPlaces(db, 'attic')).toEqual([]);
+    });
   });
 
   it('matches label_text and notes, and carries the full breadcrumb', () => {

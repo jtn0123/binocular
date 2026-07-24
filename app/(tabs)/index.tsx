@@ -22,7 +22,12 @@ import {
 } from '@/db/queries';
 import { logEvent } from '@/diagnostics/events';
 import { useFocusTick } from '@/lib/useFocusTick';
-import { searchBins, searchItemsWithFallback, type SearchResult } from '@/search/fts';
+import {
+  searchBins,
+  searchItemsWithFallback,
+  searchPlaces,
+  type SearchResult,
+} from '@/search/fts';
 import { colors, radius, sp, type } from '@/theme';
 
 function BinCard({
@@ -185,6 +190,7 @@ export default function HomeScreen() {
     ? searchItemsWithFallback(db, trimmed, 50)
     : { results: [] as SearchResult[], corrected: null };
   const binMatches = trimmed ? searchBins(db, trimmed) : [];
+  const placeMatches = trimmed ? searchPlaces(db, trimmed) : [];
   const recentBins = trimmed ? [] : listRecentBins(db, 12);
 
   // D16: log the settled query, not every keystroke.
@@ -255,6 +261,38 @@ export default function HomeScreen() {
                       return crumb ? <Text style={styles.cardMeta}>{crumb}</Text> : null;
                     })()}
                   </View>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {placeMatches.length > 0 && (
+            <View style={styles.binHits} testID="place-hits">
+              {placeMatches.map((place) => (
+                <Pressable
+                  key={`${place.kind}-${place.id}`}
+                  style={styles.binHit}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${place.kind === 'shelf' ? 'Shelf' : 'Location'} ${place.name}${
+                    place.parentName ? ` in ${place.parentName}` : ''
+                  }`}
+                  onPress={() =>
+                    router.push({ pathname: '/browse', params: { focus: place.id } })
+                  }
+                >
+                  <Ionicons
+                    name={place.kind === 'shelf' ? 'layers-outline' : 'home-outline'}
+                    size={16}
+                    color={colors.steel}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.binHitName} numberOfLines={1}>
+                      {place.name}
+                    </Text>
+                    <Text style={styles.cardMeta}>
+                      {place.kind === 'shelf' ? `Shelf · ${place.parentName}` : 'Location'}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={15} color={colors.textFaint} />
                 </Pressable>
               ))}
             </View>

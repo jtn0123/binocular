@@ -122,3 +122,45 @@ export function searchItemsWithFallback(
   const retried = searchItems(db, corrected, limit);
   return retried.length > 0 ? { results: retried, corrected } : { results: [], corrected: null };
 }
+
+export interface PlaceHit {
+  kind: 'location' | 'shelf';
+  id: string;
+  name: string;
+  /** The location a shelf sits in; null for a location itself. */
+  parentName: string | null;
+}
+
+/**
+ * Shelf and location lookup by name (field-test finding: typing "workbench"
+ * found nothing, because search only ever covered items and bins — the two
+ * levels of the tree you navigate by were invisible to it).
+ *
+ * Same plain-LIKE approach as searchBins, wildcards escaped so "%" typed by
+ * the user is text rather than an operator.
+ */
+export function searchPlaces(db: DbAdapter, rawQuery: string, limit = 6): PlaceHit[] {
+  const q = rawQuery.trim();
+  if (!q) return [];
+  const like = `%${q.replace(/([\\%_])/g, '\\$1')}%`;
+  const locations = db.getAllSync<{ id: string; name: string }>(
+    `SELECT id, name FROM locations
+     WHERE name LIKE ? ESCAPE '\\'
+     ORDER BY name
+     LIMIT ?`,
+    [like, limit],
+  );
+  const shelves = db.getAllSync<{ id: string; name: string; parentName: string }>(
+    `SELECT shelves.id AS id, shelves.name AS name, locations.name AS parentName
+     FROM shelves
+     JOIN locations ON locations.id = shelves.location_id
+     WHERE shelves.name LIKE ? ESCAPE '\\'
+     ORDER BY locations.name, shelves.name
+     LIMIT ?`,
+    [like, limit],
+  );
+  return [
+    ...locations.map((l) => ({ kind: 'location' as const, ...l, parentName: null })),
+    ...shelves.map((s) => ({ kind: 'shelf' as const, ...s })),
+  ].slice(0, limit);
+}
