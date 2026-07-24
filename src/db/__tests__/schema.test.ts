@@ -116,7 +116,7 @@ describe('migration runner', () => {
     // ...and every column that was already indexed still is.
     for (const query of ['deck*', 'spax', 'galvanised']) {
       expect(
-        db.getAllSync(`SELECT name FROM item_search WHERE item_search MATCH '${query}'`),
+        db.getAllSync('SELECT name FROM item_search WHERE item_search MATCH ?', [query]),
       ).toHaveLength(1);
     }
   });
