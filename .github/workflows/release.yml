@@ -70,6 +70,19 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      # A cold Gradle build is ~20 minutes, most of it re-downloading
+      # dependencies and re-running the native (CMake) configure. Keyed on
+      # what actually changes the native build — the dependency set and the
+      # Expo config that prebuild turns into Gradle files.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'plugins/**') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
       - run: npm ci
 
       # A release APK should never ship from red code; this is the same gate
