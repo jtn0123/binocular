@@ -113,6 +113,35 @@ export function listItemsNeedingEmbedding(
   );
 }
 
+export interface EmbeddedItem {
+  id: string;
+  name: string;
+  bin_id: string | null;
+  bin_code: string | null;
+  photo_uri: string | null;
+}
+
+/**
+ * Name, bin and picture for everything currently remembered — what the
+ * calibration screen needs to render a pair as two photos and two names
+ * rather than two row ids. Same photo fallback as the work list.
+ */
+export function listEmbeddedItems(db: DbAdapter, model: string): EmbeddedItem[] {
+  return db.getAllSync<EmbeddedItem>(
+    `SELECT items.id          AS id,
+            items.name        AS name,
+            items.bin_id      AS bin_id,
+            bins.short_code   AS bin_code,
+            ${BEST_PHOTO}     AS photo_uri
+     FROM item_embeddings
+     JOIN items ON items.id = item_embeddings.item_id
+     LEFT JOIN bins ON bins.id = items.bin_id
+     LEFT JOIN scans ON scans.id = items.source_scan_id
+     WHERE item_embeddings.model = ?`,
+    [model],
+  );
+}
+
 export function countEmbeddings(db: DbAdapter, model: string): number {
   const row = db.getFirstSync<{ n: number }>(
     'SELECT COUNT(*) AS n FROM item_embeddings WHERE model = ?',
