@@ -422,6 +422,19 @@ So Binocular never shows a percentage anywhere. Instead:
 
 3. Because the user confirms every scan (D6), confidence only tunes *default
    selection state* — it is never a gate that hides or auto-commits data.
+4. **The table above is per-chip; a scan is also judged as a whole.** When a
+   scan returns **no `high`-confidence item at all**, the engine did not
+   really identify anything, and the review screen must not present a list of
+   accepted items: nothing is pre-selected, and the manual editor opens
+   straight away with the photo attached. The per-chip mapping still governs
+   every scan that identified *something*.
+
+   This exists because the on-device engine is capped at `medium` by the §5
+   capability note, so without it every generic label it produces — "Drill",
+   "Metal", "Tool" — arrives pre-selected and has to be individually undone.
+   Field testing found that the common local-engine outcome was therefore a
+   list of plausible-looking junk presented as a decision already made, which
+   is the opposite of what D6 is for.
 
 Future option (explicitly out of scope for v1): self-consistency voting —
 run the same photo twice and flag items that appear in only one response.
