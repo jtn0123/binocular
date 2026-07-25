@@ -1,3 +1,5 @@
+import { normalisePhotoUri } from '../scan/photos';
+
 import { setEmbedder, type Embedder } from './visualMemory';
 
 /**
@@ -134,7 +136,10 @@ export async function loadEncoder(onProgress?: (progress: number) => void): Prom
 
   const embedder: Embedder = {
     model: ENCODER_MODEL,
-    embed: (photoUri) => module.forward(photoUri),
+    // Same repair the upload path needs: expo-file-system can hand back a
+    // `file:////…` uri that native code cannot resolve. Stored rows still
+    // carry the broken form, so it is fixed on the way to the encoder.
+    embed: (photoUri) => module.forward(normalisePhotoUri(photoUri)),
   };
   setEmbedder(embedder);
   return true;
