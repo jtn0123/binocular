@@ -304,6 +304,15 @@ sit beside a recognition result rather than replacing one. Keeping it outside
 the provider abstraction is what stops the §6.1 contract from having to
 describe something that is not a model output.
 
+**What it encodes.** An item's own photo where it has one — but §8.1 stamps
+a capture onto the *bin* cover and leaves detected items with `photo_uri`
+NULL, so a workshop catalogued by scanning has none. The photo an item was
+recognised *from* (`items.source_scan_id`) is therefore the fallback, which
+also means the memory fills in retroactively rather than needing every item
+re-shot. That image is used for encoding only and never written back to
+`items.photo_uri`: a shot of a whole bin is not a photo *of* the socket, and
+recording it as one would put a bin picture on the item row.
+
 Its encoder is a CLIP image model (int8, ExecuTorch) confined to
 `src/vision/executorchEmbedder.ts` — the same import boundary the providers
 obey. Everything else in the app talks to the `Embedder` interface, which is
