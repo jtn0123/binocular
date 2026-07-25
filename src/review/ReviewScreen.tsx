@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -29,7 +30,7 @@ import {
   type ItemRow,
 } from '../db/queries';
 import { quickCreateBin } from '../db/scaffold';
-import { FALLBACK_TAG, listTags } from '../db/tags';
+import { createTag, FALLBACK_TAG, listTags } from '../db/tags';
 import { findDuplicate, suggestTag } from '../db/tagSuggest';
 import { logEvent } from '../diagnostics/events';
 import { hapticSuccess, hapticWarning } from '../lib/haptics';
@@ -664,6 +665,11 @@ export function ChipEditor({
   // D19: read straight from the vocabulary rather than taking a prop, so all
   // three places that open this editor stay unchanged.
   const db = useDb();
+  // D19: a tag invented here has to be visible immediately, and listTags is a
+  // synchronous read, so a counter is the whole mechanism.
+  const [tagTick, setTagTick] = useState(0);
+  void tagTick;
+  const [newTagPrompt, setNewTagPrompt] = useState<PromptRequest | null>(null);
   const editorTags = listTags(db);
   const duplicate = findDuplicate(db, name, chip?.matchedExistingId ?? null);
 
@@ -774,7 +780,45 @@ export function ChipEditor({
                 </Text>
               </Pressable>
             ))}
+            {/*
+              D19: when nothing in the vocabulary fits, inventing the right
+              tag has to be cheaper than settling for "other" — otherwise the
+              fallback silently becomes the most-used tag in the workshop.
+            */}
+            <Pressable
+              style={[styles.catChip, styles.catChipNew]}
+              testID="new-tag"
+              accessibilityRole="button"
+              accessibilityLabel="Create a new tag"
+              onPress={() =>
+                setNewTagPrompt({
+                  title: 'New tag',
+                  placeholder: 'e.g. Marine, Garden, Spares',
+                  submitLabel: 'Create',
+                  onSubmit: (value) => {
+                    try {
+                      const created = createTag(db, value);
+                      setCategory(created.slug);
+                      setTagTouched(true);
+                      setTagSuggested(false);
+                      setTagTick((t) => t + 1);
+                      setNewTagPrompt(null);
+                    } catch (err) {
+                      // Duplicate or empty: TagError already says which, and
+                      // the prompt stays open so it can be corrected in place.
+                      Alert.alert(
+                        'Could not create that tag',
+                        err instanceof Error ? err.message : String(err),
+                      );
+                    }
+                  },
+                })
+              }
+            >
+              <Text style={styles.catLabelNew}>+ New tag</Text>
+            </Pressable>
           </ScrollView>
+          <PromptModal request={newTagPrompt} onClose={() => setNewTagPrompt(null)} />
           <View style={styles.modalActions}>
             {onDelete && (
               <Pressable onPress={onDelete} testID="editor-delete">
@@ -979,6 +1023,9 @@ const styles = StyleSheet.create({
   catChipActive: { backgroundColor: colors.amber, borderColor: colors.amber },
   catLabel: { fontSize: 12, color: colors.textDim, fontFamily: mono },
   catLabelActive: { color: colors.amberInkOn },
+  // Dashed, never filled: an action among the options, not one of them.
+  catChipNew: { borderStyle: 'dashed', borderColor: colors.borderStrong },
+  catLabelNew: { fontSize: 12, color: colors.steel, fontFamily: mono },
   modalActions: { flexDirection: 'row', alignItems: 'center', marginTop: sp(1.5) },
   modalActionsRight: {
     flexDirection: 'row',
