@@ -60,16 +60,33 @@ const withSingleNdk = (config) =>
     // modules that never declare one fall back to whatever their AGP defaults
     // to. That is ~1 minute and several GB of runner disk — and disk is not
     // spare here, since ExecuTorch's build already exhausted it once.
-    cfg.modResults.contents += `
-// binocular:single-ndk — one NDK for every module, so CI installs one.
+    //
+    // Inserted BEFORE the root plugins rather than appended: they evaluate
+    // subprojects eagerly, and afterEvaluate throws outright once a project
+    // has been evaluated ("Cannot run Project.afterEvaluate(Closure) when the
+    // project is already evaluated"). Registering first is what makes the
+    // callback legal; it still runs late enough to see ext.ndkVersion, which
+    // expo-root-project sets. The state.executed guard means a future
+    // reordering degrades to a no-op instead of a failed build.
+    const block = `// binocular:single-ndk — one NDK for every module, so CI installs one.
 subprojects { subproject ->
-  afterEvaluate {
+  def pinNdk = {
     if (subproject.hasProperty('android') && rootProject.ext.has('ndkVersion')) {
       subproject.android.ndkVersion = rootProject.ext.ndkVersion
     }
   }
+  if (subproject.state.executed) {
+    pinNdk()
+  } else {
+    subproject.afterEvaluate { pinNdk() }
+  }
 }
-`;
+
+apply plugin: "expo-root-project"`;
+    cfg.modResults.contents = cfg.modResults.contents.replace(
+      /^apply plugin: "expo-root-project"/m,
+      block,
+    );
     return cfg;
   });
 
