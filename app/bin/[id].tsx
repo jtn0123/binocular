@@ -16,6 +16,7 @@ import {
   type ItemFilter,
   type ItemSort,
 } from '@/db/itemView';
+import { iconForTag } from '@/db/tagIcon';
 import { binTagTally } from '@/db/tags';
 import { PromptModal, type PromptRequest } from '@/components/PromptModal';
 import { useDb } from '@/db/DbProvider';
@@ -152,6 +153,11 @@ export default function BinDetailScreen() {
     refresh();
   }
 
+  /** Every photo on this screen opens the same read-only viewer. */
+  function openPhoto(uri: string, title?: string) {
+    router.push({ pathname: '/photo', params: title ? { uri, title } : { uri } });
+  }
+
   function describe(list: ItemRow[]): string {
     return list.length === 1 ? list[0].name : `${list.length} items`;
   }
@@ -272,12 +278,18 @@ export default function BinDetailScreen() {
           <View style={styles.header}>
             {bin.cover_photo_uri ? (
               <Pressable
+                // A tap had no handler at all: the only gesture was a long
+                // press that opened the camera to *replace* the photo. Tap
+                // now shows it full screen, which is what a picture is for;
+                // retake keeps the long press and the Photo chip.
+                onPress={() => openPhoto(bin.cover_photo_uri as string, bin.name)}
                 onLongPress={() =>
                   router.push({ pathname: '/bin-photo/[id]', params: { id: bin.id } })
                 }
                 delayLongPress={300}
                 accessibilityRole="imagebutton"
-                accessibilityLabel="Bin cover photo — press and hold to retake"
+                accessibilityLabel={`${bin.name} photo — tap to view, press and hold to retake`}
+                testID="bin-cover"
               >
                 <Image
                   source={{ uri: bin.cover_photo_uri }}
@@ -289,16 +301,19 @@ export default function BinDetailScreen() {
               itemPhotos.length > 0 && (
                 <View style={styles.coverCollage}>
                   {itemPhotos.map((uri, i) => (
-                    <Image
+                    <Pressable
                       key={`${uri}-${i}`}
-                      source={{ uri }}
+                      onPress={() => openPhoto(uri, bin.name)}
+                      accessibilityRole="imagebutton"
+                      accessibilityLabel="Item photo — tap to view"
                       style={[
                         styles.collageCell,
                         itemPhotos.length === 1 && styles.collageCellFull,
                         itemPhotos.length === 2 && styles.collageCellHalf,
                       ]}
-                      contentFit="cover"
-                    />
+                    >
+                      <Image source={{ uri }} style={styles.collageFill} contentFit="cover" />
+                    </Pressable>
                   ))}
                 </View>
               )
@@ -372,14 +387,19 @@ export default function BinDetailScreen() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={{ gap: 8 }}
                   renderItem={({ item: scan }) => (
-                    <View style={styles.historyCell}>
+                    <Pressable
+                      style={styles.historyCell}
+                      onPress={() => openPhoto(scan.photo_uri, scan.created_at.slice(0, 10))}
+                      accessibilityRole="imagebutton"
+                      accessibilityLabel={`Audit photo from ${scan.created_at.slice(0, 10)}`}
+                    >
                       <Image
                         source={{ uri: scan.photo_uri }}
                         style={styles.historyThumb}
                         contentFit="cover"
                       />
                       <Text style={styles.historyDate}>{scan.created_at.slice(0, 10)}</Text>
-                    </View>
+                    </Pressable>
                   )}
                 />
               </View>
@@ -464,6 +484,9 @@ export default function BinDetailScreen() {
                 size={20}
                 color={selected[item.id] ? colors.amber : colors.textFaint}
               />
+              <View style={styles.itemIcon}>
+                <Ionicons name={iconForTag(item.category)} size={15} color={colors.steel} />
+              </View>
               <View style={styles.itemMain}>
                 <Text style={styles.itemName}>
                   {item.quantity > 1 ? `${item.quantity}× ` : ''}
@@ -500,6 +523,25 @@ export default function BinDetailScreen() {
                 >
                   <Text style={styles.itemQty}>{item.quantity}×</Text>
                 </Pressable>
+                {/*
+                  Field report: "can we put the small icons next to the item".
+                  Its own photo when it has one — otherwise the tag's icon,
+                  because scanning gives items no photo of their own and a
+                  borrowed bin shot repeated down the list tells you nothing.
+                */}
+                {item.photo_uri ? (
+                  <Pressable
+                    onPress={() => openPhoto(item.photo_uri as string, item.name)}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel={`Photo of ${item.name}`}
+                  >
+                    <Image source={{ uri: item.photo_uri }} style={styles.itemThumb} contentFit="cover" />
+                  </Pressable>
+                ) : (
+                  <View style={styles.itemIcon}>
+                    <Ionicons name={iconForTag(item.category)} size={15} color={colors.steel} />
+                  </View>
+                )}
                 <Pressable
                   style={styles.itemMain}
                   onPress={() => setSheetItem(item)}
@@ -902,6 +944,18 @@ function BinPicker({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg, padding: sp(4) },
+  itemThumb: { width: 30, height: 30, borderRadius: radius.sm, backgroundColor: colors.surfaceSunken },
+  itemIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceSunken,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  collageFill: { width: '100%', height: '100%' },
   center: {
     flex: 1,
     alignItems: 'center',
