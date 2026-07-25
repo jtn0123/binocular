@@ -76,6 +76,20 @@ export interface ReviewScreenProps {
 
 const norm = (s: string) => s.trim().toLowerCase();
 
+/**
+ * Whether the engine actually recognised anything (blueprint §6.3.4).
+ *
+ * A single `high` is the bar, because §6.3's rubric reserves it for "I can
+ * see the identifying detail". Without one, the result is a bag of guesses,
+ * and §5 caps the on-device engine at `medium` precisely so it can never
+ * claim otherwise — which is why its every pass lands here.
+ *
+ * An empty result counts as identifying nothing, which is the plain reading.
+ */
+export function identifiedSomething(result: RecognitionResult): boolean {
+  return result.items.some((item) => item.confidence === 'high');
+}
+
 export function buildDetectedChips(
   result: RecognitionResult,
   existing: ItemRow[],
@@ -83,6 +97,7 @@ export function buildDetectedChips(
   suggest: (name: string, brand: string | null) => string | null = () => null,
 ): DetectedChip[] {
   const remaining = [...existing];
+  const identified = identifiedSomething(result);
   return result.items.map((item, i) => {
     const matchIdx = remaining.findIndex((e) => norm(e.name) === norm(item.name));
     const matched = matchIdx >= 0 ? remaining.splice(matchIdx, 1)[0] : null;
@@ -104,9 +119,11 @@ export function buildDetectedChips(
       notes: null,
       photoUri: null,
       confidence: item.confidence,
-      // §6.3: high/medium pre-selected; low requires an explicit tap.
-      // A chip matching an existing item defaults to keep regardless.
-      selected: matched ? true : item.confidence !== 'low',
+      // §6.3: high/medium pre-selected; low requires an explicit tap — but
+      // only when the scan identified something (§6.3.4). A chip matching an
+      // existing item defaults to keep regardless: that is a *recognised*
+      // item, not a guess, and unchecking it would mean deleting it.
+      selected: matched ? true : identified && item.confidence !== 'low',
       matchedExistingId: matched?.id ?? null,
     };
   });
@@ -159,7 +176,13 @@ export function ReviewScreen({
   const [mode, setMode] = useState<'merge' | 'replace'>(
     () => draft?.mode ?? (existingItems.length > 0 ? 'merge' : 'replace'),
   );
-  const [editingKey, setEditingKey] = useState<string | 'new' | null>(null);
+  // §6.3.4: when the engine identified nothing, skip straight to typing it in
+  // — that is what the user was going to do anyway, and it beats presenting
+  // generic guesses as a decision already made. Only on a fresh scan: a
+  // resumed draft means they have already been here and chosen.
+  const [editingKey, setEditingKey] = useState<string | 'new' | null>(() =>
+    !draft && parsed && !identifiedSomething(parsed) ? 'new' : null,
+  );
   const [retrying, setRetrying] = useState(false);
   const [prompt, setPrompt] = useState<PromptRequest | null>(null);
   const [renameTick, setRenameTick] = useState(0);

@@ -1,7 +1,7 @@
 import type { ItemRow } from '../../db/queries';
 import { FALLBACK_TAG } from '../../db/tags';
 import type { RecognitionResult } from '../../vision/types';
-import { buildDetectedChips } from '../ReviewScreen';
+import { buildDetectedChips, identifiedSomething } from '../ReviewScreen';
 
 const KNOWN = new Set(['hand_tool', 'electrical', 'fastener', FALLBACK_TAG]);
 
@@ -73,6 +73,74 @@ describe('turning a recognition result into review chips', () => {
     // A chip matching something already in the bin defaults to keep...
     expect(chips[0]).toMatchObject({ matchedExistingId: 'i1', selected: true });
     // ...while a new low-confidence chip still requires an explicit tap.
+    expect(chips[1]).toMatchObject({ matchedExistingId: null, selected: false });
+  });
+});
+
+/**
+ * §6.3.4 — the scan-level rule. The on-device engine is capped at `medium`
+ * (§5), so before this existed its every pass arrived as a list of generic
+ * labels pre-selected for saving.
+ */
+describe('a scan that identified nothing (§6.3.4)', () => {
+  const HIGH = { name: 'Makita 18V drill', category: 'power_tool', confidence: 'high' } as const;
+
+  it('recognises a scan that saw something specific', () => {
+    expect(identifiedSomething(result([HIGH, { confidence: 'low' }]))).toBe(true);
+  });
+
+  it('recognises one that did not, however many guesses it made', () => {
+    expect(
+      identifiedSomething(
+        result([
+          { name: 'Drill', confidence: 'medium' },
+          { name: 'Metal', confidence: 'medium' },
+          { name: 'Tool', confidence: 'medium' },
+        ]),
+      ),
+    ).toBe(false);
+  });
+
+  it('treats an empty result as identifying nothing', () => {
+    expect(identifiedSomething(result([]))).toBe(false);
+  });
+
+  it('pre-selects nothing when the scan identified nothing', () => {
+    const chips = buildDetectedChips(
+      result([
+        { name: 'Drill', confidence: 'medium' },
+        { name: 'Metal', confidence: 'medium' },
+      ]),
+      [],
+      KNOWN,
+    );
+    expect(chips.map((c) => c.selected)).toEqual([false, false]);
+  });
+
+  it('still pre-selects medium chips once anything was identified', () => {
+    // The per-chip table is unchanged for scans that actually recognised
+    // something — one `high` vouches for the rest being worth a glance.
+    const chips = buildDetectedChips(
+      result([HIGH, { name: 'Drill bit', confidence: 'medium' }, { confidence: 'low' }]),
+      [],
+      KNOWN,
+    );
+    expect(chips.map((c) => c.selected)).toEqual([true, true, false]);
+  });
+
+  it('keeps an already-catalogued item selected even on a scan that saw nothing', () => {
+    // Unchecking a matched chip means deleting a real item, so a bad scan
+    // must not quietly stage every existing item for removal.
+    const existing = [{ id: 'i1', name: 'wire nuts' } as ItemRow];
+    const chips = buildDetectedChips(
+      result([
+        { name: 'Wire nuts', confidence: 'medium' },
+        { name: 'Metal', confidence: 'medium' },
+      ]),
+      existing,
+      KNOWN,
+    );
+    expect(chips[0]).toMatchObject({ matchedExistingId: 'i1', selected: true });
     expect(chips[1]).toMatchObject({ matchedExistingId: null, selected: false });
   });
 });
