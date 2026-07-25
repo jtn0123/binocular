@@ -121,6 +121,36 @@ describe('migration runner', () => {
     }
   });
 
+  it('migration 010 adds the D21 arrangement columns on upgrade', () => {
+    // A database stopped at version 9 (pre-arrangement), with rows in it...
+    db.withTransactionSync(() => {
+      for (let i = 0; i < 9; i++) db.execSync(MIGRATIONS[i]);
+      db.execSync('PRAGMA user_version = 9');
+    });
+    db.runSync(
+      "INSERT INTO locations (id, name, created_at) VALUES ('l1', 'Garage', '2026-01-01T00:00:00Z')",
+    );
+    db.runSync(
+      "INSERT INTO shelves (id, location_id, name, created_at) VALUES ('s1', 'l1', 'Shelf A', '2026-01-01T00:00:00Z')",
+    );
+    db.runSync(
+      "INSERT INTO bins (id, shelf_id, short_code, name, created_at) VALUES ('b1', 's1', 'B-001', 'Bits', '2026-01-01T00:00:00Z')",
+    );
+
+    runMigrations(db);
+
+    // ...which gain a zero order and an unsized capacity, not junk.
+    expect(
+      db.getFirstSync<{ sort_order: number }>('SELECT sort_order FROM bins WHERE id = ?', ['b1'])
+        ?.sort_order,
+    ).toBe(0);
+    expect(
+      db.getFirstSync<{ capacity: number | null }>('SELECT capacity FROM shelves WHERE id = ?', [
+        's1',
+      ])?.capacity,
+    ).toBeNull();
+  });
+
   it('keeps the rebuilt FTS triggers in step on update and delete', () => {
     runMigrations(db);
     db.runSync(
