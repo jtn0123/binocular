@@ -318,6 +318,35 @@ export default function HomeScreen() {
           <Text style={styles.stamp}>
             {results.length} match{results.length === 1 ? '' : 'es'}
           </Text>
+          {(() => {
+            // D21: when the matches spread across bins, light every one of
+            // them on the map at once instead of making the user walk the
+            // results one "show on map" tap at a time.
+            const matchedBinIds = [
+              ...new Set(results.map((r) => r.binId).filter((id): id is string => Boolean(id))),
+            ];
+            if (matchedBinIds.length < 2) return null;
+            return (
+              <Pressable
+                style={styles.mapAll}
+                accessibilityRole="button"
+                accessibilityLabel={`Show all ${matchedBinIds.length} matching bins on the map`}
+                testID="search-map-all"
+                onPress={() =>
+                  router.push({
+                    pathname: '/map',
+                    params: { highlight: matchedBinIds.join(',') },
+                  })
+                }
+              >
+                <Ionicons name="map" size={15} color={colors.steel} />
+                <Text style={styles.mapAllText}>
+                  Show all {matchedBinIds.length} bins on the map
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />
+              </Pressable>
+            );
+          })()}
           {corrected ? (
             <Text style={styles.corrected} testID="search-correction">
               Nothing for “{trimmed}” — showing “{corrected}”
@@ -461,6 +490,18 @@ const styles = StyleSheet.create({
   },
   search: { flex: 1, fontSize: 15, color: colors.text, padding: 0 },
   stamp: { ...type.stamp, marginTop: sp(1) },
+  mapAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(2),
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    paddingHorizontal: sp(3),
+    paddingVertical: sp(2.5),
+  },
+  mapAllText: { color: colors.steel, fontSize: 13, flex: 1 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
