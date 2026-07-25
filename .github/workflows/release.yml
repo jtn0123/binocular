@@ -67,6 +67,22 @@ jobs:
           # The build needs the code, not the ability to push it.
           persist-credentials: false
 
+      # ExecuTorch's native build fills the runner: the first APK containing it
+      # finished, then failed to save either cache with "No space left on
+      # device" — which silently makes every subsequent build a cold 20-minute
+      # one. Reclaiming the preinstalled toolchains this project never touches
+      # buys ~25 GB. Deliberately does NOT touch the Android SDK or NDK, which
+      # the native build very much does need.
+      - name: Reclaim runner disk
+        run: |
+          set -euo pipefail
+          before=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/powershell \
+                      /usr/local/share/chromium /usr/local/lib/node_modules \
+                      /opt/hostedtoolcache/CodeQL || true
+          after=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          echo "Free disk: ${before}G -> ${after}G"
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
