@@ -65,7 +65,33 @@ export function getEmbedding(db: DbAdapter, itemId: string, model: string): Floa
 }
 
 /**
- * Items that have a photo but no vector from this encoder — the backfill
+ * The best image available for an item (D20).
+ *
+ * Its own photo when it has one — but scanning never gives an item its own
+ * photo. §8.1 stamps the capture onto the *bin* cover and leaves every
+ * detected item with `photo_uri` NULL, so a workshop catalogued entirely by
+ * scanning reported "Remembering 0 of 0" and visual memory sat waiting on
+ * something that was never going to arrive.
+ *
+ * `items.source_scan_id` is the way out: the photo the item was recognised
+ * *from* is the honest second choice, and it already exists for every item
+ * ever scanned — so the memory fills in retroactively, with no re-shooting.
+ *
+ * Deliberately NOT written back to `items.photo_uri`. A shot of a whole bin
+ * is not a photo *of* the socket, and pretending otherwise would put a bin
+ * picture on the item row and in the storage report. Visual memory just uses
+ * the best pixels on hand; the data model stays honest.
+ *
+ * NULLIF is load-bearing: pruning a 30-day-old scan sets `photo_uri = ''`
+ * rather than NULL (the column is NOT NULL), and an empty string is not null.
+ * Without it a pruned scan yields an item with an empty uri that can never
+ * encode — and, being permanently on the work list, gets retried on every
+ * backfill pass forever.
+ */
+const BEST_PHOTO = "COALESCE(NULLIF(items.photo_uri, ''), NULLIF(scans.photo_uri, ''))";
+
+/**
+ * Items that have an image but no vector from this encoder — the backfill
  * work list. Ordered newest first: what you catalogued today is what you are
  * most likely to photograph again this afternoon.
  */
@@ -75,11 +101,12 @@ export function listItemsNeedingEmbedding(
   limit = 10,
 ): { id: string; photo_uri: string }[] {
   return db.getAllSync<{ id: string; photo_uri: string }>(
-    `SELECT items.id AS id, items.photo_uri AS photo_uri
+    `SELECT items.id AS id, ${BEST_PHOTO} AS photo_uri
      FROM items
+     LEFT JOIN scans ON scans.id = items.source_scan_id
      LEFT JOIN item_embeddings
        ON item_embeddings.item_id = items.id AND item_embeddings.model = ?
-     WHERE items.photo_uri IS NOT NULL AND item_embeddings.item_id IS NULL
+     WHERE ${BEST_PHOTO} IS NOT NULL AND item_embeddings.item_id IS NULL
      ORDER BY items.created_at DESC
      LIMIT ?`,
     [model, limit],
@@ -94,10 +121,18 @@ export function countEmbeddings(db: DbAdapter, model: string): number {
   return row?.n ?? 0;
 }
 
-/** Items with a photo at all — the denominator for "N of M remembered". */
+/**
+ * Items visual memory could remember — the denominator for "N of M".
+ *
+ * Must use the same fallback as the work list, or the two disagree and
+ * Settings settles on something like "12 of 0", which reads as broken.
+ */
 export function countItemsWithPhotos(db: DbAdapter): number {
   const row = db.getFirstSync<{ n: number }>(
-    'SELECT COUNT(*) AS n FROM items WHERE photo_uri IS NOT NULL',
+    `SELECT COUNT(*) AS n
+     FROM items
+     LEFT JOIN scans ON scans.id = items.source_scan_id
+     WHERE ${BEST_PHOTO} IS NOT NULL`,
   );
   return row?.n ?? 0;
 }
