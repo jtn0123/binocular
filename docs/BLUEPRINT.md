@@ -304,6 +304,15 @@ sit beside a recognition result rather than replacing one. Keeping it outside
 the provider abstraction is what stops the §6.1 contract from having to
 describe something that is not a model output.
 
+Its encoder is a CLIP image model (int8, ExecuTorch) confined to
+`src/vision/executorchEmbedder.ts` — the same import boundary the providers
+obey. Everything else in the app talks to the `Embedder` interface, which is
+why the feature is fully testable with a fake and why the app is complete
+without it. The weights are **downloaded from Settings, never bundled and
+never fetched by a launch**: app start may only re-activate weights that are
+already on the device, so a cold start in a workshop with no signal behaves
+exactly as it did before the feature existed (I4).
+
 ---
 
 ## 6. AI vision contract
