@@ -9,7 +9,7 @@ import {
   putEmbedding,
 } from '../embeddingQueries';
 import { createNodeAdapter, type NodeDbAdapter } from '../nodeAdapter';
-import { createBin, insertItem } from '../queries';
+import { createBin, insertItem, insertScan } from '../queries';
 import { runMigrations } from '../schema';
 
 const MODEL = 'clip-test-v1';
@@ -141,5 +141,95 @@ describe('visual memory storage (D20, migration 009)', () => {
     } finally {
       old.close();
     }
+  });
+});
+
+/**
+ * The gap that made visual memory report "Remembering 0 of 0" on a real
+ * workshop: §8.1 stamps a scan's photo onto the *bin* cover and leaves every
+ * detected item with photo_uri NULL, so nothing was ever eligible. An item
+ * catalogued by scanning is the overwhelmingly common case, and it had zero
+ * coverage here — every test above hands insertItem an explicit photoUri.
+ */
+describe('items catalogued by scanning', () => {
+  let db: NodeDbAdapter;
+  let binId: string;
+
+  beforeEach(() => {
+    db = createNodeAdapter(':memory:');
+    runMigrations(db);
+    binId = createBin(db, { name: 'Tools', shortCode: 'B-001' }).id;
+  });
+  afterEach(() => db.close());
+
+  const scanned = (name: string, scanPhoto: string | null) => {
+    const scan = scanPhoto
+      ? insertScan(db, { mode: 'bin_audit', binId, photoUri: scanPhoto })
+      : null;
+    // Exactly what ReviewScreen does on save: no photo of the item's own.
+    return insertItem(db, {
+      binId,
+      name,
+      category: 'hand_tool',
+      photoUri: null,
+      sourceScanId: scan?.id ?? null,
+    });
+  };
+
+  it('falls back to the photo the item was recognised from', () => {
+    const socket = scanned('10 mm socket', 'file:///photos/scan-a.jpg');
+    expect(listItemsNeedingEmbedding(db, MODEL)).toEqual([
+      { id: socket.id, photo_uri: 'file:///photos/scan-a.jpg' },
+    ]);
+  });
+
+  it('counts them, so Settings stops saying 0 of 0', () => {
+    scanned('10 mm socket', 'file:///photos/scan-a.jpg');
+    scanned('12 mm socket', 'file:///photos/scan-a.jpg');
+    expect(countItemsWithPhotos(db)).toBe(2);
+  });
+
+  it("prefers the item's own photo when it has one", () => {
+    const scan = insertScan(db, { mode: 'bin_audit', binId, photoUri: 'file:///photos/bin.jpg' });
+    const item = insertItem(db, {
+      binId,
+      name: 'Torque wrench',
+      category: 'hand_tool',
+      photoUri: 'file:///photos/its-own.jpg',
+      sourceScanId: scan.id,
+    });
+    expect(listItemsNeedingEmbedding(db, MODEL)).toEqual([
+      { id: item.id, photo_uri: 'file:///photos/its-own.jpg' },
+    ]);
+  });
+
+  it('still skips an item with no image anywhere', () => {
+    // Added by hand, never photographed: nothing to remember, and the count
+    // must not claim otherwise.
+    scanned('Typed in by hand', null);
+    expect(listItemsNeedingEmbedding(db, MODEL)).toEqual([]);
+    expect(countItemsWithPhotos(db)).toBe(0);
+  });
+
+  it('the work list and the count agree', () => {
+    // They disagreed before: the count read items.photo_uri while the list
+    // did too, so both said 0 — but any divergence shows up as "12 of 0".
+    scanned('A', 'file:///photos/a.jpg');
+    scanned('B', 'file:///photos/b.jpg');
+    scanned('No image', null);
+    expect(listItemsNeedingEmbedding(db, MODEL, 100)).toHaveLength(countItemsWithPhotos(db));
+  });
+
+  it('survives the scan photo being pruned after 30 days', () => {
+    const item = scanned('10 mm socket', 'file:///photos/scan-a.jpg');
+    // Pruning blanks the uri rather than nulling it — scans.photo_uri is
+    // NOT NULL. An empty string is not null, so this is exactly the case a
+    // plain COALESCE would wave through as a valid photo.
+    db.runSync("UPDATE scans SET photo_uri = ''");
+    // The image is gone, so there is nothing to encode — but an embedding
+    // already taken keeps working, which is why vectors outlive photos.
+    expect(listItemsNeedingEmbedding(db, MODEL)).toEqual([]);
+    putEmbedding(db, item.id, v(1, 0), MODEL);
+    expect(listCandidates(db, MODEL).map((c) => c.itemId)).toEqual([item.id]);
   });
 });
