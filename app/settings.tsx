@@ -39,6 +39,13 @@ import { colors, radius, sp, type } from '@/theme';
 import { testClaudeConnection } from '@/vision/claudeProvider';
 import { estimateScanCost, formatTokens, formatUsd, PRICES_AS_OF } from '@/vision/cost';
 import { testOpenAiConnection } from '@/vision/openaiProvider';
+import {
+  encoderDownloadBytes,
+  ENCODER_MODEL,
+  isEncoderSupported,
+  loadEncoder,
+  removeEncoder,
+} from '@/vision/executorchEmbedder';
 import { getEmbedder } from '@/vision/visualMemory';
 
 const ENGINE_LABELS: Record<ProviderChoice, string> = {
@@ -157,12 +164,44 @@ export default function SettingsScreen() {
   const build = buildInfo();
   // D20: the encoder is downloaded on demand, so "not set up" is the normal
   // resting state and has to read as a capability rather than a fault.
+  // `tick` exists to re-derive the counts below after a download or removal,
+  // which are the only things here that change them.
+  const [encoder, setEncoder] = useState({
+    supported: isEncoderSupported(),
+    bytes: null as number | null,
+    busy: false,
+    progress: 0,
+    tick: 0,
+  });
   const embedder = getEmbedder();
   const visualMemory = {
     available: embedder !== null,
     remembered: embedder ? countEmbeddings(db, embedder.model) : 0,
     withPhotos: countItemsWithPhotos(db),
   };
+
+  async function downloadEncoder() {
+    setEncoder((e) => ({ ...e, busy: true, progress: 0 }));
+    const startedAt = Date.now();
+    try {
+      await loadEncoder((progress) => setEncoder((e) => ({ ...e, progress })));
+      logEvent(db, {
+        kind: 'memory',
+        name: 'encoder_downloaded',
+        durationMs: Date.now() - startedAt,
+        detail: { model: ENCODER_MODEL },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logEvent(db, { kind: 'memory', name: 'encoder_download_failed', detail: { message } });
+      Alert.alert(
+        'Download failed',
+        `${message}\n\nNothing else has changed — try again when you have a steadier connection.`,
+      );
+    } finally {
+      setEncoder((e) => ({ ...e, busy: false, tick: e.tick + 1 }));
+    }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -171,6 +210,21 @@ export default function SettingsScreen() {
       setHasOpenAiKey((await getOpenAiApiKey()) !== null);
     })();
   }, []);
+
+  // Asks the network how big the download is, so the offer can state its cost
+  // before the user commits to it. Best-effort: the offer stands without it.
+  const encoderSupported = encoder.supported;
+  const encoderKnown = encoder.bytes !== null;
+  useEffect(() => {
+    if (!encoderSupported || encoderKnown) return;
+    let cancelled = false;
+    void encoderDownloadBytes().then((bytes) => {
+      if (!cancelled && bytes !== null) setEncoder((e) => ({ ...e, bytes }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [encoderSupported, encoderKnown]);
 
   // Synchronous SQLite: derive spend on render, no effect/state dance.
   const now = new Date();
@@ -325,8 +379,65 @@ export default function SettingsScreen() {
           ? `Remembering ${visualMemory.remembered} of ${visualMemory.withPhotos} item${
               visualMemory.withPhotos === 1 ? '' : 's'
             } that have a photo. Photograph something and Binocular can tell you which of your own items it resembles — on this phone, with no connection.`
-          : 'Not set up. Binocular can learn what your items look like and match new photos against them offline, once the recognizer has been downloaded. Nothing else changes until then.'}
+          : encoder.supported
+            ? `Not set up. Binocular can learn what your items look like and match new photos against them offline, once the recognizer has been downloaded${
+                encoder.bytes ? ` (${formatBytes(encoder.bytes)}, one time)` : ''
+              }. Nothing else changes until then.`
+            : 'Not available in this build. Visual memory needs the on-device recognizer, which ships in the standalone app rather than Expo Go.'}
       </Text>
+      {encoder.supported && !visualMemory.available && (
+        <Pressable
+          style={[styles.secondaryButton, encoder.busy && styles.disabled]}
+          disabled={encoder.busy}
+          accessibilityRole="button"
+          accessibilityLabel="Download the recognizer"
+          testID="download-encoder"
+          onPress={downloadEncoder}
+        >
+          <Text style={styles.secondaryLabel}>
+            {encoder.busy
+              ? // A percentage of a download is a measured fact, not a
+                // confidence — D5 has nothing to say about it.
+                `Downloading… ${Math.round(encoder.progress * 100)}%`
+              : 'Download recognizer'}
+          </Text>
+        </Pressable>
+      )}
+      {visualMemory.available && (
+        <Pressable
+          style={styles.secondaryButton}
+          accessibilityRole="button"
+          accessibilityLabel="Remove the recognizer"
+          testID="remove-encoder"
+          onPress={() =>
+            Alert.alert(
+              'Remove the recognizer?',
+              'Frees the downloaded model and turns visual memory off. Your bins, items and photos are untouched, and what it has already learned is kept — downloading it again restores the memory without re-reading every photo.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Remove',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await removeEncoder();
+                      logEvent(db, { kind: 'memory', name: 'encoder_removed' });
+                    } catch (err) {
+                      Alert.alert(
+                        'Could not remove it',
+                        err instanceof Error ? err.message : String(err),
+                      );
+                    }
+                    setEncoder((e) => ({ ...e, tick: e.tick + 1 }));
+                  },
+                },
+              ],
+            )
+          }
+        >
+          <Text style={styles.secondaryLabel}>Remove recognizer</Text>
+        </Pressable>
+      )}
 
       <Text style={styles.sectionTitle}>Storage</Text>
       <Text style={styles.hint}>
