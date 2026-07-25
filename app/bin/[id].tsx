@@ -370,6 +370,13 @@ export default function BinDetailScreen() {
                 }
               />
               <ActionChip
+                icon="map"
+                label="Map"
+                onPress={() =>
+                  router.push({ pathname: '/map', params: { highlight: bin.id } })
+                }
+              />
+              <ActionChip
                 icon="arrow-redo"
                 label="Move"
                 onPress={() => router.push({ pathname: '/move/[binId]', params: { binId: bin.id } })}

@@ -19,6 +19,8 @@ export interface MapCell {
   items: number;
   /** Drawn dimmer, so an empty bin reads as space rather than stock. */
   empty: boolean;
+  /** The bin's cover photo, so a cell looks like the bin and not a square. */
+  photoUri: string | null;
 }
 
 export interface MapRow {
@@ -55,7 +57,14 @@ export interface MapInput {
 export function buildMap({ locations, shelves, bins, itemCounts }: MapInput): MapArea[] {
   const cell = (bin: BinRow): MapCell => {
     const items = itemCounts.get(bin.id) ?? 0;
-    return { binId: bin.id, code: bin.short_code, name: bin.name, items, empty: items === 0 };
+    return {
+      binId: bin.id,
+      code: bin.short_code,
+      name: bin.name,
+      items,
+      empty: items === 0,
+      photoUri: bin.cover_photo_uri ?? null,
+    };
   };
 
   const byShelf = new Map<string, BinRow[]>();
@@ -105,13 +114,24 @@ export function buildMap({ locations, shelves, bins, itemCounts }: MapInput): Ma
 export function locate(
   areas: readonly MapArea[],
   binId: string,
-): { area: MapArea; row: MapRow } | null {
+): { area: MapArea; row: MapRow; cell: MapCell } | null {
   for (const area of areas) {
     for (const row of area.rows) {
-      if (row.bins.some((b) => b.binId === binId)) return { area, row };
+      const cell = row.bins.find((b) => b.binId === binId);
+      if (cell) return { area, row, cell };
     }
   }
   return null;
+}
+
+/**
+ * "Garage › Shelf A" — the sentence that tells you where to walk. Written
+ * here rather than in the screen so the map and anything else that points at
+ * a bin say it the same way.
+ */
+export function describePlace(found: { area: MapArea; row: MapRow }): string {
+  const parts = [found.area.name, found.row.name].filter((p) => p !== UNPLACED && p !== UNSHELVED);
+  return parts.length > 0 ? parts.join(' › ') : 'Not filed anywhere yet';
 }
 
 /** Total bins drawn — the map's own claim about how complete it is. */
