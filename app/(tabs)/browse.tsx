@@ -213,6 +213,18 @@ export default function BrowseScreen() {
             <Ionicons name="add" size={16} color={colors.amberInkOn} />
             <Text style={styles.toolbarLabel}>Bin</Text>
           </Pressable>
+          {/* D21: the map is a view of this same list, so this is where you
+              would go looking for it. */}
+          <Link href="/map" asChild>
+            <Pressable
+              style={styles.toolbarButtonAlt}
+              accessibilityRole="button"
+              accessibilityLabel="See the workshop as a map"
+            >
+              <Ionicons name="map" size={16} color={colors.steel} />
+              <Text style={styles.toolbarLabelAlt}>Map</Text>
+            </Pressable>
+          </Link>
           <Pressable style={styles.toolbarButtonAlt} onPress={openPrintPicker}>
             <Ionicons name="print" size={16} color={colors.steel} />
             <Text style={styles.toolbarLabelAlt}>Print bin labels</Text>

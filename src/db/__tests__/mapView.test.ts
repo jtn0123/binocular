@@ -1,4 +1,12 @@
-import { buildMap, locate, mapSize, UNPLACED, UNSHELVED, type MapInput } from '../mapView';
+import {
+  buildMap,
+  describePlace,
+  locate,
+  mapSize,
+  UNPLACED,
+  UNSHELVED,
+  type MapInput,
+} from '../mapView';
 import type { BinRow, LocationRow, ShelfRow } from '../queries';
 
 const loc = (id: string, name: string): LocationRow => ({ id, name, created_at: '' });
@@ -125,14 +133,39 @@ describe('finding a bin on the map', () => {
     }),
   );
 
-  it('reports the area and row a bin sits in', () => {
+  it('reports the area, row and cell a bin sits in', () => {
     expect(locate(areas, 'b1')).toMatchObject({
       area: { name: 'Garage' },
       row: { name: 'Shelf A' },
+      cell: { code: 'B-001' },
     });
   });
 
   it('returns null for a bin that is not drawn', () => {
     expect(locate(areas, 'nope')).toBeNull();
+  });
+
+  it('names the place so the screen can say where to walk', () => {
+    expect(describePlace(locate(areas, 'b1')!)).toBe('Garage › Shelf A');
+  });
+
+  it('does not read out the placeholder names as if they were a place', () => {
+    // "Not in a location › Not on a shelf" is worse than saying nothing.
+    const loose = buildMap(input({ bins: [bin('b9', null, 'B-009')] }));
+    expect(describePlace(locate(loose, 'b9')!)).toBe('Not filed anywhere yet');
+  });
+});
+
+describe('what a map cell carries', () => {
+  it('brings the bin cover photo along so a cell can look like the bin', () => {
+    const withPhoto = { ...bin('b1', 's1', 'B-001'), cover_photo_uri: 'file:///cover.jpg' };
+    const areas = buildMap(
+      input({
+        locations: [loc('l1', 'Garage')],
+        shelves: [shelf('s1', 'l1', 'Shelf A')],
+        bins: [withPhoto, bin('b2', 's1', 'B-002')],
+      }),
+    );
+    expect(areas[0].rows[0].bins.map((c) => c.photoUri)).toEqual(['file:///cover.jpg', null]);
   });
 });
