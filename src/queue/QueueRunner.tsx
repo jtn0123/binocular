@@ -6,6 +6,7 @@ import { AppState } from 'react-native';
 import { useDb } from '../db/DbProvider';
 import { purgeDeletedItems } from '../db/queries';
 
+import { activateEncoderIfDownloaded } from '../vision/executorchEmbedder';
 import { backfillEmbeddings } from '../vision/visualMemory';
 
 import { initScanQueue, pruneOldScanPhotos, recoverInterruptedScans } from './scanQueue';
@@ -49,7 +50,13 @@ export function QueueRunner() {
 
     const queue = initScanQueue(db);
     void queue.drain();
-    void drainEmbeddingBacklog(db);
+    // D20: bring the encoder back if its weights are already here (never
+    // downloads), then work the backlog with it. Ordered, not raced — a
+    // backfill that starts before the encoder loads would find nothing to do
+    // and report a false "0 remaining" on every cold start.
+    void activateEncoderIfDownloaded()
+      .catch(() => false)
+      .then(() => drainEmbeddingBacklog(db));
 
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
