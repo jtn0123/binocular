@@ -84,10 +84,12 @@ function ResultRow({
   result,
   onPress,
   onShowQr,
+  onShowMap,
 }: {
   result: SearchResult;
   onPress: () => void;
   onShowQr: () => void;
+  onShowMap: () => void;
 }) {
   const where =
     [result.binName, result.shelfName, result.locationName].filter(Boolean).join(', ') ||
@@ -129,6 +131,16 @@ function ResultRow({
           <Text style={styles.checkedOut}>checked out to {result.checkedOutTo}</Text>
         ) : null}
       </View>
+      {/* D21: the breadcrumb says where it is; this shows you. */}
+      <Pressable
+        onPress={onShowMap}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={`Show the bin holding ${result.name} on the map`}
+        testID="show-on-map"
+      >
+        <Ionicons name="map-outline" size={18} color={colors.steel} />
+      </Pressable>
       <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
     </Pressable>
   );
@@ -328,6 +340,13 @@ export default function HomeScreen() {
                 }
                 onShowQr={() => {
                   if (result.binId) setQrBin(getBin(db, result.binId));
+                }}
+                onShowMap={() => {
+                  // D21: end "where is my X" on a picture of the wall, with
+                  // the bin lit up, rather than on a breadcrumb.
+                  if (result.binId) {
+                    router.push({ pathname: '/map', params: { highlight: result.binId } });
+                  }
                 }}
               />
             )}
