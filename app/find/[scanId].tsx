@@ -7,6 +7,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CodeTag } from '@/components/CodeTag';
 import { useDb } from '@/db/DbProvider';
 import { getScan, updateScanStatus } from '@/db/queries';
+import { logEvent } from '@/diagnostics/events';
 import { nowIso } from '@/lib/time';
 import { searchItems } from '@/search/fts';
 import { colors, radius, sp, type } from '@/theme';
@@ -79,8 +80,21 @@ export default function FindResultScreen() {
   /** Ranked by resemblance; deliberately no score shown (D5/D20). */
   const recalledRows = (
     <>
-      {(recalled ?? []).map((hit) => (
-        <Pressable key={hit.itemId} style={styles.resultRow} onPress={() => openBin(hit.binId)}>
+      {(recalled ?? []).map((hit, rank) => (
+        <Pressable
+          key={hit.itemId}
+          style={styles.resultRow}
+          onPress={() => {
+            // D16: whether a suggestion was acted on is the only honest signal
+            // of whether it was right, and it costs the user nothing to give.
+            logEvent(db, {
+              kind: 'memory',
+              name: 'memory_recall_opened',
+              detail: { rank, itemId: hit.itemId },
+            });
+            openBin(hit.binId);
+          }}
+        >
           <View style={[styles.thumb, styles.thumbEmpty]}>
             <Ionicons name="sparkles-outline" size={18} color={colors.textFaint} />
           </View>

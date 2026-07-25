@@ -22,7 +22,9 @@ export type EventKind =
   | 'search'
   | 'net'
   | 'crash'
-  | 'settings';
+  | 'settings'
+  /** D20 visual memory: what the encoder did, and what it nearly matched. */
+  | 'memory';
 
 export interface EventInput {
   kind: EventKind;
