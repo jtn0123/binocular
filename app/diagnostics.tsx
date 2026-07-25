@@ -1,3 +1,4 @@
+import { Link } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
@@ -217,6 +218,20 @@ export default function DiagnosticsScreen() {
 
       <Text style={styles.sectionTitle}>Visual memory</Text>
       <VisualMemoryCard report={memory} />
+      {memory.remembered > 1 ? (
+        // Its own screen because the comparison is O(N²) — it should run when
+        // asked for, not every time this page is opened.
+        <Link href="/visual-memory" asChild>
+          <Pressable
+            style={styles.secondaryButton}
+            accessibilityRole="button"
+            accessibilityLabel="Open match strength"
+            testID="open-match-strength"
+          >
+            <Text style={styles.secondaryLabel}>Match strength →</Text>
+          </Pressable>
+        </Link>
+      ) : null}
 
       <Text style={styles.sectionTitle}>Recent events</Text>
       {events.length === 0 ? (

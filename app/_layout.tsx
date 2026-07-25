@@ -23,6 +23,7 @@ export default function RootLayout() {
         <Stack.Screen name="queue" options={{ title: 'Scan queue' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         <Stack.Screen name="diagnostics" options={{ title: 'Diagnostics' }} />
+        <Stack.Screen name="visual-memory" options={{ title: 'Match strength' }} />
         <Stack.Screen name="trash" options={{ title: 'Recently deleted' }} />
         <Stack.Screen name="bin-photo/[id]" options={{ headerShown: false }} />
       </Stack>
