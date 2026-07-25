@@ -7,6 +7,7 @@ import { nowIso } from '../lib/time';
 
 import { deviceContext, type DeviceContext } from './context';
 import { countEvents, countEventsOfKind, isLoggingEnabled, listEvents, type EventRow } from './events';
+import { buildMemoryReport, type MemoryReport } from './memoryReport';
 
 /**
  * User-initiated diagnostics export (blueprint D16).
@@ -30,6 +31,8 @@ export interface DiagnosticsPayload {
     bins: number;
   };
   events: EventRow[];
+  /** D20: what visual memory holds and what it has been finding. */
+  memory: MemoryReport;
   dump: BackupDump;
 }
 
@@ -52,6 +55,7 @@ export function buildDiagnosticsPayload(
       bins: dump.bins.length,
     },
     events: listEvents(db, eventLimit),
+    memory: buildMemoryReport(db),
     dump,
   };
 }

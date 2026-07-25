@@ -15,6 +15,7 @@ import {
   MAX_EVENTS,
   type EventRow,
 } from '@/diagnostics/events';
+import { buildMemoryReport, describeRecall } from '@/diagnostics/memoryReport';
 import { colors, radius, sp, type } from '@/theme';
 
 /**
@@ -25,6 +26,7 @@ const KIND_COLOR: Record<string, string> = {
   crash: colors.danger,
   scan: colors.amber,
   queue: colors.steel,
+  memory: colors.steel,
 };
 
 function EventLine({ event }: { event: EventRow }) {
@@ -51,6 +53,57 @@ function EventLine({ event }: { event: EventRow }) {
   );
 }
 
+/**
+ * D20 visual memory, made legible. This is the one surface allowed to show a
+ * raw similarity (§11 invariant 2): without the score of the *best rejected*
+ * candidate, "missed by a hair" and "nothing was close" are the same empty
+ * screen, and they need opposite fixes.
+ */
+function VisualMemoryCard({ report }: { report: ReturnType<typeof buildMemoryReport> }) {
+  const {
+    model,
+    available,
+    remembered,
+    withPhotos,
+    recalls,
+    recallsWithHits,
+    opened,
+    embedFailures,
+    recent,
+  } = report;
+
+  return (
+    <View style={styles.card} testID="visual-memory-card">
+      <Text style={styles.mono}>
+        encoder: {model ?? 'none'}
+        {model && !available ? ' (not loaded)' : ''}
+      </Text>
+      <Text style={styles.mono}>
+        memorised: {remembered} of {withPhotos} item{withPhotos === 1 ? '' : 's'} with a photo
+        {embedFailures > 0 ? ` · ${embedFailures} photo(s) would not encode` : ''}
+      </Text>
+      {recalls === 0 ? (
+        <Text style={styles.hint}>
+          {available
+            ? 'No lookups yet. Photograph something with Find it and come back.'
+            : 'Nothing to report until a recognizer has been downloaded.'}
+        </Text>
+      ) : (
+        <>
+          <Text style={styles.mono}>
+            lookups: {recalls} · {recallsWithHits} found something · {opened} opened
+          </Text>
+          {recent.map((line, i) => (
+            <Text key={`${line.time}-${i}`} style={styles.mono} numberOfLines={1}>
+              {line.time} {describeRecall(line)}
+            </Text>
+          ))}
+        </>
+      )}
+    </View>
+  );
+}
+
 export default function DiagnosticsScreen() {
   const db = useDb();
   const [enabled, setEnabled] = useState(true);
@@ -66,6 +119,7 @@ export default function DiagnosticsScreen() {
   const total = countEvents(db);
   const crashes = countEventsOfKind(db, 'crash');
   const attention = countAttentionScans(db);
+  const memory = buildMemoryReport(db);
   void tick;
 
   return (
@@ -160,6 +214,9 @@ export default function DiagnosticsScreen() {
           <Text style={styles.secondaryLabel}>Clear log</Text>
         </Pressable>
       </View>
+
+      <Text style={styles.sectionTitle}>Visual memory</Text>
+      <VisualMemoryCard report={memory} />
 
       <Text style={styles.sectionTitle}>Recent events</Text>
       {events.length === 0 ? (
