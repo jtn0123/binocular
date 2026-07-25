@@ -2,6 +2,7 @@ import { countEmbeddings, listItemsNeedingEmbedding } from '../../db/embeddingQu
 import { createNodeAdapter, type NodeDbAdapter } from '../../db/nodeAdapter';
 import { createBin, createLocation, createShelf, insertItem } from '../../db/queries';
 import { runMigrations } from '../../db/schema';
+import { listEvents } from '../../diagnostics/events';
 import {
   backfillEmbeddings,
   isVisualMemoryAvailable,
@@ -160,6 +161,120 @@ describe('visual memory (D20)', () => {
 
       expect(await backfillEmbeddings(db)).toBe(1);
       expect(countEmbeddings(db, 'fake-v1')).toBe(1);
+    });
+  });
+
+  /**
+   * D16 instrumentation. What matters here is that the *rejected* score is
+   * recorded: a miss is otherwise indistinguishable from an empty memory or a
+   * missing encoder, and telling those apart is the whole reason a shared
+   * diagnostics bundle is worth reading.
+   */
+  describe('diagnostics', () => {
+    const memoryEvents = (name?: string) =>
+      listEvents(db, 100).filter((e) => e.kind === 'memory' && (!name || e.name === name));
+    const detailOf = (index = 0) =>
+      JSON.parse(memoryEvents('memory_recall')[index].detail ?? '{}') as Record<string, unknown>;
+
+    it('records that there was no encoder at all', async () => {
+      await recall(db, 'file:///photos/query.jpg');
+      expect(memoryEvents('memory_recall')).toHaveLength(1);
+      expect(detailOf()).toEqual({ available: false });
+    });
+
+    it('records an empty memory as empty, not as a miss', async () => {
+      setEmbedder(fakeEmbedder({ 'file:///photos/query.jpg': [1, 0, 0] }));
+      await recall(db, 'file:///photos/query.jpg');
+      expect(detailOf()).toEqual({ model: 'fake-v1', candidates: 0 });
+    });
+
+    it('records the best score of a miss, so the threshold can be judged', async () => {
+      item('10 mm socket', 'file:///photos/socket.jpg');
+      setEmbedder(
+        fakeEmbedder({
+          'file:///photos/socket.jpg': [1, 0, 0],
+          'file:///photos/kayak.jpg': [0, 1, 0],
+        }),
+      );
+      await backfillEmbeddings(db);
+
+      expect(await recall(db, 'file:///photos/kayak.jpg')).toEqual([]);
+      const detail = detailOf();
+      expect(detail).toMatchObject({ model: 'fake-v1', candidates: 1, dims: 3, hits: 0 });
+      // Orthogonal vectors: the near-miss is nowhere near, and the log says so.
+      expect(detail.top).toBe(0);
+      expect(detail.top as number).toBeLessThan(detail.minScore as number);
+    });
+
+    it('records a hit with its score above the threshold', async () => {
+      item('10 mm socket', 'file:///photos/socket.jpg');
+      setEmbedder(
+        fakeEmbedder({
+          'file:///photos/socket.jpg': [1, 0, 0],
+          'file:///photos/query.jpg': [1, 0, 0],
+        }),
+      );
+      await backfillEmbeddings(db);
+
+      expect(await recall(db, 'file:///photos/query.jpg')).toHaveLength(1);
+      const detail = detailOf();
+      expect(detail).toMatchObject({ hits: 1, top: 1 });
+      expect(detail.top as number).toBeGreaterThanOrEqual(detail.minScore as number);
+    });
+
+    it('rounds the score rather than logging float noise', async () => {
+      item('Nearly', 'file:///photos/near.jpg');
+      setEmbedder(
+        fakeEmbedder({
+          'file:///photos/near.jpg': [1, 0.4],
+          'file:///photos/query.jpg': [1, 0],
+        }),
+      );
+      await backfillEmbeddings(db);
+      await recall(db, 'file:///photos/query.jpg');
+
+      const top = detailOf().top as number;
+      expect(top).toBeCloseTo(0.928, 3);
+      expect(String(top).replace('0.', '')).toHaveLength(3);
+    });
+
+    it('names the item whose photo would not encode', async () => {
+      item('Readable', 'file:///photos/ok.jpg');
+      const gone = item('Gone', 'file:///photos/missing.jpg');
+      setEmbedder(fakeEmbedder({ 'file:///photos/ok.jpg': [1, 0] }));
+      await backfillEmbeddings(db);
+
+      const failures = memoryEvents('memory_embed_failed');
+      expect(failures).toHaveLength(1);
+      expect(JSON.parse(failures[0].detail ?? '{}')).toMatchObject({ itemId: gone.id });
+    });
+
+    it('summarises a backfill pass and what it left behind', async () => {
+      for (let i = 0; i < 3; i++) item(`Item ${i}`, `file:///photos/${i}.jpg`);
+      setEmbedder(
+        fakeEmbedder({
+          'file:///photos/0.jpg': [1, 0],
+          'file:///photos/1.jpg': [0, 1],
+          'file:///photos/2.jpg': [1, 1],
+        }),
+      );
+
+      await backfillEmbeddings(db, 2);
+      const first = memoryEvents('memory_backfill');
+      expect(first).toHaveLength(1);
+      expect(JSON.parse(first[0].detail ?? '{}')).toMatchObject({
+        model: 'fake-v1',
+        attempted: 2,
+        embedded: 2,
+        remaining: 1,
+      });
+    });
+
+    it('stays silent when a foreground finds nothing to do', async () => {
+      setEmbedder(fakeEmbedder({}));
+      // Every app resume calls this; an empty pass must not spend a row.
+      expect(await backfillEmbeddings(db)).toBe(0);
+      expect(memoryEvents()).toHaveLength(0);
     });
   });
 });

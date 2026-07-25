@@ -1,4 +1,4 @@
-import { bytesToVector, cosine, nearest, vectorToBytes } from '../similarity';
+import { bytesToVector, cosine, nearest, search, vectorToBytes } from '../similarity';
 
 const v = (...values: number[]) => Float32Array.from(values);
 
@@ -66,6 +66,36 @@ describe('nearest neighbours', () => {
 
   it('handles an empty memory', () => {
     expect(nearest(v(1, 0), [])).toEqual([]);
+  });
+});
+
+describe('search: what was rejected', () => {
+  const memory = [
+    { itemId: 'near', vector: v(1, 0.4) },
+    { itemId: 'far', vector: v(0, 1) },
+  ];
+
+  it('reports the best score even when nothing cleared the threshold', () => {
+    const { matches, best } = search(v(1, 0), memory, { minScore: 0.99 });
+    expect(matches).toEqual([]);
+    // The whole point: "missed by a hair" is legible, not just "no match".
+    expect(best).toBeCloseTo(0.928, 3);
+  });
+
+  it('reports the winner when there is one', () => {
+    const { matches, best } = search(v(1, 0), memory, { minScore: 0.5 });
+    expect(matches.map((m) => m.itemId)).toEqual(['near']);
+    expect(best).toBeCloseTo(matches[0].score, 6);
+  });
+
+  it('has no best score when there was nothing to compare against', () => {
+    expect(search(v(1, 0), [])).toEqual({ matches: [], best: null });
+  });
+
+  it('agrees with nearest, which is the same search minus the rejects', () => {
+    expect(search(v(1, 0), memory, { minScore: 0.5 }).matches).toEqual(
+      nearest(v(1, 0), memory, { minScore: 0.5 }),
+    );
   });
 });
 

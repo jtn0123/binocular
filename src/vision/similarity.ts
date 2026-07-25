@@ -58,14 +58,40 @@ export function nearest(
   candidates: readonly Candidate[],
   { k = 3, minScore = 0 }: { k?: number; minScore?: number } = {},
 ): Match[] {
+  return search(query, candidates, { k, minScore }).matches;
+}
+
+export interface SearchResult {
+  matches: Match[];
+  /**
+   * The single best cosine seen, **whether or not it cleared the threshold**,
+   * or null when there were no candidates to score.
+   *
+   * This exists for the diagnostics log (D16/D20). A rejected match leaves no
+   * other trace, so without it "missed by a hair" and "nothing was remotely
+   * close" are indistinguishable after the fact — and those are the two cases
+   * that decide whether the threshold is set right. It is never rendered on a
+   * screen that describes inventory; see §11 invariant 2.
+   */
+  best: number | null;
+}
+
+/** `nearest`, plus what it rejected. */
+export function search(
+  query: Float32Array,
+  candidates: readonly Candidate[],
+  { k = 3, minScore = 0 }: { k?: number; minScore?: number } = {},
+): SearchResult {
   const scored: Match[] = [];
+  let best: number | null = null;
   for (const candidate of candidates) {
     const score = cosine(query, candidate.vector);
+    if (best === null || score > best) best = score;
     if (score >= minScore) scored.push({ itemId: candidate.itemId, score });
   }
   // Ties break on item id so the order is stable between renders.
   scored.sort((a, b) => b.score - a.score || a.itemId.localeCompare(b.itemId));
-  return scored.slice(0, Math.max(0, k));
+  return { matches: scored.slice(0, Math.max(0, k)), best };
 }
 
 /** Little-endian Float32 bytes for SQLite storage. */
