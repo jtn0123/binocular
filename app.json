@@ -39,7 +39,8 @@
       "expo-secure-store",
       "expo-asset",
       "expo-sharing",
-      "./plugins/withGradleDaemonJvm"
+      "./plugins/withGradleDaemonJvm",
+      "./plugins/withBuildPerformance"
     ],
     "experiments": {
       "typedRoutes": true
