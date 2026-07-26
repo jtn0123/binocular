@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -26,6 +27,7 @@ import { isDatabaseEmpty } from '@/db/backupQueries';
 import { countEmbeddings, countItemsWithPhotos } from '@/db/embeddingQueries';
 import { listSpendTotals, type SpendTotals } from '@/db/queries';
 import { buildInfo, describeBuild, RELEASES_URL } from '@/settings/build';
+import { DEFAULT_MAP_PREFS, loadMapPrefs, saveMapPrefs } from '@/settings/mapPrefs';
 import {
   getApiKey,
   getOpenAiApiKey,
@@ -213,6 +215,17 @@ export default function SettingsScreen() {
       );
     });
   }
+  // Map preferences live here so the drag can be turned off without going to
+  // the screen it might be breaking.
+  const [mapDrag, setMapDrag] = useState(DEFAULT_MAP_PREFS.drag);
+  const [mapHeat, setMapHeat] = useState(DEFAULT_MAP_PREFS.heat);
+  useEffect(() => {
+    void loadMapPrefs().then((prefs) => {
+      setMapDrag(prefs.drag);
+      setMapHeat(prefs.heat);
+    });
+  }, []);
+
   const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
   const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
   // Touches the filesystem, so unlike the SQLite-derived numbers below it is
@@ -404,6 +417,29 @@ export default function SettingsScreen() {
           </Text>
         </View>
       )}
+
+      <Text style={styles.sectionTitle}>Map</Text>
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleMain}>
+          <Text style={styles.toggleLabel}>Drag bins with your finger</Text>
+          <Text style={styles.hint}>
+            Off by default. Hold a bin and drag it instead of tapping where it goes. An earlier
+            version of this crashed the app on some phones; if anything looks wrong on the map,
+            switch it off here and long-press-then-tap still works exactly as before.
+          </Text>
+        </View>
+        <Switch
+          value={mapDrag}
+          onValueChange={(next) => {
+            setMapDrag(next);
+            void saveMapPrefs({ heat: mapHeat, drag: next });
+            logEvent(db, { kind: 'settings', name: 'map_drag', detail: { enabled: next } });
+          }}
+          trackColor={{ true: colors.amber, false: colors.borderStrong }}
+          thumbColor={colors.surface}
+          testID="settings-map-drag"
+        />
+      </View>
 
       <Text style={styles.sectionTitle}>Diagnostics</Text>
       <Text style={styles.hint}>
@@ -648,6 +684,9 @@ const styles = StyleSheet.create({
   // Wraps because Android font scale can push a two-button row off the right
   // edge, and a button you cannot see is a button you cannot press.
   buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: sp(2.5) },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: sp(3) },
+  toggleMain: { flex: 1, gap: 2 },
+  toggleLabel: { color: colors.text, fontWeight: '600', fontSize: 15 },
   dangerButton: {
     alignSelf: 'flex-start',
     borderWidth: 1,

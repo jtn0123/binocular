@@ -35,19 +35,21 @@ jest.mock('react-native-reanimated', () => {
 });
 
 // The gesture layer is native; under jest the detector is a passthrough so the
-// tap/press path — the one that must always work — is what gets exercised.
+// tap/press path — the one that must always work, and the one a screen reader
+// drives — is what gets exercised.
+//
+// The chain is a Proxy rather than a fixed list of methods on purpose: it
+// returns itself for anything, so adding a builder call to the real gesture
+// cannot silently break every test in this file. It also cannot tell us
+// anything about whether the gesture works on a device — see the note at the
+// top of app/map.tsx.
 jest.mock('react-native-gesture-handler', () => {
-  const chain: Record<string, unknown> = {};
-  for (const method of [
-    'activateAfterLongPress',
-    'maxPointers',
-    'shouldCancelWhenOutside',
-    'onStart',
-    'onUpdate',
-    'onEnd',
-  ]) {
-    chain[method] = () => chain;
-  }
+  const chain: Record<string, unknown> = new Proxy(
+    {},
+    {
+      get: () => () => chain,
+    },
+  );
   return {
     Gesture: { Pan: () => chain },
     GestureDetector: ({ children }: { children: React.ReactNode }) => children,

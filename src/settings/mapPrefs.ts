@@ -21,19 +21,34 @@ const KEY = 'binocular.map_prefs';
 
 export interface MapPrefs {
   heat: HeatMode;
+  /**
+   * Finger-drag on the map.
+   *
+   * Default OFF, and that is deliberate rather than timid. A drag layer on
+   * this screen killed the app *process* on the field-test phone once
+   * already, and the shipped default should be the interaction we know
+   * survives — long-press to lift, tap to place. Turning this on is a
+   * decision to test something, and there is always a safe state to go back
+   * to without waiting for another build.
+   */
+  drag: boolean;
 }
 
-export const DEFAULT_MAP_PREFS: MapPrefs = { heat: 'none' };
+export const DEFAULT_MAP_PREFS: MapPrefs = { heat: 'none', drag: false };
 
 const MapPrefsSchema = z.object({
   heat: z.enum(['none', 'items', 'scanned']),
+  // Tolerated as missing: a stored value written before drag existed must not
+  // reset the tint the user chose.
+  drag: z.boolean().optional(),
 });
 
 export function parseMapPrefs(raw: string | null): MapPrefs {
   if (!raw) return DEFAULT_MAP_PREFS;
   try {
     const parsed = MapPrefsSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : DEFAULT_MAP_PREFS;
+    if (!parsed.success) return DEFAULT_MAP_PREFS;
+    return { heat: parsed.data.heat, drag: parsed.data.drag ?? DEFAULT_MAP_PREFS.drag };
   } catch {
     return DEFAULT_MAP_PREFS;
   }

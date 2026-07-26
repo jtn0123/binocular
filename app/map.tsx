@@ -13,6 +13,9 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { GestureDetector } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+
 import { PromptModal, type PromptRequest } from '@/components/PromptModal';
 import { useDb } from '@/db/DbProvider';
 import {
@@ -41,6 +44,8 @@ import {
   setShelfCapacity,
 } from '@/db/queries';
 import { logEvent } from '@/diagnostics/events';
+import { resolveDrop, type CellRect, type RowRect } from '@/map/dragGeometry';
+import { makeBinDragGesture } from '@/map/dragGesture';
 import { hapticShutter, hapticSuccess } from '@/lib/haptics';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { DEFAULT_MAP_PREFS, loadMapPrefs, saveMapPrefs } from '@/settings/mapPrefs';
@@ -52,23 +57,52 @@ import { colors, mono, radius, sp, type } from '@/theme';
  * layout is the data — there is no map-only position that can drift from
  * where a bin is really filed.
  *
- * Organizing is lift-and-place rather than a held drag: long-press a bin to
- * lift it, then tap the spot it belongs — another bin to slide in front of,
- * a gap, or the end of a row. A drop inside the same shelf just writes the
- * stored order; a drop on another shelf is the §8.5 move and asks first.
+ * Organizing is lift-and-place: long-press a bin to lift it, then tap the
+ * spot it belongs — another bin to slide in front of, a gap, or the end of a
+ * row. A drop inside the same shelf just writes the stored order; a drop on
+ * another shelf is the §8.5 move and asks first.
  *
- * A finger-following drag was built on top of this and withdrawn: wrapping
- * every cell in a gesture-handler detector with reanimated worklets killed
- * the *process* on the field-test phone — the event log showed an app_start
- * seconds after every screen//map, with no app_background between them and
- * nothing in the JS crash handler, which is what a native crash looks like.
- * Plain Pressables cost no capability: every move the drag could make, a tap
- * makes too, and tapping is what a screen reader drives anyway. Do not
- * reintroduce the gesture layer here without testing it on a device.
+ * A finger-following drag sits on top of that, OFF by default (Settings ›
+ * Map). The first attempt at one killed the *process* on the field-test
+ * phone: the event log showed an app_start seconds after every screen//map,
+ * with no app_background between them and nothing in the JS crash handler,
+ * which is what a native crash looks like. The cause was one line — a worklet
+ * calling `sp(3)`, an ordinary function, which on the UI runtime becomes a
+ * stub that throws, with no guard around it in a release build.
+ *
+ * This version is built to make that class of failure impossible or visible:
+ * one gesture detector rather than one per cell, worklets that read only
+ * module-scope constants, hit-testing as arithmetic over layout rects
+ * (src/map/dragGeometry.ts) rather than a native measure fan-out, and a CI
+ * check (scripts/ci/audit-worklet-closures.mjs) that fails the build on a
+ * captured non-worklet function.
+ *
+ * It is still off by default, because none of that is a substitute for the
+ * phone. Jest cannot see this class of bug — the native layer is stubbed, and
+ * the suite stayed green throughout the original incident. Lift-and-place
+ * remains the model of record and the screen-reader path: every move the drag
+ * can make, a tap makes too.
  *
  * `highlight` may carry several comma-separated bin ids: a search that
  * matched items in four bins lights all four, and the banner walks them.
  */
+/**
+ * Drag constants live at module scope, and must stay there.
+ *
+ * The withdrawn drag positioned its chip with `sp(3)` inside a
+ * `useAnimatedStyle` worklet. `sp` is an ordinary function, so on the UI
+ * runtime it became a stub whose only behaviour is to throw — and a release
+ * build has no guard around that, so the process aborted. Every number a
+ * worklet reads is therefore a plain constant, and
+ * scripts/ci/audit-worklet-closures.mjs fails the build if that stops being
+ * true.
+ */
+const DRAG_ACTIVATE_MS = 350;
+const GHOST_WIDTH = 132;
+const GHOST_HEIGHT = 40;
+/** How far above the fingertip the ghost rides, so it is not under the thumb. */
+const GHOST_LIFT = 28;
+
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   // A field-test phone has no Metro console, so a screen that throws is just
   // a blank rectangle. expo-router renders this in the route's place instead.
@@ -139,13 +173,15 @@ export default function MapScreen() {
   );
 
   const [heat, setHeat] = useState<HeatMode>(DEFAULT_MAP_PREFS.heat);
-  const [heatLoaded, setHeatLoaded] = useState(false);
+  const [dragEnabled, setDragEnabled] = useState(DEFAULT_MAP_PREFS.drag);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   useEffect(() => {
     let cancelled = false;
     void loadMapPrefs().then((prefs) => {
       if (cancelled) return;
       setHeat(prefs.heat);
-      setHeatLoaded(true);
+      setDragEnabled(prefs.drag);
+      setPrefsLoaded(true);
     });
     return () => {
       cancelled = true;
@@ -154,9 +190,9 @@ export default function MapScreen() {
   // Write back only once the load has landed, so the default cannot race
   // ahead and overwrite what was stored.
   useEffect(() => {
-    if (!heatLoaded) return;
-    void saveMapPrefs({ heat });
-  }, [heatLoaded, heat]);
+    if (!prefsLoaded) return;
+    void saveMapPrefs({ heat, drag: dragEnabled });
+  }, [prefsLoaded, heat, dragEnabled]);
 
   // Recomputed per render on purpose: staleness tints must not fossilize.
   const nowIso = new Date().toISOString();
@@ -195,6 +231,11 @@ export default function MapScreen() {
   // exists to end. Row granularity was what arranging needed; answering needs
   // cell granularity.
   const cellYs = useRef<Record<string, number>>({});
+  // The rest of the offset chain, needed to place a cell in content space.
+  const areaXs = useRef<Record<string, number>>({});
+  const rowXs = useRef<Record<string, number>>({});
+  const cellsXs = useRef<Record<string, number>>({});
+  const cellsYs = useRef<Record<string, number>>({});
   const scrolledOnce = useRef(false);
 
   const rowKey = (row: MapRow) => row.shelfId ?? 'unshelved';
@@ -250,6 +291,71 @@ export default function MapScreen() {
       hold(binId);
     },
     [hold],
+  );
+
+  // ------------------------------------------------------------ dragging
+  //
+  // Rebuilt after the first attempt killed the process. Three things are
+  // different, and each maps onto a mechanism the post-mortem found:
+  //
+  //  1. ONE gesture detector, on a View that is a parent of the ScrollView —
+  //     not one per cell. The native footprint is O(1) in wall size instead
+  //     of one handler, one UI-runtime event registration and a
+  //     `collapsable: false` view per bin.
+  //  2. The worklets do almost nothing. `onUpdate` writes two shared values
+  //     and calls nothing; the old one fired `runOnJS` on every touch sample
+  //     (90–120 Hz) and each hop drove a synchronous `scrollTo`. There are
+  //     exactly two thread hops per drag now, at the ends.
+  //  3. Hit-testing is arithmetic over rects collected from `onLayout`
+  //     (src/map/dragGeometry.ts, unit-tested), not a `measureInWindow`
+  //     fan-out that never settles when a node has unmounted.
+  //
+  // `scrollEnabled` is never touched: RNGH reads it at touch-down only, and
+  // flipping it mid-gesture is the documented way to produce the pointer-set
+  // inconsistency it rethrows as fatal. Long-press activation means a flick
+  // moves the finger before the timeout and the pan simply never starts.
+  //
+  // No auto-scroll in this version. Driving the scroll offset from a gesture
+  // was a prime suspect and buys little: lift-and-place still crosses the
+  // whole wall, and it is one tap.
+  const dragX = useSharedValue(0);
+  const dragY = useSharedValue(0);
+  const [dragging, setDragging] = useState(false);
+
+  /** Cell and row rects in scroll-content space, gathered as the map draws. */
+  const cellRects = useRef<Map<string, CellRect>>(new Map());
+  const rowRects = useRef<Map<string, RowRect>>(new Map());
+  const scrollOffset = useRef(0);
+  const scrollOrigin = useRef({ x: 0, y: 0 });
+
+  /** Finger position (relative to the detector) → scroll-content space. */
+  const toContent = useCallback(
+    (x: number, y: number) => ({
+      x: x - scrollOrigin.current.x,
+      y: y - scrollOrigin.current.y + scrollOffset.current,
+    }),
+    [],
+  );
+
+  const cancelDrag = useCallback(() => setDragging(false), []);
+
+  const beginDrag = useCallback(
+    (x: number, y: number) => {
+      const point = toContent(x, y);
+      for (const rect of cellRects.current.values()) {
+        if (
+          point.x >= rect.x &&
+          point.x <= rect.x + rect.width &&
+          point.y >= rect.y &&
+          point.y <= rect.y + rect.height
+        ) {
+          lift(rect.binId);
+          setDragging(true);
+          return;
+        }
+      }
+    },
+    [lift, toContent],
   );
 
   /**
@@ -326,6 +432,57 @@ export default function MapScreen() {
     },
     [areas, bump, db, held, heldFind, hold, offerUndo],
   );
+
+  const endDrag = useCallback(
+    (x: number, y: number) => {
+      setDragging(false);
+      const carried = heldRef.current;
+      if (!carried) return;
+      const drop = resolveDrop(
+        toContent(x, y),
+        [...cellRects.current.values()],
+        [...rowRects.current.values()],
+        carried,
+      );
+      // Released over nothing: put the bin down rather than guessing a shelf.
+      if (!drop) {
+        hold(null);
+        return;
+      }
+      executeDrop({ shelfId: drop.shelfId, beforeBinId: drop.beforeBinId });
+    },
+    [executeDrop, hold, toContent],
+  );
+
+
+  const pan = useMemo(
+    () =>
+      // `useSharedValue` returns a `{ value }` box the React Compiler cannot
+      // tell apart from `useRef`, so handing one to a function reads as a
+      // render-phase ref access. It is not: the gesture is *built* here and
+      // its worklets run on the UI thread during a drag. Suppressed on this
+      // line only, so the rule keeps its teeth everywhere it is right.
+      // eslint-disable-next-line react-hooks/refs
+      makeBinDragGesture({
+        enabled: dragEnabled,
+        activateAfterMs: DRAG_ACTIVATE_MS,
+        dragX,
+        dragY,
+        onBegin: beginDrag,
+        onRelease: endDrag,
+        onCancelled: cancelDrag,
+      }),
+    [beginDrag, cancelDrag, dragEnabled, dragX, dragY, endDrag],
+  );
+
+  const ghostStyle = useAnimatedStyle(() => ({
+    // Constants only — see the note on DRAG_ACTIVATE_MS above.
+    transform: [
+      { translateX: dragX.value - GHOST_WIDTH / 2 },
+      { translateY: dragY.value - GHOST_HEIGHT - GHOST_LIFT },
+    ],
+  }));
+
 
   const onCellPress = useCallback(
     (cell: MapCell, row: MapRow) => {
@@ -405,6 +562,7 @@ export default function MapScreen() {
   }
 
   return (
+    <GestureDetector gesture={pan}>
     <View style={styles.screen}>
       <Stack.Screen options={{ title: 'Map' }} />
       {/*
@@ -473,7 +631,17 @@ export default function MapScreen() {
           )
         ) : null}
 
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.container}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={styles.container}
+        onLayout={(e) => {
+          scrollOrigin.current = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y };
+        }}
+        onScroll={(e) => {
+          scrollOffset.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={32}
+      >
         <View style={styles.heatBar}>
           <Text style={styles.heatLabel}>Tint</Text>
           {(
@@ -514,6 +682,7 @@ export default function MapScreen() {
               style={styles.area}
               onLayout={(e) => {
                 areaYs.current[areaKey] = e.nativeEvent.layout.y;
+                areaXs.current[areaKey] = e.nativeEvent.layout.x;
               }}
             >
               <View style={styles.areaHead}>
@@ -540,7 +709,15 @@ export default function MapScreen() {
                     key={key}
                     style={[styles.row, marked && styles.rowFound]}
                     onLayout={(e) => {
-                      rowYs.current[key] = e.nativeEvent.layout.y;
+                      const { x, y, height } = e.nativeEvent.layout;
+                      rowYs.current[key] = y;
+                      rowXs.current[key] = x;
+                      rowRects.current.set(key, {
+                        rowKey: key,
+                        shelfId: row.shelfId,
+                        y: (areaYs.current[areaKey] ?? 0) + y,
+                        height,
+                      });
                     }}
                   >
                     <View style={styles.rowHead}>
@@ -577,7 +754,13 @@ export default function MapScreen() {
                         </View>
                       ) : null}
                     </View>
-                    <View style={styles.cells}>
+                    <View
+                      style={styles.cells}
+                      onLayout={(e) => {
+                        cellsXs.current[key] = e.nativeEvent.layout.x;
+                        cellsYs.current[key] = e.nativeEvent.layout.y;
+                      }}
+                    >
                       {row.bins.map((cell) => (
                         <Cell
                           key={cell.binId}
@@ -589,8 +772,25 @@ export default function MapScreen() {
                           heatStyle={tint(heatTier(cell, heat, nowIso), heat)}
                           onPress={() => onCellPress(cell, row)}
                           onLongPress={() => lift(cell.binId)}
-                          onLayout={(y) => {
-                            cellYs.current[cell.binId] = y;
+                          onLayout={(rect) => {
+                            cellYs.current[cell.binId] = rect.y;
+                            cellRects.current.set(cell.binId, {
+                              binId: cell.binId,
+                              rowKey: key,
+                              shelfId: row.shelfId,
+                              x:
+                                (areaXs.current[areaKey] ?? 0) +
+                                (rowXs.current[key] ?? 0) +
+                                (cellsXs.current[key] ?? 0) +
+                                rect.x,
+                              y:
+                                (areaYs.current[areaKey] ?? 0) +
+                                (rowYs.current[key] ?? 0) +
+                                (cellsYs.current[key] ?? 0) +
+                                rect.y,
+                              width: rect.width,
+                              height: rect.height,
+                            });
                           }}
                         />
                       ))}
@@ -670,8 +870,19 @@ export default function MapScreen() {
           </Pressable>
         </View>
       )}
+      {dragging && heldFind ? (
+        <Animated.View style={[styles.ghost, ghostStyle]} pointerEvents="none">
+          <Text style={styles.ghostCode} numberOfLines={1}>
+            {heldFind.cell.code}
+          </Text>
+          <Text style={styles.ghostName} numberOfLines={1}>
+            {heldFind.cell.name}
+          </Text>
+        </Animated.View>
+      ) : null}
       <PromptModal request={prompt} onClose={() => setPrompt(null)} />
     </View>
+    </GestureDetector>
   );
 }
 
@@ -730,15 +941,19 @@ function Cell({
   heatStyle: ViewStyle | null;
   onPress: () => void;
   onLongPress: () => void;
-  /** Offset within its row, so a search can scroll to the cell not the shelf. */
-  onLayout: (y: number) => void;
+  /**
+   * Rect within the cells container. Feeds both the scroll-to-cell offset and
+   * the drag hit-test, which is arithmetic over these rather than a native
+   * measure fan-out.
+   */
+  onLayout: (rect: { x: number; y: number; width: number; height: number }) => void;
 }) {
   const loud = focusedCell || heldCell;
   return (
     <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
-      onLayout={(e) => onLayout(e.nativeEvent.layout.y)}
+      onLayout={(e) => onLayout(e.nativeEvent.layout)}
       style={[
         styles.cell,
         cell.empty && styles.cellEmpty,
@@ -789,6 +1004,21 @@ function Cell({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  ghost: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: GHOST_WIDTH,
+    height: GHOST_HEIGHT,
+    justifyContent: 'center',
+    paddingHorizontal: sp(2.5),
+    borderRadius: radius.md,
+    backgroundColor: colors.amber,
+    borderWidth: 1,
+    borderColor: colors.amberInkOn,
+  },
+  ghostCode: { color: colors.amberInkOn, fontFamily: mono, fontSize: 12, fontWeight: '700' },
+  ghostName: { color: colors.amberInkOn, fontSize: 11 },
   container: {
     padding: sp(4),
     // Room for the undo snackbar, which is pinned over this content. Without
