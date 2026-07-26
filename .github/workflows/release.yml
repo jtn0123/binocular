@@ -101,29 +101,31 @@ jobs:
           # Gradle fetches the platform and build-tools it actually needs.
           packages: ''
 
-      # Gradle re-executed all 956 tasks on every run because this cached only
-      # ~/.gradle/caches — downloaded *dependencies*, not task outputs. With
-      # org.gradle.caching on (plugins/withBuildPerformance.js) those outputs
-      # land in ~/.gradle/caches/build-cache-1, inside the path below.
+      # Two caches, because the two halves of ~/.gradle want opposite keys.
       #
-      # The key must be unique per run: actions/cache skips saving entirely on
-      # an exact key hit ("Cache hit occurred on the primary key … not saving
-      # cache"), so a fixed key would restore an empty build cache and then
-      # discard everything the run just computed, forever.
-      # Split deliberately. Caching all of ~/.gradle/caches under a run-id key
-      # wrote a 2.27 GB entry on EVERY run — 40s to restore, 50s to save, and
-      # against GitHub's 10 GB per-repo quota only about four builds fit before
-      # eviction started throwing away the npm and jest caches too.
+      # Caching all of it under one run-id key wrote a 2.27 GB entry on EVERY
+      # run — 40s to restore, 50s to save — and against GitHub's 10 GB per-repo
+      # quota only about four builds fit before eviction started throwing away
+      # the npm and jest caches too.
       #
-      # Downloaded dependencies are large and change only with the lockfile, so
-      # they get a stable key and are written once. Task outputs are what the
-      # run actually computes, so they keep the run-id suffix: actions/cache
-      # skips saving on an exact key hit, and a fixed key there would restore
-      # an empty build cache and discard the run's work forever.
+      # Dependencies change only with the lockfile, so they key on it and are
+      # written once. `transforms-*` and `jars-*` sit here rather than being
+      # dropped: they are Android artifact transforms derived from those same
+      # dependencies and expensive to rebuild, and the first cut of this split
+      # omitted them — which would have cost time on EVERY run, not just the
+      # first.
+      #
+      # Task outputs (build-cache-1, populated because org.gradle.caching is on
+      # via plugins/withBuildPerformance.js) are what the run actually computes,
+      # so they keep a run-id suffix: actions/cache skips saving entirely on an
+      # exact key hit, and a fixed key would restore an empty build cache and
+      # then discard everything the run just computed, forever.
       - uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches/modules-2
+            ~/.gradle/caches/transforms-*
+            ~/.gradle/caches/jars-*
             ~/.gradle/wrapper
           key: gradle-deps-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'plugins/**') }}
           restore-keys: gradle-deps-${{ runner.os }}-
