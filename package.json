@@ -20,7 +20,8 @@
     "test": "jest",
     "seed": "tsx scripts/seed.ts",
     "eval": "tsx scripts/eval.ts",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "audit:worklets": "node scripts/ci/audit-worklet-closures.mjs app src"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.5",

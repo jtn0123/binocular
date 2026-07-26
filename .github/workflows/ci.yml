@@ -30,6 +30,11 @@ jobs:
 
       - run: npm run lint
       - run: npm run typecheck
+      # The class of bug jest structurally cannot see: a worklet capturing an
+      # ordinary function throws on the UI runtime, and release builds compile
+      # out the guard that would catch it — so it aborts the process while the
+      # whole test suite stays green. The check self-tests before it runs.
+      - run: npm run audit:worklets
       # A GitHub runner has 2 cores; jest's default (cores - 1) still leaves
       # workers fighting, and each worker pays its own module-registry cost.
       - run: npm test -- --ci --cacheDirectory ~/.cache/jest --maxWorkers=2
