@@ -1,10 +1,16 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useDb } from '@/db/DbProvider';
-import { getBin, listDeletedItems, restoreDeletedItem, type DeletedItemRow } from '@/db/queries';
+import {
+  getBin,
+  listDeletedItems,
+  restoreDeletedItem,
+  type BinRow,
+  type DeletedItemRow,
+} from '@/db/queries';
 import { quickCreateBin } from '@/db/scaffold';
 import { colors, radius, sp, type } from '@/theme';
 
@@ -19,15 +25,45 @@ export default function TrashScreen() {
   void tick;
   const rows = listDeletedItems(db);
 
+  /**
+   * Replacement bins, keyed by the deleted bin they stand in for.
+   *
+   * Restoring items whose original bin is gone used to mint a brand new bin
+   * per row, so five items from one deleted bin scattered across five
+   * unlabelled bins — turning a restore into a tidying job. Items that lived
+   * together land together.
+   */
+  const replacements = useRef<Map<string, string>>(new Map());
+
   function restore(row: DeletedItemRow) {
     const originalBin = row.bin_id ? getBin(db, row.bin_id) : null;
     let targetBinId = originalBin?.id;
+    let created: BinRow | null = null;
+
     if (!targetBinId) {
-      const created = quickCreateBin(db);
-      targetBinId = created.id;
+      const key = row.bin_id ?? 'never-had-a-bin';
+      const reused = replacements.current.get(key);
+      // Re-check it still exists: the screen can outlive a bin deleted from
+      // elsewhere, and restoring into a missing bin would fail silently.
+      if (reused && getBin(db, reused)) {
+        targetBinId = reused;
+      } else {
+        created = quickCreateBin(db);
+        targetBinId = created.id;
+        replacements.current.set(key, created.id);
+      }
     }
+
     if (restoreDeletedItem(db, row.id, targetBinId)) {
       setTick((t) => t + 1);
+      if (created) {
+        // Say where it went. A restore that reports nothing leaves you
+        // hunting for the thing you just recovered.
+        Alert.alert(
+          'Restored to a new bin',
+          `${row.name} is in ${created.short_code}, because the bin it came from no longer exists. Anything else restored from that bin joins it there.`,
+        );
+      }
     } else {
       Alert.alert('Restore failed', 'This item could not be restored.');
     }
