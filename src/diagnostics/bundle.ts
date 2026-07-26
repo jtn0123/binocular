@@ -103,13 +103,33 @@ export function formatDiagnosticsText(
   return lines.join('\n');
 }
 
-/** Zips the payload plus every referenced photo and opens the share sheet. */
-export async function exportDiagnosticsZip(db: DbAdapter): Promise<void> {
+export interface DiagnosticsZipOptions {
+  /**
+   * Include the full inventory dump and every photo it references.
+   *
+   * Off by default, and that is the point. This export is reached from a
+   * button labelled "Share diagnostics", next to one that promises "No photos
+   * and no inventory, just the log" — and it used to send the entire workshop
+   * and every photograph in it, unconditionally and without saying so.
+   * Consent to share a log is not consent to share the workshop, and this is
+   * the one thing in the app whose cost lands outside it.
+   */
+  includeInventory?: boolean;
+}
+
+/** Zips the log, and — only if asked — the inventory and its photos. */
+export async function exportDiagnosticsZip(
+  db: DbAdapter,
+  opts: DiagnosticsZipOptions = {},
+): Promise<void> {
   const payload = buildDiagnosticsPayload(db, deviceContext());
   const zip = new JSZip();
-  zip.file('diagnostics.json', JSON.stringify(payload, null, 2));
+  const shared: Omit<DiagnosticsPayload, 'dump'> & { dump?: BackupDump } = { ...payload };
+  if (!opts.includeInventory) delete shared.dump;
+  zip.file('diagnostics.json', JSON.stringify(shared, null, 2));
   // Events also as JSONL — far easier to grep/tail than nested JSON.
   zip.file('events.jsonl', payload.events.map((e) => JSON.stringify(e)).join('\n'));
-  addPhotosToZip(zip, collectPhotoUris(payload.dump));
-  await writeAndShareZip(zip, `binocular-diagnostics-${nowIso().slice(0, 10)}.zip`);
+  if (opts.includeInventory) addPhotosToZip(zip, collectPhotoUris(payload.dump));
+  const suffix = opts.includeInventory ? 'full' : 'log';
+  await writeAndShareZip(zip, `binocular-diagnostics-${suffix}-${nowIso().slice(0, 10)}.zip`);
 }

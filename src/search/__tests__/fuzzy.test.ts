@@ -2,7 +2,7 @@ import { createNodeAdapter, type NodeDbAdapter } from '../../db/nodeAdapter';
 import { createBin, insertItem } from '../../db/queries';
 import { runMigrations } from '../../db/schema';
 import { searchItemsWithFallback } from '../fts';
-import { bestMatch, editDistanceWithin, loadVocabulary, maxDistanceFor } from '../fuzzy';
+import { bestMatch, editDistanceWithin, loadVocabulary, maxDistanceFor, pluralVariants } from '../fuzzy';
 
 describe('edit distance', () => {
   it('measures the usual slips', () => {
@@ -107,5 +107,45 @@ describe('search fallback end to end', () => {
     const scannedVocab = spy.mock.calls.some((call) => String(call[0]).includes('item_vocab'));
     expect(scannedVocab).toBe(false);
     spy.mockRestore();
+  });
+});
+
+/**
+ * The worst shape a search failure can take: an answer that was on screen a
+ * keystroke ago disappears when you finish typing the word. "batterie" is one
+ * edit from "battery" and corrects; "batteries" is three, and the cap for a
+ * nine-letter token is two, so the final "s" deleted the result.
+ */
+describe('plurals', () => {
+  const vocab = [
+    { term: 'battery', doc: 4 },
+    { term: 'box', doc: 3 },
+    { term: 'screw', doc: 9 },
+    { term: 'brass', doc: 2 },
+  ];
+
+  it('finds the singular when the plural was typed', () => {
+    expect(bestMatch('batteries', vocab)).toBe('battery');
+    expect(bestMatch('boxes', vocab)).toBe('box');
+    expect(bestMatch('screws', vocab)).toBe('screw');
+  });
+
+  it('finds the plural when the singular was typed', () => {
+    const plural = [{ term: 'batteries', doc: 4 }];
+    expect(bestMatch('battery', plural)).toBe('batteries');
+  });
+
+  it('leaves a word the index already prefixes alone', () => {
+    // "screw" prefixes "screw" — nothing to correct, and correcting anyway is
+    // how a good token gets rewritten because a different one failed.
+    expect(bestMatch('screw', vocab)).toBeNull();
+  });
+
+  it('does not strip the second s of a double-s word', () => {
+    expect(pluralVariants('brass')).not.toContain('bras');
+  });
+
+  it('still reports nothing for a word the workshop lacks (§8.3)', () => {
+    expect(bestMatch('flanges', vocab)).toBeNull();
   });
 });
