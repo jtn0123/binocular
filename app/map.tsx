@@ -1,29 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import {
-  Stack,
-  useLocalSearchParams,
-  useRouter,
-  type ErrorBoundaryProps,
-} from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Dimensions,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type ViewStyle,
-} from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  type SharedValue,
-} from 'react-native-reanimated';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 import { PromptModal, type PromptRequest } from '@/components/PromptModal';
 import { useDb } from '@/db/DbProvider';
@@ -62,28 +41,26 @@ import { colors, mono, radius, sp, type } from '@/theme';
  * layout is the data — there is no map-only position that can drift from
  * where a bin is really filed.
  *
- * Organizing: long-press a bin and drag — a chip follows the finger, the map
- * ferries itself when you near an edge, and releasing over a cell, gap, or
- * row drops there. Long-press *without* dragging lifts the bin into
- * tap-to-place mode instead (tap the spot it belongs), which is also what a
- * screen reader drives, so nothing on this screen is drag-only. A drop
- * inside the same shelf just writes the stored order; a drop on another
- * shelf is the §8.5 move and asks first.
+ * Organizing is lift-and-place rather than a held drag: long-press a bin to
+ * lift it, then tap the spot it belongs — another bin to slide in front of,
+ * a gap, or the end of a row. A drop inside the same shelf just writes the
+ * stored order; a drop on another shelf is the §8.5 move and asks first.
+ *
+ * A finger-following drag was built on top of this and withdrawn: wrapping
+ * every cell in a gesture-handler detector with reanimated worklets killed
+ * the *process* on the field-test phone — the event log showed an app_start
+ * seconds after every screen//map, with no app_background between them and
+ * nothing in the JS crash handler, which is what a native crash looks like.
+ * Plain Pressables cost no capability: every move the drag could make, a tap
+ * makes too, and tapping is what a screen reader drives anyway. Do not
+ * reintroduce the gesture layer here without testing it on a device.
  *
  * `highlight` may carry several comma-separated bin ids: a search that
  * matched items in four bins lights all four, and the banner walks them.
  */
-const CHIP_WIDTH = 120;
-const CHIP_HEIGHT = 44;
-
-/**
- * A field-test phone has no Metro console, so a screen that throws is just a
- * blank rectangle and the bug reporter is left saying "it doesn't work".
- * expo-router renders this in the route's place instead, which turns that
- * into a legible message someone can read out — the same reason the D16
- * diagnostics log exists at all.
- */
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  // A field-test phone has no Metro console, so a screen that throws is just
+  // a blank rectangle. expo-router renders this in the route's place instead.
   return (
     <ScrollView contentContainerStyle={styles.center}>
       <Text style={styles.crashTitle}>The map could not be drawn.</Text>
@@ -105,21 +82,10 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
         <Text style={styles.crashRetryText}>Try again</Text>
       </Pressable>
       <Text style={styles.dim}>
-        Settings › Open diagnostics keeps a copy of this, and can export it.
+        Settings › Open diagnostics keeps a copy of this, and can copy it out.
       </Text>
     </ScrollView>
   );
-}
-
-/** UI-thread write of the finger position into the chip's shared values. */
-function trackDrag(
-  x: SharedValue<number>,
-  y: SharedValue<number>,
-  e: { absoluteX: number; absoluteY: number },
-): void {
-  'worklet';
-  x.value = e.absoluteX;
-  y.value = e.absoluteY;
 }
 export default function MapScreen() {
   const { highlight } = useLocalSearchParams<{ highlight?: string }>();
@@ -153,138 +119,6 @@ export default function MapScreen() {
     () => (held ? locateMany(areas, [held])[0] ?? null : null),
     [areas, held],
   );
-
-  // A mirror of `held` that is readable synchronously, because one physical
-  // long press reaches this screen twice — the pan gesture activates at
-  // 300 ms and Pressable's own onLongPress fires at 500 ms — and the second
-  // arrival must not undo the first.
-  const heldRef = useRef<string | null>(null);
-  const hold = useCallback((binId: string | null) => {
-    heldRef.current = binId;
-    setHeld(binId);
-  }, []);
-
-  /**
-   * Lifts a bin. Idempotent on purpose: lifting twice is the normal case,
-   * not a double tap, so it must not toggle. Putting a bin down is always an
-   * explicit act — tap the bin itself, or the banner's cancel.
-   */
-  const lift = useCallback(
-    (binId: string) => {
-      if (heldRef.current === binId) return;
-      hapticShutter();
-      hold(binId);
-    },
-    [hold],
-  );
-
-  // ------------------------------------------------------------- dragging
-  // The finger-following drag rides on top of lift-and-place: a long-press
-  // activates a pan, a floating chip tracks the finger, and releasing over
-  // a cell, gap, or row drops there. Releasing without having moved leaves
-  // the bin lifted in tap-to-place mode — which is also the path a screen
-  // reader or a failed gesture falls back to, so nothing is drag-only.
-  const [dragging, setDragging] = useState(false);
-  const draggingRef = useRef(false);
-  const dragX = useSharedValue(0);
-  const dragY = useSharedValue(0);
-  // Window origin of this screen, so absolute finger coords map onto it.
-  const originX = useSharedValue(0);
-  const originY = useSharedValue(0);
-  const wrapRef = useRef<View>(null);
-  const scrollOffset = useRef(0);
-
-  // Every place a bin can land, keyed so cells and gaps win over whole rows.
-  const dropTargets = useRef(new Map<string, { node: View; target: DropTarget }>());
-  const registerTarget = useCallback(
-    (key: string, target: DropTarget) => (node: View | null) => {
-      if (node) dropTargets.current.set(key, { node, target });
-      else dropTargets.current.delete(key);
-    },
-    [],
-  );
-
-  const beginDrag = useCallback(
-    (binId: string) => {
-      lift(binId);
-      draggingRef.current = true;
-      setDragging(true);
-    },
-    [lift],
-  );
-
-  // Ferry the map when the finger nears an edge, or a cross-shelf drag
-  // would be impossible on any workshop taller than one screen.
-  const dragScroll = useCallback((absoluteY: number) => {
-    const windowHeight = Dimensions.get('window').height;
-    const step = absoluteY < 160 ? -14 : absoluteY > windowHeight - 120 ? 14 : 0;
-    if (step !== 0) {
-      scrollRef.current?.scrollTo({
-        y: Math.max(0, scrollOffset.current + step),
-        animated: false,
-      });
-    }
-  }, []);
-
-  // executeDrop closes over fresh state below; the drop resolver only runs
-  // after an await, so it goes through a ref to always call the latest one.
-  const executeDropRef = useRef<(target: DropTarget) => void>(() => {});
-
-  const resolveDrop = useCallback(
-    async (x: number, y: number) => {
-      const measured = await Promise.all(
-        [...dropTargets.current.entries()].map(
-          ([key, entry]) =>
-            new Promise<{ key: string; entry: { node: View; target: DropTarget }; hit: boolean }>(
-              (resolve) => {
-                try {
-                  entry.node.measureInWindow((mx, my, mw, mh) =>
-                    resolve({
-                      key,
-                      entry,
-                      hit: x >= mx && x <= mx + mw && y >= my && y <= my + mh,
-                    }),
-                  );
-                } catch {
-                  resolve({ key, entry, hit: false });
-                }
-              },
-            ),
-        ),
-      );
-      const hits = measured.filter((m) => m.hit);
-      // A cell or gap under the finger beats the row it sits in.
-      const found = hits.find((m) => !m.key.startsWith('row-')) ?? hits[0];
-      if (found) executeDropRef.current(found.entry.target);
-      else hold(null);
-    },
-    [hold],
-  );
-
-  const endDrag = useCallback(
-    (x: number, y: number, moved: boolean) => {
-      if (!draggingRef.current) return;
-      draggingRef.current = false;
-      setDragging(false);
-      // A long-press released in place stays lifted: tap-to-place mode.
-      if (moved) void resolveDrop(x, y);
-    },
-    [resolveDrop],
-  );
-
-  const cancelDrag = useCallback(() => {
-    if (!draggingRef.current) return;
-    draggingRef.current = false;
-    setDragging(false);
-    hold(null);
-  }, [hold]);
-
-  const chipStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: dragX.value - originX.value - CHIP_WIDTH / 2 },
-      { translateY: dragY.value - originY.value - CHIP_HEIGHT - sp(3) },
-    ],
-  }));
 
   const [heat, setHeat] = useState<HeatMode>('none');
   // Recomputed per render on purpose: staleness tints must not fossilize.
@@ -330,6 +164,29 @@ export default function MapScreen() {
   }, [finds, focusIndex, scrollToRow]);
 
   // --------------------------------------------------------------- moving
+  // A mirror of `held` that is readable synchronously, so a long press that
+  // arrives twice cannot undo itself. Kept after the drag was withdrawn: any
+  // future second source of lifts must not be able to cancel the first.
+  const heldRef = useRef<string | null>(null);
+  const hold = useCallback((binId: string | null) => {
+    heldRef.current = binId;
+    setHeld(binId);
+  }, []);
+
+  /**
+   * Lifts a bin. Idempotent on purpose: lifting twice must not toggle.
+   * Putting a bin down is always explicit — tap the bin, or the banner's
+   * cancel.
+   */
+  const lift = useCallback(
+    (binId: string) => {
+      if (heldRef.current === binId) return;
+      hapticShutter();
+      hold(binId);
+    },
+    [hold],
+  );
+
   const executeDrop = useCallback(
     (target: DropTarget) => {
       if (!held) return;
@@ -357,9 +214,6 @@ export default function MapScreen() {
     },
     [areas, bump, db, held, heldFind, hold],
   );
-  useEffect(() => {
-    executeDropRef.current = executeDrop;
-  }, [executeDrop]);
 
   const onCellPress = useCallback(
     (cell: MapCell, row: MapRow) => {
@@ -431,25 +285,8 @@ export default function MapScreen() {
   }
 
   return (
-    <View
-      ref={wrapRef}
-      style={styles.screen}
-      onLayout={() => {
-        wrapRef.current?.measureInWindow((x, y) => {
-          originX.value = x;
-          originY.value = y;
-        });
-      }}
-    >
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={styles.container}
-        scrollEnabled={!dragging}
-        onScroll={(e) => {
-          scrollOffset.current = e.nativeEvent.contentOffset.y;
-        }}
-        scrollEventThrottle={16}
-      >
+    <>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.container}>
         <Stack.Screen options={{ title: 'Map' }} />
 
         {held ? (
@@ -612,10 +449,7 @@ export default function MapScreen() {
                         </View>
                       ) : null}
                     </View>
-                    <View
-                      ref={registerTarget(`row-${key}`, { shelfId: row.shelfId })}
-                      style={styles.cells}
-                    >
+                    <View style={styles.cells}>
                       {row.bins.map((cell) => (
                         <Cell
                           key={cell.binId}
@@ -627,22 +461,11 @@ export default function MapScreen() {
                           heatStyle={tint(heatTier(cell, heat, nowIso), heat)}
                           onPress={() => onCellPress(cell, row)}
                           onLongPress={() => lift(cell.binId)}
-                          registerRef={registerTarget(`cell-${cell.binId}`, {
-                            shelfId: row.shelfId,
-                            beforeBinId: cell.binId,
-                          })}
-                          dragX={dragX}
-                          dragY={dragY}
-                          onBeginDrag={beginDrag}
-                          onDragMove={dragScroll}
-                          onEndDrag={endDrag}
-                          onCancelDrag={cancelDrag}
                         />
                       ))}
                       {Array.from({ length: gaps }, (_, i) => (
                         <Pressable
                           key={`gap-${i}`}
-                          ref={registerTarget(`gap-${key}-${i}`, { shelfId: row.shelfId })}
                           style={styles.gap}
                           disabled={!held}
                           onPress={() => executeDrop({ shelfId: row.shelfId })}
@@ -664,7 +487,6 @@ export default function MapScreen() {
                       ))}
                       {held && gaps === 0 ? (
                         <Pressable
-                          ref={registerTarget(`end-${key}`, { shelfId: row.shelfId })}
                           style={[styles.gap, styles.gapActive]}
                           onPress={() => executeDrop({ shelfId: row.shelfId })}
                           accessibilityRole="button"
@@ -688,22 +510,12 @@ export default function MapScreen() {
 
         <Text style={styles.foot}>
           {total} bin{total === 1 ? '' : 's'} drawn. Shelves are rows, in the order your workshop is
-          filed. Long-press a bin and drag it where it belongs — or release in place, then tap the
-          spot. Moving it to another shelf asks first — it changes where the bin really lives.
+          filed. Long-press a bin to move it; tap where it belongs. Moving it to another shelf asks
+          first — it changes where the bin really lives.
         </Text>
       </ScrollView>
-      {dragging && heldFind ? (
-        <Animated.View pointerEvents="none" style={[styles.dragChip, chipStyle]}>
-          <Text style={styles.dragChipCode} numberOfLines={1}>
-            {heldFind.cell.code}
-          </Text>
-          <Text style={styles.dragChipName} numberOfLines={1}>
-            {heldFind.cell.name}
-          </Text>
-        </Animated.View>
-      ) : null}
       <PromptModal request={prompt} onClose={() => setPrompt(null)} />
-    </View>
+    </>
   );
 }
 
@@ -743,13 +555,6 @@ function Cell({
   heatStyle,
   onPress,
   onLongPress,
-  registerRef,
-  dragX,
-  dragY,
-  onBeginDrag,
-  onDragMove,
-  onEndDrag,
-  onCancelDrag,
 }: {
   cell: MapCell;
   found: boolean;
@@ -759,48 +564,10 @@ function Cell({
   heatStyle: ViewStyle | null;
   onPress: () => void;
   onLongPress: () => void;
-  registerRef: (node: View | null) => void;
-  dragX: SharedValue<number>;
-  dragY: SharedValue<number>;
-  onBeginDrag: (binId: string) => void;
-  onDragMove: (absoluteY: number) => void;
-  onEndDrag: (x: number, y: number, moved: boolean) => void;
-  onCancelDrag: () => void;
 }) {
   const loud = focusedCell || heldCell;
-  const binId = cell.binId;
-  const pan = useMemo(
-    () =>
-      Gesture.Pan()
-        .activateAfterLongPress(300)
-        .maxPointers(1)
-        .shouldCancelWhenOutside(false)
-        .onStart((e) => {
-          trackDrag(dragX, dragY, e);
-          runOnJS(onBeginDrag)(binId);
-        })
-        .onUpdate((e) => {
-          trackDrag(dragX, dragY, e);
-          runOnJS(onDragMove)(e.absoluteY);
-        })
-        .onEnd((e, success) => {
-          if (success) {
-            runOnJS(onEndDrag)(
-              e.absoluteX,
-              e.absoluteY,
-              Math.hypot(e.translationX, e.translationY) > 10,
-            );
-          } else {
-            // The system stole the gesture mid-drag — never drop blind.
-            runOnJS(onCancelDrag)();
-          }
-        }),
-    [binId, dragX, dragY, onBeginDrag, onDragMove, onEndDrag, onCancelDrag],
-  );
   return (
-    <GestureDetector gesture={pan}>
     <Pressable
-      ref={registerRef}
       onPress={onPress}
       onLongPress={onLongPress}
       style={[
@@ -848,31 +615,10 @@ function Cell({
         {cell.empty ? 'empty' : `${cell.items} item${cell.items === 1 ? '' : 's'}`}
       </Text>
     </Pressable>
-    </GestureDetector>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  dragChip: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: CHIP_WIDTH,
-    height: CHIP_HEIGHT,
-    borderRadius: radius.md,
-    backgroundColor: colors.amber,
-    paddingHorizontal: sp(2.5),
-    justifyContent: 'center',
-    gap: 1,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  dragChipCode: { fontFamily: mono, fontSize: 11, fontWeight: '800', color: colors.amberInkOn },
-  dragChipName: { fontSize: 11, color: colors.amberInkOn },
   container: {
     padding: sp(4),
     paddingBottom: sp(12),

@@ -4,6 +4,7 @@ import { runMigrations } from '../../db/schema';
 import {
   clearEvents,
   countEvents,
+  detectAbnormalExit,
   countEventsOfKind,
   listEvents,
   logEvent,
@@ -114,5 +115,41 @@ describe('diagnostics event log (blueprint D16)', () => {
     logEvent(db, { kind: 'app', name: 'a' });
     clearEvents(db);
     expect(countEvents(db)).toBe(0);
+  });
+
+  /**
+   * The gap a field test exposed: the map screen was killing the process, and
+   * Diagnostics still said "0 crashes" because a native death never reaches
+   * the JS handler. The only evidence is a restart with no goodbye.
+   */
+  describe('detecting a session that died', () => {
+    it('reports nothing on a fresh install', () => {
+      expect(detectAbnormalExit(db)).toBeNull();
+    });
+
+    it('treats a backgrounded app as a clean exit', () => {
+      logEvent(db, { kind: 'screen', name: '/map' });
+      logEvent(db, { kind: 'app', name: 'app_background' });
+      expect(detectAbnormalExit(db)).toBeNull();
+    });
+
+    it('reports a restart with no goodbye, and says where it happened', () => {
+      logEvent(db, { kind: 'app', name: 'app_start' });
+      logEvent(db, { kind: 'screen', name: '/browse' });
+      logEvent(db, { kind: 'screen', name: '/map' });
+
+      expect(detectAbnormalExit(db)).toMatchObject({ lastScreen: '/map' });
+    });
+
+    it('names the last screen even when other events followed it', () => {
+      logEvent(db, { kind: 'screen', name: '/map' });
+      logEvent(db, { kind: 'net', name: 'connectivity' });
+      expect(detectAbnormalExit(db)?.lastScreen).toBe('/map');
+    });
+
+    it('still reports the death when no screen was ever recorded', () => {
+      logEvent(db, { kind: 'app', name: 'app_active' });
+      expect(detectAbnormalExit(db)).toMatchObject({ lastScreen: null });
+    });
   });
 });
