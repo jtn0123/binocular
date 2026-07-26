@@ -1,6 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  Stack,
+  useLocalSearchParams,
+  useRouter,
+  type ErrorBoundaryProps,
+} from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -70,6 +75,41 @@ import { colors, mono, radius, sp, type } from '@/theme';
  */
 const CHIP_WIDTH = 120;
 const CHIP_HEIGHT = 44;
+
+/**
+ * A field-test phone has no Metro console, so a screen that throws is just a
+ * blank rectangle and the bug reporter is left saying "it doesn't work".
+ * expo-router renders this in the route's place instead, which turns that
+ * into a legible message someone can read out — the same reason the D16
+ * diagnostics log exists at all.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <ScrollView contentContainerStyle={styles.center}>
+      <Text style={styles.crashTitle}>The map could not be drawn.</Text>
+      <Text style={styles.crashMessage} selectable>
+        {error?.message ?? String(error)}
+      </Text>
+      {error?.stack ? (
+        <Text style={styles.crashStack} selectable>
+          {error.stack.split('\n').slice(0, 8).join('\n')}
+        </Text>
+      ) : null}
+      <Pressable
+        style={styles.crashRetry}
+        onPress={() => void retry()}
+        accessibilityRole="button"
+        accessibilityLabel="Try drawing the map again"
+        testID="map-retry"
+      >
+        <Text style={styles.crashRetryText}>Try again</Text>
+      </Pressable>
+      <Text style={styles.dim}>
+        Settings › Open diagnostics keeps a copy of this, and can export it.
+      </Text>
+    </ScrollView>
+  );
+}
 
 /** UI-thread write of the finger position into the chip's shared values. */
 function trackDrag(
@@ -840,8 +880,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     flexGrow: 1,
   },
-  center: { flex: 1, justifyContent: 'center', padding: sp(6), backgroundColor: colors.bg },
+  center: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: sp(6),
+    gap: sp(3),
+    backgroundColor: colors.bg,
+  },
   dim: { ...type.dim, textAlign: 'center', lineHeight: 20 },
+  crashTitle: { ...type.h2, textAlign: 'center' },
+  crashMessage: { color: colors.danger, fontFamily: mono, fontSize: 13, lineHeight: 18 },
+  crashStack: { color: colors.textFaint, fontFamily: mono, fontSize: 10, lineHeight: 14 },
+  crashRetry: {
+    alignSelf: 'center',
+    backgroundColor: colors.amber,
+    borderRadius: radius.md,
+    paddingHorizontal: sp(5),
+    paddingVertical: sp(2.5),
+  },
+  crashRetryText: { color: colors.amberInkOn, fontWeight: '800' },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
