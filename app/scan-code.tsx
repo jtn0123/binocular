@@ -6,6 +6,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraGate } from '@/components/CameraGate';
 import { useDb } from '@/db/DbProvider';
 import { getBin, getLocation, getShelf, moveBinToShelf } from '@/db/queries';
+import { logEvent } from '@/diagnostics/events';
 import { parseQrPayload } from '@/qr/payload';
 import { colors } from '@/theme';
 
@@ -53,8 +54,25 @@ export default function ScanCodeScreen() {
           ]);
           return;
         }
-        moveBinToShelf(db, movingBin.id, shelf.id);
-        router.replace({ pathname: '/bin/[id]', params: { id: movingBin.id } });
+        // §8.5's acceptance criterion is "two scans + one confirm", and this
+        // was the path with the two scans and no confirm — a misread label
+        // re-filed the bin instantly, with no undo and no trace. Same dialog
+        // the map and the move picker use.
+        Alert.alert('Move bin?', `Move ${movingBin.short_code} to ${shelf.name}.`, [
+          { text: 'Cancel', style: 'cancel', onPress: unlockSoon },
+          {
+            text: 'Move',
+            onPress: () => {
+              moveBinToShelf(db, movingBin.id, shelf.id);
+              logEvent(db, {
+                kind: 'organize',
+                name: 'bin_moved',
+                detail: { bin: movingBin.short_code, to: shelf.name, via: 'shelf_label' },
+              });
+              router.replace({ pathname: '/bin/[id]', params: { id: movingBin.id } });
+            },
+          },
+        ]);
         return;
       }
       if (payload.type === 'location') {
@@ -101,8 +119,14 @@ export default function ScanCodeScreen() {
       router.replace({ pathname: '/bin/[id]', params: { id: bin.id } });
       return;
     }
-    // Shelf/location labels: land on Browse.
-    router.replace('/browse');
+    // Shelf/location labels land on Browse, focused on the thing you scanned.
+    //
+    // §7's whole premise is that a label identifies the object it is stuck to,
+    // and this used to drop you on the Browse root with nothing indicating
+    // what had been read — so scanning a shelf label told you strictly less
+    // than reading it. Browse already accepts `focus` and scrolls the match
+    // into view (app/(tabs)/browse.tsx:76-92); it was simply never told.
+    router.replace({ pathname: '/browse', params: { focus: payload.id } });
   }
 
   if (!permission) return <View style={styles.container} />;
