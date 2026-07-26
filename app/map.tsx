@@ -905,7 +905,7 @@ export default function MapScreen() {
           </View>
         )}
         {dragging && heldFind ? (
-          <Animated.View style={[styles.ghost, ghostStyle]} pointerEvents="none">
+          <Animated.View style={[styles.ghost, ghostStyle]} pointerEvents="none" testID="map-ghost">
             <Text style={styles.ghostCode} numberOfLines={1}>
               {heldFind.cell.code}
             </Text>

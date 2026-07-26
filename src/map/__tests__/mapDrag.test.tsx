@@ -1,4 +1,4 @@
-import { act, fireEvent, render, type RenderResult } from '@testing-library/react-native';
+import { act, fireEvent, render, within, type RenderResult } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 
 import MapScreen from '../../../app/map';
@@ -44,11 +44,20 @@ import { layoutWall, type LayoutOptions, type Wall } from './helpers/wall';
 jest.mock('react-native-reanimated', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { View } = require('react-native');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useRef } = require('react');
   return {
     __esModule: true,
     default: { View, createAnimatedComponent: (c: unknown) => c },
-    useSharedValue: (initial: number) => ({ value: initial }),
-    useAnimatedStyle: () => ({}),
+    // Stable across renders, as the real one is. A stand-in that returns a
+    // fresh box each render throws away every write the gesture made and
+    // silently rebuilds the gesture on each render — so the mock has to hold
+    // this property or it tests something the app never does.
+    useSharedValue: (initial: number) => useRef({ value: initial }).current,
+    // Runs the worklet body rather than discarding it, so the ghost's
+    // position is checkable. Elsewhere this is stubbed to `{}` — which is why
+    // the chip a user actually watches during a drag had no coverage at all.
+    useAnimatedStyle: (fn: () => unknown) => fn(),
     runOnJS: (fn: unknown) => fn,
   };
 });
@@ -360,6 +369,70 @@ describe('dragging a bin across the map', () => {
     mockGesture.onFinalize?.();
 
     expect(codesOn(shelfA)).toEqual(['B-003', 'B-001', 'B-002']);
+  });
+
+  // ------------------------------------------------------------- the ghost
+
+  /**
+   * The chip that rides under the finger.
+   *
+   * It is the only feedback during a drag, so if it sits somewhere other than
+   * the fingertip the drag feels wrong even when the drop is right — and a
+   * user has no way to tell those two failures apart. Its transform is read
+   * in gesture space, and the chip is positioned absolutely against the same
+   * view the gesture is attached to; those two facts have to agree.
+   */
+  const ghostAt = (screen: RenderResult) => {
+    const style = screen.getByTestId('map-ghost').props.style as unknown[];
+    const flat = style.flat(2).filter(Boolean) as { transform?: { [k: string]: number }[] }[];
+    const transform = flat.find((s) => s.transform)?.transform ?? [];
+    return {
+      x: transform.find((t) => 'translateX' in t)?.translateX,
+      y: transform.find((t) => 'translateY' in t)?.translateY,
+    };
+  };
+
+  it('shows no ghost until a drag actually starts', async () => {
+    const [screen] = await openWall();
+    expect(screen.queryByTestId('map-ghost')).toBeNull();
+  });
+
+  it('rides the chip under the fingertip, in the same space the gesture reports', async () => {
+    const [screen, wall] = await openWall();
+    const grab = wall.onCell('B-002');
+
+    await act(async () => mockGesture.onStart?.(grab));
+
+    // Centred horizontally on the finger, lifted clear of the thumb above it.
+    // GHOST_WIDTH 132, GHOST_HEIGHT 40, GHOST_LIFT 28.
+    expect(ghostAt(screen)).toEqual({ x: grab.x - 66, y: grab.y - 68 });
+  });
+
+  it('names the bin being carried, not whatever was held before', async () => {
+    const [screen, wall] = await openWall();
+
+    await act(async () => mockGesture.onStart?.(wall.onCell('B-003')));
+
+    expect(within(screen.getByTestId('map-ghost')).getByText('B-003')).toBeTruthy();
+    expect(within(screen.getByTestId('map-ghost')).getByText('Nails')).toBeTruthy();
+  });
+
+  it('takes the ghost away once the finger lifts', async () => {
+    const [screen, wall] = await openWall();
+
+    await dragFrom(wall.onCell('B-003'), wall.onCell('B-001'));
+
+    expect(screen.queryByTestId('map-ghost')).toBeNull();
+  });
+
+  it('takes the ghost away when the system cancels mid-drag', async () => {
+    const [screen, wall] = await openWall();
+
+    await act(async () => mockGesture.onStart?.(wall.onCell('B-001')));
+    expect(screen.queryByTestId('map-ghost')).not.toBeNull();
+
+    await act(async () => mockGesture.onFinalize?.());
+    expect(screen.queryByTestId('map-ghost')).toBeNull();
   });
 
   /**
