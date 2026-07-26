@@ -72,6 +72,25 @@ export default function CaptureScreen() {
     getProviderChoice().then(setEngine, () => setEngine(null));
   }, []);
 
+  /**
+   * Set once the user has walked away from this camera.
+   *
+   * Recognition cannot be called off — the request is in flight and the photo
+   * is already durable — but the *navigation* absolutely can. Pressing Cancel
+   * (or hardware back) during "Recognizing…" used to leave `processScan`
+   * running, and its `router.replace` then fired seconds later, dragging the
+   * user into a review screen for a scan they had abandoned. The scan still
+   * lands in the queue and is reviewable from there; it just no longer
+   * hijacks whatever they moved on to.
+   */
+  const abandoned = useRef(false);
+  useEffect(
+    () => () => {
+      abandoned.current = true;
+    },
+    [],
+  );
+
   useEffect(() => {
     let cancelled = false;
     loadCapturePrefs().then((prefs) => {
@@ -168,6 +187,9 @@ export default function CaptureScreen() {
 
       setBusy('recognizing');
       const result = await processScan(db, scanId);
+      // Walked away while it was thinking: the scan is saved and reviewable
+      // from the queue, but nothing here gets to move them.
+      if (abandoned.current) return;
       const target =
         mode === 'find_it'
           ? ({ pathname: '/find/[scanId]', params: { scanId } } as const)
@@ -378,7 +400,16 @@ export default function CaptureScreen() {
               <Text style={styles.nextBinLabel}>Next bin →</Text>
             </Pressable>
           ) : null}
-          <Pressable style={styles.cancel} onPress={() => router.back()}>
+          <Pressable
+            style={styles.cancel}
+            onPress={() => {
+              abandoned.current = true;
+              router.back();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={shotCount > 0 ? 'Done photographing' : 'Cancel'}
+            testID="capture-cancel"
+          >
             <Text style={styles.cancelLabel}>{shotCount > 0 ? 'Done' : 'Cancel'}</Text>
           </Pressable>
         </View>
