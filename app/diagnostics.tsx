@@ -1,3 +1,4 @@
+import * as Clipboard from 'expo-clipboard';
 import { Link } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
@@ -5,7 +6,11 @@ import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 're
 import { useDb } from '@/db/DbProvider';
 import { countAttentionScans } from '@/db/queries';
 import { deviceContext } from '@/diagnostics/context';
-import { exportDiagnosticsZip } from '@/diagnostics/bundle';
+import {
+  buildDiagnosticsPayload,
+  exportDiagnosticsZip,
+  formatDiagnosticsText,
+} from '@/diagnostics/bundle';
 import { loadDiagnosticsEnabled, setDiagnosticsEnabled } from '@/diagnostics/enabled';
 import {
   clearEvents,
@@ -193,6 +198,36 @@ export default function DiagnosticsScreen() {
           }}
         >
           <Text style={styles.primaryLabel}>Share diagnostics</Text>
+        </Pressable>
+        {/*
+          The clipboard path exists because the zip one cannot be relied on:
+          it needs a share target that will take a 100 MB file, and when it
+          fails there is no way to report *why* it failed. Text always goes
+          somewhere — a message, a note, an email to yourself.
+        */}
+        <Pressable
+          style={[styles.primaryButton, busy && styles.disabled]}
+          disabled={busy}
+          accessibilityRole="button"
+          accessibilityLabel="Copy the log to the clipboard"
+          testID="diagnostics-copy-log"
+          onPress={async () => {
+            setBusy(true);
+            try {
+              const text = formatDiagnosticsText(buildDiagnosticsPayload(db, deviceContext()));
+              await Clipboard.setStringAsync(text);
+              Alert.alert(
+                'Log copied',
+                `${text.split('\n').length} lines on the clipboard — paste it anywhere. No photos and no inventory, just the log.`,
+              );
+            } catch (err) {
+              Alert.alert('Copy failed', err instanceof Error ? err.message : String(err));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <Text style={styles.primaryLabel}>Copy log</Text>
         </Pressable>
         <Pressable
           style={styles.secondaryButton}

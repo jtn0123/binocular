@@ -1,7 +1,7 @@
 import { createNodeAdapter, type NodeDbAdapter } from '../../db/nodeAdapter';
 import { createBin, insertItem, insertScan, updateScanStatus } from '../../db/queries';
 import { runMigrations } from '../../db/schema';
-import { buildDiagnosticsPayload } from '../bundle';
+import { buildDiagnosticsPayload, formatDiagnosticsText } from '../bundle';
 import type { DeviceContext } from '../context';
 import { logEvent, setLoggingEnabled } from '../events';
 
@@ -77,5 +77,47 @@ describe('diagnostics bundle (blueprint D16)', () => {
   it('respects the event limit', () => {
     for (let i = 0; i < 10; i++) logEvent(db, { kind: 'app', name: `e${i}` });
     expect(buildDiagnosticsPayload(db, CTX, 4).events).toHaveLength(4);
+  });
+
+  describe('the pasteable log (field-test finding: the zip could not be shared)', () => {
+    it('leads with the build and the counts', () => {
+      const text = formatDiagnosticsText(buildDiagnosticsPayload(db, CTX));
+      expect(text).toContain('Binocular 0.1.0');
+      expect(text).toContain('android 36');
+      expect(text).toContain('release');
+    });
+
+    it('prints every crash in full, with its detail', () => {
+      logEvent(db, {
+        kind: 'crash',
+        name: 'uncaught',
+        detail: { message: 'Cannot read property x of undefined', isFatal: true },
+      });
+      const text = formatDiagnosticsText(buildDiagnosticsPayload(db, CTX));
+      expect(text).toContain('--- crashes (1) ---');
+      expect(text).toContain('Cannot read property x of undefined');
+    });
+
+    it('says so plainly when nothing has crashed', () => {
+      expect(formatDiagnosticsText(buildDiagnosticsPayload(db, CTX))).toContain('none recorded');
+    });
+
+    it('caps the event tail so the clipboard stays pasteable', () => {
+      for (let i = 0; i < 200; i++) logEvent(db, { kind: 'app', name: `e${i}` });
+      const text = formatDiagnosticsText(buildDiagnosticsPayload(db, CTX), { events: 5 });
+      expect(text).toContain('--- last 5 events (newest first) ---');
+      expect(text).toContain('e199');
+      expect(text).not.toContain('e100 ');
+    });
+
+    it('carries no inventory — a clipboard is not the place for the workshop', () => {
+      const bin = createBin(db, { name: 'Fixings', shortCode: 'B-001' });
+      insertItem(db, { binId: bin.id, name: 'Deck screws', category: 'fastener' });
+      const text = formatDiagnosticsText(buildDiagnosticsPayload(db, CTX));
+      expect(text).not.toContain('Deck screws');
+      expect(text).not.toContain('Fixings');
+      // The count is fine — it explains behaviour without naming anything.
+      expect(text).toContain('1 items');
+    });
   });
 });
