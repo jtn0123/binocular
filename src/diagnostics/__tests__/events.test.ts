@@ -5,6 +5,7 @@ import {
   clearEvents,
   countEvents,
   detectAbnormalExit,
+  RUNTIME_ID,
   countEventsOfKind,
   listEvents,
   logEvent,
@@ -123,18 +124,23 @@ describe('diagnostics event log (blueprint D16)', () => {
    * the JS handler. The only evidence is a restart with no goodbye.
    */
   describe('detecting a session that died', () => {
+    /** What a session writes on the way up. */
+    const start = (runtimeId?: string) =>
+      logEvent(db, { kind: 'app', name: 'app_start', detail: { runtimeId: runtimeId ?? 'previous-run' } });
+
     it('reports nothing on a fresh install', () => {
       expect(detectAbnormalExit(db)).toBeNull();
     });
 
     it('treats a backgrounded app as a clean exit', () => {
+      start();
       logEvent(db, { kind: 'screen', name: '/map' });
       logEvent(db, { kind: 'app', name: 'app_background' });
       expect(detectAbnormalExit(db)).toBeNull();
     });
 
     it('reports a restart with no goodbye, and says where it happened', () => {
-      logEvent(db, { kind: 'app', name: 'app_start' });
+      start();
       logEvent(db, { kind: 'screen', name: '/browse' });
       logEvent(db, { kind: 'screen', name: '/map' });
 
@@ -142,14 +148,57 @@ describe('diagnostics event log (blueprint D16)', () => {
     });
 
     it('names the last screen even when other events followed it', () => {
+      start();
       logEvent(db, { kind: 'screen', name: '/map' });
       logEvent(db, { kind: 'net', name: 'connectivity' });
       expect(detectAbnormalExit(db)?.lastScreen).toBe('/map');
     });
 
     it('still reports the death when no screen was ever recorded', () => {
+      start();
       logEvent(db, { kind: 'app', name: 'app_active' });
       expect(detectAbnormalExit(db)).toMatchObject({ lastScreen: null });
+    });
+
+    /**
+     * The bug this check shipped with. `DiagnosticsRunner` logged the
+     * navigation breadcrumb for the NEW session before the detector ran, so
+     * the newest row was never the old session's `app_background` and every
+     * launch was reported as a death. Anchoring on the previous `app_start`
+     * is what makes the answer independent of who wrote last.
+     */
+    it('is not fooled by the new session writing its own breadcrumb first', () => {
+      start();
+      logEvent(db, { kind: 'screen', name: '/map' });
+      logEvent(db, { kind: 'app', name: 'app_background' });
+
+      // …the new session boots and records where it landed.
+      logEvent(db, { kind: 'screen', name: '/' });
+
+      expect(detectAbnormalExit(db)).toBeNull();
+    });
+
+    /**
+     * An Activity recreation — an Android light/dark switch, since app.json
+     * sets userInterfaceStyle "automatic" — remounts React inside a process
+     * that never died. Same runtime id, so it is not a death.
+     */
+    it('treats a React remount in the same process as a clean session', () => {
+      logEvent(db, {
+        kind: 'app',
+        name: 'app_start',
+        detail: { runtimeId: RUNTIME_ID },
+      });
+      logEvent(db, { kind: 'screen', name: '/map' });
+
+      expect(detectAbnormalExit(db)).toBeNull();
+    });
+
+    it('still reports a death when the previous start came from another process', () => {
+      start('a-process-that-is-gone');
+      logEvent(db, { kind: 'screen', name: '/map' });
+
+      expect(detectAbnormalExit(db)).toMatchObject({ lastScreen: '/map' });
     });
   });
 });

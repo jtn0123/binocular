@@ -9,7 +9,7 @@ import { useDb } from '../db/DbProvider';
 import { deviceContext, setNetworkContext } from './context';
 import { loadDiagnosticsEnabled } from './enabled';
 import { CRASH_FALLBACK_FILE, installErrorHandler } from './errorHandler';
-import { detectAbnormalExit, logEvent, pruneEvents } from './events';
+import { detectAbnormalExit, logEvent, pruneEvents, RUNTIME_ID } from './events';
 
 /**
  * Mounts once beside QueueRunner (blueprint D16): installs crash capture,
@@ -34,18 +34,30 @@ export function DiagnosticsRunner() {
   const booted = useRef(false);
 
   useEffect(() => {
-    let disposeErrors = () => {};
+    // Both of these run in the effect's SYNCHRONOUS prologue, on purpose.
+    //
+    // Read the previous session's ending before this session records anything:
+    // a process killed natively never gets to run the JS crash handler, so the
+    // only trace it leaves is a restart with no goodbye. This used to sit
+    // behind the `await` below, which meant the navigation breadcrumb effect
+    // further down had already written `screen//` by the time it looked — so
+    // it never saw the previous session's `app_background` and reported a
+    // death on every launch. The detector has to run before the app it is
+    // watching starts talking.
+    const abnormal = detectAbnormalExit(db);
+    // Likewise the error handler: anything thrown while SecureStore resolves
+    // was previously unrecorded, and early boot is exactly when a migration
+    // failure would throw.
+    const disposeErrors = installErrorHandler(db, { appendFallback: appendCrashFallback });
+
     void (async () => {
       await loadDiagnosticsEnabled();
-      disposeErrors = installErrorHandler(db, { appendFallback: appendCrashFallback });
       pruneEvents(db);
-      // Read the previous session's ending BEFORE this start is recorded:
-      // a process killed natively never gets to run the JS crash handler, so
-      // the only trace it leaves is a restart with no goodbye. Recording it
-      // as a crash is what makes it visible in the counts and the copied log
-      // — otherwise the screen cheerfully reports "0 crashes" mid-crash-loop.
-      const abnormal = detectAbnormalExit(db);
-      logEvent(db, { kind: 'app', name: 'app_start', detail: { ...deviceContext() } });
+      logEvent(db, {
+        kind: 'app',
+        name: 'app_start',
+        detail: { ...deviceContext(), runtimeId: RUNTIME_ID },
+      });
       if (abnormal) {
         logEvent(db, {
           kind: 'crash',

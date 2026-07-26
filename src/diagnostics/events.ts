@@ -146,31 +146,82 @@ export interface AbnormalExit {
 }
 
 /**
+ * Identifies this JS runtime, for the lifetime of the process.
+ *
+ * Two `app_start` rows sharing an id are one process mounting React twice —
+ * an Android Activity recreation on a config change (`app.json` sets
+ * `userInterfaceStyle: "automatic"`, so a light/dark switch does exactly
+ * this). Two rows with different ids are two processes, and the first one
+ * ended somehow. Without this the two are indistinguishable and every theme
+ * change looks like a crash.
+ */
+export const RUNTIME_ID = newId();
+
+/**
  * Whether the *previous* session ended without going to background.
  *
  * The D16 crash handler hooks JS `ErrorUtils`, so it can only ever see a JS
- * error. A native crash — a bad JSI call, a worklet on a runtime that has
- * gone away — kills the process outright, and the log shows a fresh
- * `app_start` with no `app_background` before it and zero crashes recorded.
- * That absence is the evidence, so this reads it: a session that never said
- * goodbye did not exit, it died.
+ * error. A native crash — a bad JSI call, a worklet throwing on a runtime
+ * with no guard compiled in — kills the process outright, and the log shows a
+ * fresh `app_start` with no `app_background` before it and zero crashes
+ * recorded. That absence is the evidence, so this reads it: a session that
+ * never said goodbye did not exit, it died.
  *
- * Call this BEFORE recording the new `app_start`. Deliberately conservative:
- * a user swiping the app away gets an `app_background` from Android first,
- * so that is a clean exit and reports nothing.
+ * The rule is anchored on the previous `app_start` rather than on "what is the
+ * newest row", because the newest row is not trustworthy: `DiagnosticsRunner`
+ * writes a `screen/<pathname>` breadcrumb during the same mount, and the old
+ * version of this check ran behind an `await` and so always saw that
+ * breadcrumb instead of the previous session's goodbye. The early return was
+ * unreachable, `previous_session_died` fired on essentially every launch, and
+ * `lastScreen` always read `/`. An instrument that cries wolf every boot is
+ * worth exactly as much as one that never fires.
+ *
+ * Deliberately conservative in two ways: a user swiping the app away gets an
+ * `app_background` from Android first, so that is a clean exit; and a React
+ * remount inside a live process shares `RUNTIME_ID`, so a theme change is not
+ * a death.
  */
 export function detectAbnormalExit(db: DbAdapter): AbnormalExit | null {
   try {
-    const last = db.getFirstSync<EventRow>(
-      'SELECT * FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1',
+    // Every session opens with one of these, so it is the boundary between
+    // "the session that just ended" and everything before it.
+    const lastStart = db.getFirstSync<EventRow & { rowid: number }>(
+      `SELECT rowid, * FROM events
+        WHERE kind = 'app' AND name = 'app_start'
+        ORDER BY created_at DESC, rowid DESC LIMIT 1`,
     );
     // A fresh install has nothing to say about a previous session.
-    if (!last) return null;
-    if (last.kind === 'app' && last.name === 'app_background') return null;
-    const screen = db.getFirstSync<EventRow>(
-      "SELECT * FROM events WHERE kind = 'screen' ORDER BY created_at DESC, rowid DESC LIMIT 1",
+    if (!lastStart) return null;
+
+    // Same process mounting React again — not a death, however it looks.
+    if (lastStart.detail?.includes(`"runtimeId":"${RUNTIME_ID}"`)) return null;
+
+    const after = `AND (created_at > ? OR (created_at = ? AND rowid > ?))`;
+    const args = [lastStart.created_at, lastStart.created_at, lastStart.rowid];
+
+    // A clean exit says goodbye *after* the start it belongs to.
+    const goodbye = db.getFirstSync<EventRow>(
+      `SELECT * FROM events
+        WHERE kind = 'app' AND name = 'app_background' ${after}
+        LIMIT 1`,
+      args,
     );
-    return { lastScreen: screen?.name ?? null, lastEventAt: last.created_at };
+    if (goodbye) return null;
+
+    const screen = db.getFirstSync<EventRow>(
+      `SELECT * FROM events WHERE kind = 'screen' ${after}
+        ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+      args,
+    );
+    const last = db.getFirstSync<EventRow>(
+      `SELECT * FROM events WHERE 1 = 1 ${after}
+        ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+      args,
+    );
+    return {
+      lastScreen: screen?.name ?? null,
+      lastEventAt: last?.created_at ?? lastStart.created_at,
+    };
   } catch {
     return null;
   }
