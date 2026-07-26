@@ -114,6 +114,30 @@ export default function MapScreen() {
     [areas, held],
   );
 
+  // A mirror of `held` that is readable synchronously, because one physical
+  // long press reaches this screen twice — the pan gesture activates at
+  // 300 ms and Pressable's own onLongPress fires at 500 ms — and the second
+  // arrival must not undo the first.
+  const heldRef = useRef<string | null>(null);
+  const hold = useCallback((binId: string | null) => {
+    heldRef.current = binId;
+    setHeld(binId);
+  }, []);
+
+  /**
+   * Lifts a bin. Idempotent on purpose: lifting twice is the normal case,
+   * not a double tap, so it must not toggle. Putting a bin down is always an
+   * explicit act — tap the bin itself, or the banner's cancel.
+   */
+  const lift = useCallback(
+    (binId: string) => {
+      if (heldRef.current === binId) return;
+      hapticShutter();
+      hold(binId);
+    },
+    [hold],
+  );
+
   // ------------------------------------------------------------- dragging
   // The finger-following drag rides on top of lift-and-place: a long-press
   // activates a pan, a floating chip tracks the finger, and releasing over
@@ -140,12 +164,14 @@ export default function MapScreen() {
     [],
   );
 
-  const beginDrag = useCallback((binId: string) => {
-    hapticShutter();
-    draggingRef.current = true;
-    setDragging(true);
-    setHeld(binId);
-  }, []);
+  const beginDrag = useCallback(
+    (binId: string) => {
+      lift(binId);
+      draggingRef.current = true;
+      setDragging(true);
+    },
+    [lift],
+  );
 
   // Ferry the map when the finger nears an edge, or a cross-shelf drag
   // would be impossible on any workshop taller than one screen.
@@ -190,9 +216,9 @@ export default function MapScreen() {
       // A cell or gap under the finger beats the row it sits in.
       const found = hits.find((m) => !m.key.startsWith('row-')) ?? hits[0];
       if (found) executeDropRef.current(found.entry.target);
-      else setHeld(null);
+      else hold(null);
     },
-    [],
+    [hold],
   );
 
   const endDrag = useCallback(
@@ -210,8 +236,8 @@ export default function MapScreen() {
     if (!draggingRef.current) return;
     draggingRef.current = false;
     setDragging(false);
-    setHeld(null);
-  }, []);
+    hold(null);
+  }, [hold]);
 
   const chipStyle = useAnimatedStyle(() => ({
     transform: [
@@ -264,23 +290,18 @@ export default function MapScreen() {
   }, [finds, focusIndex, scrollToRow]);
 
   // --------------------------------------------------------------- moving
-  const lift = useCallback((binId: string) => {
-    hapticShutter();
-    setHeld((current) => (current === binId ? null : binId));
-  }, []);
-
   const executeDrop = useCallback(
     (target: DropTarget) => {
       if (!held) return;
       const plan = planDrop(areas, held, target);
       if (!plan) {
-        setHeld(null);
+        hold(null);
         return;
       }
       const commit = () => {
         placeBin(db, { binId: plan.binId, shelfId: plan.shelfId, orderedIds: plan.orderedIds });
         hapticSuccess();
-        setHeld(null);
+        hold(null);
         bump();
       };
       if (plan.crossShelf) {
@@ -294,7 +315,7 @@ export default function MapScreen() {
         commit();
       }
     },
-    [areas, bump, db, held, heldFind],
+    [areas, bump, db, held, heldFind, hold],
   );
   useEffect(() => {
     executeDropRef.current = executeDrop;
@@ -307,12 +328,12 @@ export default function MapScreen() {
         return;
       }
       if (cell.binId === held) {
-        setHeld(null);
+        hold(null);
         return;
       }
       executeDrop({ shelfId: row.shelfId, beforeBinId: cell.binId });
     },
-    [executeDrop, held, router],
+    [executeDrop, held, hold, router],
   );
 
   // -------------------------------------------------------------- editing
@@ -403,7 +424,7 @@ export default function MapScreen() {
               </Text>
             </View>
             <Pressable
-              onPress={() => setHeld(null)}
+              onPress={() => hold(null)}
               accessibilityRole="button"
               accessibilityLabel="Cancel the move"
               hitSlop={8}
