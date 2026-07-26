@@ -1,4 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 
 import MapScreen from '../../../app/map';
 import { DbProvider } from '../../db/DbProvider';
@@ -77,6 +78,16 @@ describe('the map screen, driven by presses', () => {
   let shelfB: ShelfRow;
   let bins: BinRow[];
 
+  /**
+   * A cross-shelf drop is the §8.5 move, so it asks first. Answering "Move"
+   * is what a thumb does; leaving the alert unanswered is what the previous
+   * version of this test accidentally did, which is why it looked like the
+   * move had silently failed.
+   */
+  const confirmMoves = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
+    buttons?.find((b) => b.text === 'Move')?.onPress?.();
+  });
+
   const renderMap = () =>
     render(
       <DbProvider adapter={db}>
@@ -85,6 +96,7 @@ describe('the map screen, driven by presses', () => {
     );
 
   beforeEach(() => {
+    confirmMoves.mockClear();
     mockPush.mockClear();
     mockParams = {};
     db = createNodeAdapter(':memory:');
@@ -176,6 +188,41 @@ describe('the map screen, driven by presses', () => {
       const move = listEvents(db, 20).find((e) => e.kind === 'organize');
       expect(move?.name).toBe('bin_reordered');
       expect(JSON.parse(move?.detail ?? '{}')).toMatchObject({ bin: 'B-002', position: 0 });
+    });
+
+    it('offers an undo, and it puts the bin back where it came from', async () => {
+      // A move is one press away; without this, reversing it means working
+      // out where the bin actually came from.
+      const screen = await renderMap();
+      await fireEvent(screen.getByTestId('map-cell-B-002'), 'longPress');
+      await fireEvent.press(screen.getByTestId('map-cell-B-001'));
+      expect(listBinsForShelf(db, shelfA.id).map((b) => b.short_code)).toEqual(['B-002', 'B-001']);
+
+      await fireEvent.press(screen.getByTestId('map-undo'));
+      expect(listBinsForShelf(db, shelfA.id).map((b) => b.short_code)).toEqual(['B-001', 'B-002']);
+      expect(screen.queryByTestId('map-undo-snackbar')).toBeNull();
+    });
+
+    it('a cross-shelf drop asks first, then moves', async () => {
+      const screen = await renderMap();
+      await fireEvent(screen.getByTestId('map-cell-B-003'), 'longPress');
+      await fireEvent.press(screen.getByTestId('map-cell-B-001'));
+      expect(confirmMoves).toHaveBeenCalledWith(
+        'Move bin?',
+        expect.stringContaining('Garage › Shelf A'),
+        expect.anything(),
+      );
+      expect(getBin(db, bins[2].id)?.shelf_id).toBe(shelfA.id);
+    });
+
+    it('undo restores the shelf a bin was moved away from', async () => {
+      const screen = await renderMap();
+      await fireEvent(screen.getByTestId('map-cell-B-003'), 'longPress');
+      await fireEvent.press(screen.getByTestId('map-cell-B-001'));
+      expect(getBin(db, bins[2].id)?.shelf_id).toBe(shelfA.id);
+
+      await fireEvent.press(screen.getByTestId('map-undo'));
+      expect(getBin(db, bins[2].id)?.shelf_id).toBe(shelfB.id);
     });
 
     it('dropping onto a free slot fills the gap', async () => {

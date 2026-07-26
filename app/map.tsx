@@ -127,6 +127,23 @@ export default function MapScreen() {
 
   const [prompt, setPrompt] = useState<PromptRequest | null>(null);
 
+  // The same one-slot undo bin detail offers, for the same reason: a move is
+  // one press away and was otherwise only reversible by doing it again
+  // backwards — which means remembering where the bin actually came from.
+  const [undo, setUndo] = useState<{ label: string; revert: () => void } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+    },
+    [],
+  );
+  const offerUndo = useCallback((label: string, revert: () => void) => {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndo({ label, revert });
+    undoTimer.current = setTimeout(() => setUndo(null), 6000);
+  }, [setUndo]);
+
   // ------------------------------------------------------------- scrolling
   // Row positions are collected as they lay out (row y is relative to its
   // area card, so both are kept) and scrolling happens on demand: once when
@@ -196,6 +213,13 @@ export default function MapScreen() {
         hold(null);
         return;
       }
+      // Where it sat before, captured now: after the write the map is redrawn
+      // from the database and the old arrangement is gone.
+      const cameFrom = heldFind?.row;
+      const previous = {
+        shelfId: cameFrom?.shelfId ?? null,
+        orderedIds: cameFrom ? cameFrom.bins.map((c) => c.binId) : [],
+      };
       const commit = () => {
         placeBin(db, { binId: plan.binId, shelfId: plan.shelfId, orderedIds: plan.orderedIds });
         // "That bin is not where I left it" needs an answer, and the move
@@ -213,6 +237,15 @@ export default function MapScreen() {
         hapticSuccess();
         hold(null);
         bump();
+        offerUndo(`${heldFind?.cell.code ?? 'Bin'} moved`, () => {
+          placeBin(db, { binId: plan.binId, ...previous });
+          logEvent(db, {
+            kind: 'organize',
+            name: 'move_undone',
+            detail: { bin: heldFind?.cell.code ?? plan.binId },
+          });
+          bump();
+        });
       };
       if (plan.crossShelf) {
         // The §8.5 move — a real filing change, so it asks first.
@@ -225,7 +258,7 @@ export default function MapScreen() {
         commit();
       }
     },
-    [areas, bump, db, held, heldFind, hold],
+    [areas, bump, db, held, heldFind, hold, offerUndo],
   );
 
   const onCellPress = useCallback(
@@ -522,11 +555,30 @@ export default function MapScreen() {
         })}
 
         <Text style={styles.foot}>
-          {total} bin{total === 1 ? '' : 's'} drawn. Shelves are rows, in the order your workshop is
-          filed. Long-press a bin to move it; tap where it belongs. Moving it to another shelf asks
-          first — it changes where the bin really lives.
+          {total} bin{total === 1 ? '' : 's'} drawn, laid out the way they are filed.
+          {held ? '' : ' Hold a bin to move it.'}
         </Text>
       </ScrollView>
+      {undo && (
+        <View style={styles.snackbar} testID="map-undo-snackbar">
+          <Text style={styles.snackbarText} numberOfLines={1}>
+            {undo.label}
+          </Text>
+          <Pressable
+            onPress={() => {
+              undo.revert();
+              if (undoTimer.current) clearTimeout(undoTimer.current);
+              setUndo(null);
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Undo the move"
+            testID="map-undo"
+          >
+            <Text style={styles.snackbarUndo}>UNDO</Text>
+          </Pressable>
+        </View>
+      )}
       <PromptModal request={prompt} onClose={() => setPrompt(null)} />
     </>
   );
@@ -553,8 +605,17 @@ function RowAction({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={6}>
-      <Ionicons name={icon} size={15} color={colors.textFaint} />
+    // 15px of icon with 6px of slop is a 27px target on a screen held in a
+    // gloved hand. Android's own guidance is 48; this gets close without
+    // making the row header louder than the bins it labels.
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={12}
+      style={styles.rowAction}
+    >
+      <Ionicons name={icon} size={17} color={colors.textDim} />
     </Pressable>
   );
 }
@@ -703,7 +764,8 @@ const styles = StyleSheet.create({
   rowName: { color: colors.textDim, fontSize: 12, fontFamily: mono, flex: 1 },
   rowNameFound: { color: colors.amber },
   rowCapacity: { color: colors.textFaint },
-  rowActions: { flexDirection: 'row', alignItems: 'center', gap: sp(3) },
+  rowActions: { flexDirection: 'row', alignItems: 'center', gap: sp(1) },
+  rowAction: { paddingHorizontal: sp(1.5), paddingVertical: sp(1) },
   rowEmpty: { color: colors.textFaint, fontSize: 11, fontStyle: 'italic' },
   cells: { flexDirection: 'row', flexWrap: 'wrap', gap: sp(2), alignItems: 'flex-start' },
   cell: {
@@ -749,4 +811,21 @@ const styles = StyleSheet.create({
   gapText: { color: colors.textFaint, fontSize: 10, fontFamily: mono },
   gapTextActive: { color: colors.amber },
   foot: { ...type.dim, fontSize: 11, lineHeight: 16 },
+  snackbar: {
+    position: 'absolute',
+    left: sp(4),
+    right: sp(4),
+    bottom: sp(5),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(3),
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.lg,
+    paddingHorizontal: sp(4),
+    paddingVertical: sp(3),
+  },
+  snackbarText: { ...type.dim, flex: 1 },
+  snackbarUndo: { color: colors.amber, fontWeight: '800', letterSpacing: 1 },
 });
