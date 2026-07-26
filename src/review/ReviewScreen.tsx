@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -729,7 +731,23 @@ export function ChipEditor({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={styles.modalBackdrop}>
+      {/*
+        This is the app's single editing surface — three entry points funnel
+        into it — and it was a fixed, unscrollable card centred in the
+        backdrop with no keyboard handling. The Notes field is multiline with
+        a minHeight and no max, so a few lines of notes grew the card past the
+        screen and clipped Cancel and Save off the bottom permanently, with no
+        way to reach them. Avoiding the keyboard and scrolling the card fixes
+        both the tall-content case and the small-screen/large-font one.
+      */}
+      <KeyboardAvoidingView
+        style={styles.modalBackdrop}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={styles.modalScroll}
+          keyboardShouldPersistTaps="handled"
+        >
         <View style={styles.modalCard}>
           <Text style={styles.modalTitle}>{chip ? 'Edit item' : 'Add item'}</Text>
           <TextInput
@@ -889,7 +907,8 @@ export function ChipEditor({
             </View>
           </View>
         </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -1017,9 +1036,10 @@ const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    padding: sp(6),
   },
+  // justifyContent on the *content* so a short card still centres, while a
+  // tall one scrolls instead of overflowing the screen.
+  modalScroll: { flexGrow: 1, justifyContent: 'center', padding: sp(6) },
   modalCard: {
     backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
