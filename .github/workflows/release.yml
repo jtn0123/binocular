@@ -261,6 +261,16 @@ jobs:
           } > release-notes.md
           cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
 
+      # `permissions: contents: write` above can only *narrow* what the
+      # repository already allows — it cannot grant a permission the repo
+      # withholds. If Settings → Actions → General → Workflow permissions is
+      # set to read-only, this step fails with a bare
+      #   HTTP 403: Resource not accessible by integration
+      # which reads like a workflow bug and is not one. This happened between
+      # build-35 (published fine) and build-38 (refused) with an identical job
+      # definition, and cost an afternoon to rule out. The trap turns that 403
+      # into the sentence that actually fixes it, and points at the artifact so
+      # the build is still installable in the meantime.
       - name: Publish the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -268,11 +278,39 @@ jobs:
           APK: ${{ needs.build.outputs.apk }}
           VERSION_NAME: ${{ needs.build.outputs.version_name }}
           PRERELEASE: ${{ inputs.prerelease && '--prerelease' || '' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+
+          explain() {
+            {
+              echo "### ❌ Could not publish the Release"
+              echo
+              echo "GitHub refused \`POST /repos/${GITHUB_REPOSITORY}/releases\` for this run's token."
+              echo
+              echo "This job asks for \`contents: write\`, but a job can only *narrow* what the"
+              echo "repository grants — it cannot add a permission the repository withholds. A 403"
+              echo "here almost always means one of:"
+              echo
+              echo "1. **Settings → Actions → General → Workflow permissions** is set to"
+              echo "   *Read repository contents and packages permissions*. Set it to"
+              echo "   *Read and write permissions* and re-run this job."
+              echo "2. A **tag ruleset** protects \`${TAG%%-*}-*\` (or \`*\`) and blocks tag creation"
+              echo "   by GitHub Actions. Add an Actions bypass, or relax the rule."
+              echo
+              echo "The APK is fine — it is attached to this run as an artifact:"
+              echo "[\`${APK}\`](${RUN_URL})."
+              echo "Re-running just this job after fixing the setting will publish it; nothing"
+              echo "needs rebuilding."
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          trap explain ERR
+
           gh release create "$TAG" "dist/$APK" \
             --target "$GITHUB_SHA" \
             --title "Binocular $VERSION_NAME" \
             --notes-file release-notes.md \
             $PRERELEASE
+          trap - ERR
           echo "Released: $(gh release view "$TAG" --json url --jq .url)" >> "$GITHUB_STEP_SUMMARY"

@@ -34,6 +34,38 @@ until the D20 on-device encoder landed: `react-native-executorch` ships large
 native libraries, and they dominate both the download and the ~14 minutes the
 Gradle step takes. Worth knowing before blaming the Wi-Fi.
 
+### When the build succeeds but nothing is published
+
+If the `build` job is green and `publish` fails with
+
+```
+HTTP 403: Resource not accessible by integration (…/releases)
+```
+
+it is **not** a workflow bug, and re-running it will not help. The job already
+declares `permissions: contents: write`, but that can only narrow what the
+repository grants — it cannot add a permission the repository withholds. Check,
+in order:
+
+1. **Settings → Actions → General → Workflow permissions.** If it reads *Read
+   repository contents and packages permissions*, switch it to *Read and write
+   permissions*. This is the usual cause, and it can change under you: build-35
+   published normally and build-38 was refused half an hour later from an
+   identical job definition.
+2. **Settings → Rules → Rulesets**, for a tag rule matching `build-*` or `v*`.
+   `gh release create` creates the tag, so a tag ruleset without an Actions
+   bypass refuses with the same message.
+
+The APK itself is unaffected — it is attached to the run as an artifact
+(Actions → the run → *Artifacts*), so once the setting is fixed, re-run **just
+the `publish` job**. It downloads that artifact; nothing is rebuilt, and the
+20 minutes are not paid twice. The workflow prints all of this into the run
+summary when the step fails.
+
+Note that a run artifact is *not* a substitute for a Release on the phone:
+artifacts download as a `.zip` and require a signed-in session, so the APK
+cannot be installed straight from one.
+
 ### Getting the APK onto the phone
 
 This repository is **private**, so a release asset is served from a
