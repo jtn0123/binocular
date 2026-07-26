@@ -306,13 +306,31 @@ of D21 — arranging the wall on the picture of it — was built.
 - [x] Home: a search matching ≥2 bins offers "show all N on the map".
 - [x] Screen-level tests that press the controls, plus the map button's route.
 
-### Withdrawn
-- [ ] ~~Finger-following drag~~ — built, shipped to the field phone, and
+### Withdrawn, then rebuilt
+- [x] ~~Finger-following drag~~ — built, shipped to the field phone, and
       withdrawn in the same day. Wrapping every cell in a gesture-handler
       detector driving reanimated worklets killed the process natively; the
       event log showed an `app_start` seconds after every `screen//map` with
-      no `app_background` between. Tap-to-place covers the same ground. Do not
-      retry without testing on a device first.
+      no `app_background` between. Tap-to-place covers the same ground.
+      Rebuilt with one detector, worklets that read only module-scope
+      constants, and `npm run audit:worklets` failing the build if that stops
+      being true. Ships OFF by default (Settings › Map).
+- [x] End-to-end tests for the drag (`src/map/__tests__/mapDrag.test.tsx`).
+      The gesture mock records the handlers the screen builds instead of
+      swallowing them, and `helpers/wall.tsx` drives a real layout pass with
+      phone-shaped geometry — so a drag from one cell to another is exercised
+      against the database. This found three defects that no amount of unit
+      testing on either side of the join could reach: cell rects summed their
+      ancestors' offsets at the moment a *child* reported layout (React Native
+      gives no ordering guarantee, and children commonly report first, so the
+      offsets read as zero); a drop read the `held` state rather than the bin
+      it was handed, so a drag quick enough to finish inside one frame did
+      nothing; and the rect cache was never reconciled against the map, so a
+      bin that left the wall could still catch a drop.
+- [ ] Confirmed on the field-test phone that a drag moves the bin you aimed
+      at. The tests prove that *if* the gesture fires the right thing happens;
+      they cannot prove RNGH activates the pan or that the worklets survive
+      the UI runtime.
 
 ### Exit criteria
 - [x] Arrangement survives a reopen (asserted against the database, not the

@@ -44,7 +44,7 @@ import {
   setShelfCapacity,
 } from '@/db/queries';
 import { logEvent } from '@/diagnostics/events';
-import { resolveDrop, type CellRect, type RowRect } from '@/map/dragGeometry';
+import { cellAt, composeWall, resolveDrop, type Box, type WallModel } from '@/map/dragGeometry';
 import { makeBinDragGesture } from '@/map/dragGesture';
 import { hapticShutter, hapticSuccess } from '@/lib/haptics';
 import { useFocusTick } from '@/lib/useFocusTick';
@@ -168,7 +168,7 @@ export default function MapScreen() {
 
   const [held, setHeld] = useState<string | null>(null);
   const heldFind = useMemo(
-    () => (held ? locateMany(areas, [held])[0] ?? null : null),
+    () => (held ? (locateMany(areas, [held])[0] ?? null) : null),
     [areas, held],
   );
 
@@ -210,11 +210,14 @@ export default function MapScreen() {
     },
     [],
   );
-  const offerUndo = useCallback((label: string, revert: () => void) => {
-    if (undoTimer.current) clearTimeout(undoTimer.current);
-    setUndo({ label, revert });
-    undoTimer.current = setTimeout(() => setUndo(null), 6000);
-  }, [setUndo]);
+  const offerUndo = useCallback(
+    (label: string, revert: () => void) => {
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+      setUndo({ label, revert });
+      undoTimer.current = setTimeout(() => setUndo(null), 6000);
+    },
+    [setUndo],
+  );
 
   // ------------------------------------------------------------- scrolling
   // Row positions are collected as they lay out (row y is relative to its
@@ -244,7 +247,7 @@ export default function MapScreen() {
     const y =
       (areaYs.current[areaKey] ?? 0) +
       (rowYs.current[key] ?? 0) +
-      (binId ? cellYs.current[binId] ?? 0 : 0);
+      (binId ? (cellYs.current[binId] ?? 0) : 0);
     scrollRef.current?.scrollTo({ y: Math.max(0, y - sp(6)), animated: true });
   }, []);
 
@@ -322,11 +325,54 @@ export default function MapScreen() {
   const dragY = useSharedValue(0);
   const [dragging, setDragging] = useState(false);
 
-  /** Cell and row rects in scroll-content space, gathered as the map draws. */
-  const cellRects = useRef<Map<string, CellRect>>(new Map());
-  const rowRects = useRef<Map<string, RowRect>>(new Map());
+  /**
+   * What each level of the wall reported about itself, in its own parent's
+   * coordinates. Deliberately NOT pre-added — see composeWall's note: React
+   * Native gives no ordering guarantee for `onLayout`, and summing at the
+   * moment a child reports reads its ancestors as zero.
+   */
+  const areaBoxes = useRef<Map<string, Box>>(new Map());
+  const rowBoxes = useRef<Map<string, Box>>(new Map());
+  const cellsBoxes = useRef<Map<string, Box>>(new Map());
+  const cellBoxes = useRef<Map<string, Box>>(new Map());
   const scrollOffset = useRef(0);
   const scrollOrigin = useRef({ x: 0, y: 0 });
+
+  /** The wall as the database describes it, for composing rects against. */
+  const wallModel = useMemo<WallModel>(
+    () => ({
+      rows: areas.flatMap((area) =>
+        area.rows.map((row) => ({
+          rowKey: rowKey(row),
+          areaKey: area.locationId ?? 'unplaced',
+          shelfId: row.shelfId,
+          binIds: row.bins.map((c) => c.binId),
+        })),
+      ),
+    }),
+    [areas],
+  );
+
+  /**
+   * Absolute rects, built at the moment a finger asks rather than as the map
+   * draws. By the time a 350 ms long press has completed every box has been
+   * reported, so this is both order-independent and current — a bin that has
+   * moved away since the last drag is gone from the model and cannot catch a
+   * drop meant for whatever took its place.
+   */
+  const wallNow = useCallback(
+    () =>
+      composeWall(
+        {
+          areas: areaBoxes.current,
+          rows: rowBoxes.current,
+          cellsBoxes: cellsBoxes.current,
+          cells: cellBoxes.current,
+        },
+        wallModel,
+      ),
+    [wallModel],
+  );
 
   /** Finger position (relative to the detector) → scroll-content space. */
   const toContent = useCallback(
@@ -341,21 +387,12 @@ export default function MapScreen() {
 
   const beginDrag = useCallback(
     (x: number, y: number) => {
-      const point = toContent(x, y);
-      for (const rect of cellRects.current.values()) {
-        if (
-          point.x >= rect.x &&
-          point.x <= rect.x + rect.width &&
-          point.y >= rect.y &&
-          point.y <= rect.y + rect.height
-        ) {
-          lift(rect.binId);
-          setDragging(true);
-          return;
-        }
-      }
+      const cell = cellAt(toContent(x, y), wallNow().cells);
+      if (!cell) return;
+      lift(cell.binId);
+      setDragging(true);
     },
-    [lift, toContent],
+    [lift, toContent, wallNow],
   );
 
   /**
@@ -377,17 +414,29 @@ export default function MapScreen() {
     return () => sub.remove();
   }, [held, hold]);
 
+  /**
+   * Place the bin being carried.
+   *
+   * `carried` is a parameter rather than a read of the `held` state, and that
+   * is load-bearing for the drag. A flick between two neighbouring bins can
+   * start and finish inside one frame, so at the moment the finger lifts the
+   * `setHeld` from the press may not have rendered yet — this callback would
+   * still close over `held === null` and return without doing anything. The
+   * result was a drag that worked when you were slow and did nothing when you
+   * were quick. The same reasoning applies to `heldFind`, so the carried bin
+   * is located here rather than taken from a value derived one render ago.
+   */
   const executeDrop = useCallback(
-    (target: DropTarget) => {
-      if (!held) return;
-      const plan = planDrop(areas, held, target);
+    (carried: string, target: DropTarget) => {
+      const plan = planDrop(areas, carried, target);
       if (!plan) {
         hold(null);
         return;
       }
+      const carriedFind = locateMany(areas, [carried])[0] ?? null;
       // Where it sat before, captured now: after the write the map is redrawn
       // from the database and the old arrangement is gone.
-      const cameFrom = heldFind?.row;
+      const cameFrom = carriedFind?.row;
       const previous = {
         shelfId: cameFrom?.shelfId ?? null,
         orderedIds: cameFrom ? cameFrom.bins.map((c) => c.binId) : [],
@@ -401,7 +450,7 @@ export default function MapScreen() {
           kind: 'organize',
           name: plan.crossShelf ? 'bin_moved' : 'bin_reordered',
           detail: {
-            bin: heldFind?.cell.code ?? plan.binId,
+            bin: carriedFind?.cell.code ?? plan.binId,
             to: plan.place,
             position: plan.orderedIds.indexOf(plan.binId),
           },
@@ -409,19 +458,19 @@ export default function MapScreen() {
         hapticSuccess();
         hold(null);
         bump();
-        offerUndo(`${heldFind?.cell.code ?? 'Bin'} moved`, () => {
+        offerUndo(`${carriedFind?.cell.code ?? 'Bin'} moved`, () => {
           placeBin(db, { binId: plan.binId, ...previous });
           logEvent(db, {
             kind: 'organize',
             name: 'move_undone',
-            detail: { bin: heldFind?.cell.code ?? plan.binId },
+            detail: { bin: carriedFind?.cell.code ?? plan.binId },
           });
           bump();
         });
       };
       if (plan.crossShelf) {
         // The §8.5 move — a real filing change, so it asks first.
-        const code = heldFind?.cell.code ?? 'this bin';
+        const code = carriedFind?.cell.code ?? 'this bin';
         Alert.alert('Move bin?', `Move ${code} to ${plan.place}.`, [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Move', onPress: commit },
@@ -430,7 +479,7 @@ export default function MapScreen() {
         commit();
       }
     },
-    [areas, bump, db, held, heldFind, hold, offerUndo],
+    [areas, bump, db, hold, offerUndo],
   );
 
   const endDrag = useCallback(
@@ -438,22 +487,17 @@ export default function MapScreen() {
       setDragging(false);
       const carried = heldRef.current;
       if (!carried) return;
-      const drop = resolveDrop(
-        toContent(x, y),
-        [...cellRects.current.values()],
-        [...rowRects.current.values()],
-        carried,
-      );
+      const wall = wallNow();
+      const drop = resolveDrop(toContent(x, y), wall.cells, wall.rows, carried);
       // Released over nothing: put the bin down rather than guessing a shelf.
       if (!drop) {
         hold(null);
         return;
       }
-      executeDrop({ shelfId: drop.shelfId, beforeBinId: drop.beforeBinId });
+      executeDrop(carried, { shelfId: drop.shelfId, beforeBinId: drop.beforeBinId });
     },
-    [executeDrop, hold, toContent],
+    [executeDrop, hold, toContent, wallNow],
   );
-
 
   const pan = useMemo(
     () =>
@@ -483,7 +527,6 @@ export default function MapScreen() {
     ],
   }));
 
-
   const onCellPress = useCallback(
     (cell: MapCell, row: MapRow) => {
       if (!held) {
@@ -494,7 +537,7 @@ export default function MapScreen() {
         hold(null);
         return;
       }
-      executeDrop({ shelfId: row.shelfId, beforeBinId: cell.binId });
+      executeDrop(held, { shelfId: row.shelfId, beforeBinId: cell.binId });
     },
     [executeDrop, held, hold, router],
   );
@@ -563,16 +606,16 @@ export default function MapScreen() {
 
   return (
     <GestureDetector gesture={pan}>
-    <View style={styles.screen}>
-      <Stack.Screen options={{ title: 'Map' }} />
-      {/*
+      <View style={styles.screen}>
+        <Stack.Screen options={{ title: 'Map' }} />
+        {/*
         The banner sits OUTSIDE the ScrollView on purpose. It used to be an
         ordinary scrolling child, so the moment you scrolled to the shelf you
         were aiming for, the label naming the bin in your hand and the only
         cancel button both left the screen. A mode needs chrome that stays
         put — that is most of what separates a mode from a mystery.
       */}
-      {held ? (
+        {held ? (
           <View style={[styles.banner, styles.bannerFixed, styles.bannerHold]}>
             <Ionicons name="move" size={18} color={colors.amber} />
             <View style={styles.bannerText}>
@@ -625,263 +668,254 @@ export default function MapScreen() {
             <View style={[styles.banner, styles.bannerFixed]}>
               <Ionicons name="help-circle-outline" size={18} color={colors.textDim} />
               <Text style={styles.bannerWhere}>
-                {highlightIds.length === 1 ? 'That bin is not on the map.' : 'Those bins are not on the map.'}
+                {highlightIds.length === 1
+                  ? 'That bin is not on the map.'
+                  : 'Those bins are not on the map.'}
               </Text>
             </View>
           )
         ) : null}
 
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={styles.container}
-        onLayout={(e) => {
-          scrollOrigin.current = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y };
-        }}
-        onScroll={(e) => {
-          scrollOffset.current = e.nativeEvent.contentOffset.y;
-        }}
-        scrollEventThrottle={32}
-      >
-        <View style={styles.heatBar}>
-          <Text style={styles.heatLabel}>Tint</Text>
-          {(
-            [
-              ['none', 'none'],
-              ['items', 'items'],
-              ['scanned', 'last scan'],
-            ] as const
-          ).map(([mode, label]) => (
-            <Pressable
-              key={mode}
-              style={[styles.heatChip, heat === mode && styles.heatChipOn]}
-              onPress={() => setHeat(mode)}
-              accessibilityRole="button"
-              accessibilityLabel={`Tint cells by ${label}`}
-              hitSlop={8}
-              testID={`map-heat-${mode}`}
-            >
-              <Text style={[styles.heatChipText, heat === mode && styles.heatChipTextOn]}>
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        {heat !== 'none' ? (
-          <Text style={styles.legend}>
-            {heat === 'items'
-              ? 'Brighter amber = more items in the bin.'
-              : 'Darker = longer since the bin was scanned; red = never scanned.'}
-          </Text>
-        ) : null}
+        <ScrollView
+          ref={scrollRef}
+          testID="map-scroll"
+          contentContainerStyle={styles.container}
+          onLayout={(e) => {
+            scrollOrigin.current = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y };
+          }}
+          onScroll={(e) => {
+            scrollOffset.current = e.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={32}
+        >
+          <View style={styles.heatBar}>
+            <Text style={styles.heatLabel}>Tint</Text>
+            {(
+              [
+                ['none', 'none'],
+                ['items', 'items'],
+                ['scanned', 'last scan'],
+              ] as const
+            ).map(([mode, label]) => (
+              <Pressable
+                key={mode}
+                style={[styles.heatChip, heat === mode && styles.heatChipOn]}
+                onPress={() => setHeat(mode)}
+                accessibilityRole="button"
+                accessibilityLabel={`Tint cells by ${label}`}
+                hitSlop={8}
+                testID={`map-heat-${mode}`}
+              >
+                <Text style={[styles.heatChipText, heat === mode && styles.heatChipTextOn]}>
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {heat !== 'none' ? (
+            <Text style={styles.legend}>
+              {heat === 'items'
+                ? 'Brighter amber = more items in the bin.'
+                : 'Darker = longer since the bin was scanned; red = never scanned.'}
+            </Text>
+          ) : null}
 
-        {areas.map((area) => {
-          const areaKey = area.locationId ?? 'unplaced';
-          return (
-            <View
-              key={areaKey}
-              style={styles.area}
-              onLayout={(e) => {
-                areaYs.current[areaKey] = e.nativeEvent.layout.y;
-                areaXs.current[areaKey] = e.nativeEvent.layout.x;
-              }}
-            >
-              <View style={styles.areaHead}>
-                <Text style={styles.areaName}>{area.name}</Text>
-                {area.locationId ? (
-                  <Pressable
-                    onPress={() => promptAddShelf(area.locationId!, area.name)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Add a shelf to ${area.name}`}
-                    hitSlop={12}
-                    testID={`map-add-shelf-${areaKey}`}
-                  >
-                    <Ionicons name="add-circle-outline" size={18} color={colors.textDim} />
-                  </Pressable>
-                ) : null}
-              </View>
-              {area.rows.map((row) => {
-                const key = rowKey(row);
-                const marked = focused?.row === row;
-                const gaps = rowGaps(row);
-                const over = row.capacity !== null && row.bins.length > row.capacity;
-                return (
-                  <View
-                    key={key}
-                    style={[styles.row, marked && styles.rowFound]}
-                    onLayout={(e) => {
-                      const { x, y, height } = e.nativeEvent.layout;
-                      rowYs.current[key] = y;
-                      rowXs.current[key] = x;
-                      rowRects.current.set(key, {
-                        rowKey: key,
-                        shelfId: row.shelfId,
-                        y: (areaYs.current[areaKey] ?? 0) + y,
-                        height,
-                      });
-                    }}
-                  >
-                    <View style={styles.rowHead}>
-                      <Text
-                        style={[styles.rowName, marked && styles.rowNameFound]}
-                        numberOfLines={1}
-                      >
-                        {row.name}
-                        {row.capacity !== null ? (
-                          <Text style={styles.rowCapacity}>
-                            {'  '}
-                            {row.bins.length}/{row.capacity}
-                            {over ? ' — over' : ''}
-                          </Text>
-                        ) : null}
-                      </Text>
-                      {row.shelfId ? (
-                        <View style={styles.rowActions}>
-                          <RowAction
-                            icon="pencil"
-                            label={`Rename ${row.name}`}
-                            onPress={() => promptRenameShelf(row.shelfId!, row.name)}
-                          />
-                          <RowAction
-                            icon="apps-outline"
-                            label={`Set how many slots ${row.name} has`}
-                            onPress={() => promptCapacity(row.shelfId!, row.name, row.capacity)}
-                          />
-                          <RowAction
-                            icon="add"
-                            label={`New bin on ${row.name}`}
-                            onPress={() => addBinToShelf(row.shelfId!)}
-                          />
-                        </View>
-                      ) : null}
-                    </View>
+          {areas.map((area) => {
+            const areaKey = area.locationId ?? 'unplaced';
+            return (
+              <View
+                key={areaKey}
+                style={styles.area}
+                testID={`map-area-${areaKey}`}
+                onLayout={(e) => {
+                  const { x, y, width, height } = e.nativeEvent.layout;
+                  areaYs.current[areaKey] = y;
+                  areaXs.current[areaKey] = x;
+                  areaBoxes.current.set(areaKey, { x, y, width, height });
+                }}
+              >
+                <View style={styles.areaHead}>
+                  <Text style={styles.areaName}>{area.name}</Text>
+                  {area.locationId ? (
+                    <Pressable
+                      onPress={() => promptAddShelf(area.locationId!, area.name)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add a shelf to ${area.name}`}
+                      hitSlop={12}
+                      testID={`map-add-shelf-${areaKey}`}
+                    >
+                      <Ionicons name="add-circle-outline" size={18} color={colors.textDim} />
+                    </Pressable>
+                  ) : null}
+                </View>
+                {area.rows.map((row) => {
+                  const key = rowKey(row);
+                  const marked = focused?.row === row;
+                  const gaps = rowGaps(row);
+                  const over = row.capacity !== null && row.bins.length > row.capacity;
+                  return (
                     <View
-                      style={styles.cells}
+                      key={key}
+                      style={[styles.row, marked && styles.rowFound]}
+                      testID={`map-row-${key}`}
                       onLayout={(e) => {
-                        cellsXs.current[key] = e.nativeEvent.layout.x;
-                        cellsYs.current[key] = e.nativeEvent.layout.y;
+                        const { x, y, width, height } = e.nativeEvent.layout;
+                        rowYs.current[key] = y;
+                        rowXs.current[key] = x;
+                        rowBoxes.current.set(key, { x, y, width, height });
                       }}
                     >
-                      {row.bins.map((cell) => (
-                        <Cell
-                          key={cell.binId}
-                          cell={cell}
-                          found={highlightIds.includes(cell.binId)}
-                          focusedCell={focused?.cell.binId === cell.binId}
-                          heldCell={held === cell.binId}
-                          holding={held !== null}
-                          heatStyle={tint(heatTier(cell, heat, nowIso), heat)}
-                          onPress={() => onCellPress(cell, row)}
-                          onLongPress={() => lift(cell.binId)}
-                          onLayout={(rect) => {
-                            cellYs.current[cell.binId] = rect.y;
-                            cellRects.current.set(cell.binId, {
-                              binId: cell.binId,
-                              rowKey: key,
-                              shelfId: row.shelfId,
-                              x:
-                                (areaXs.current[areaKey] ?? 0) +
-                                (rowXs.current[key] ?? 0) +
-                                (cellsXs.current[key] ?? 0) +
-                                rect.x,
-                              y:
-                                (areaYs.current[areaKey] ?? 0) +
-                                (rowYs.current[key] ?? 0) +
-                                (cellsYs.current[key] ?? 0) +
-                                rect.y,
-                              width: rect.width,
-                              height: rect.height,
-                            });
-                          }}
-                        />
-                      ))}
-                      {Array.from({ length: gaps }, (_, i) => (
-                        <Pressable
-                          key={`gap-${i}`}
-                          style={styles.gap}
-                          disabled={!held}
-                          onPress={() => executeDrop({ shelfId: row.shelfId })}
-                          accessibilityRole={held ? 'button' : undefined}
-                          accessibilityLabel={
-                            held ? `Empty slot on ${row.name} — place the bin here` : `Empty slot on ${row.name}`
-                          }
-                          testID={`map-gap-${key}-${i}`}
+                      <View style={styles.rowHead}>
+                        <Text
+                          style={[styles.rowName, marked && styles.rowNameFound]}
+                          numberOfLines={1}
                         >
-                          <Ionicons
-                            name={held ? 'download-outline' : 'ellipse-outline'}
-                            size={14}
-                            color={held ? colors.amber : colors.textFaint}
+                          {row.name}
+                          {row.capacity !== null ? (
+                            <Text style={styles.rowCapacity}>
+                              {'  '}
+                              {row.bins.length}/{row.capacity}
+                              {over ? ' — over' : ''}
+                            </Text>
+                          ) : null}
+                        </Text>
+                        {row.shelfId ? (
+                          <View style={styles.rowActions}>
+                            <RowAction
+                              icon="pencil"
+                              label={`Rename ${row.name}`}
+                              onPress={() => promptRenameShelf(row.shelfId!, row.name)}
+                            />
+                            <RowAction
+                              icon="apps-outline"
+                              label={`Set how many slots ${row.name} has`}
+                              onPress={() => promptCapacity(row.shelfId!, row.name, row.capacity)}
+                            />
+                            <RowAction
+                              icon="add"
+                              label={`New bin on ${row.name}`}
+                              onPress={() => addBinToShelf(row.shelfId!)}
+                            />
+                          </View>
+                        ) : null}
+                      </View>
+                      <View
+                        style={styles.cells}
+                        testID={`map-cells-${key}`}
+                        onLayout={(e) => {
+                          const { x, y, width, height } = e.nativeEvent.layout;
+                          cellsXs.current[key] = x;
+                          cellsYs.current[key] = y;
+                          cellsBoxes.current.set(key, { x, y, width, height });
+                        }}
+                      >
+                        {row.bins.map((cell) => (
+                          <Cell
+                            key={cell.binId}
+                            cell={cell}
+                            found={highlightIds.includes(cell.binId)}
+                            focusedCell={focused?.cell.binId === cell.binId}
+                            heldCell={held === cell.binId}
+                            holding={held !== null}
+                            heatStyle={tint(heatTier(cell, heat, nowIso), heat)}
+                            onPress={() => onCellPress(cell, row)}
+                            onLongPress={() => lift(cell.binId)}
+                            onLayout={(rect) => {
+                              cellYs.current[cell.binId] = rect.y;
+                              cellBoxes.current.set(cell.binId, rect);
+                            }}
                           />
-                          <Text style={[styles.gapText, held && styles.gapTextActive]}>
-                            {held ? 'here' : 'free'}
-                          </Text>
-                        </Pressable>
-                      ))}
-                      {held && gaps === 0 ? (
-                        <Pressable
-                          style={[styles.gap, styles.gapActive]}
-                          onPress={() => executeDrop({ shelfId: row.shelfId })}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Move the bin to the end of ${row.name}`}
-                          testID={`map-drop-end-${key}`}
-                        >
-                          <Ionicons name="download-outline" size={14} color={colors.amber} />
-                          <Text style={[styles.gapText, styles.gapTextActive]}>here</Text>
-                        </Pressable>
-                      ) : null}
-                      {row.bins.length === 0 && gaps === 0 && !held ? (
-                        <Text style={styles.rowEmpty}>no bins yet</Text>
-                      ) : null}
+                        ))}
+                        {Array.from({ length: gaps }, (_, i) => (
+                          <Pressable
+                            key={`gap-${i}`}
+                            style={styles.gap}
+                            disabled={!held}
+                            onPress={() => held && executeDrop(held, { shelfId: row.shelfId })}
+                            accessibilityRole={held ? 'button' : undefined}
+                            accessibilityLabel={
+                              held
+                                ? `Empty slot on ${row.name} — place the bin here`
+                                : `Empty slot on ${row.name}`
+                            }
+                            testID={`map-gap-${key}-${i}`}
+                          >
+                            <Ionicons
+                              name={held ? 'download-outline' : 'ellipse-outline'}
+                              size={14}
+                              color={held ? colors.amber : colors.textFaint}
+                            />
+                            <Text style={[styles.gapText, held && styles.gapTextActive]}>
+                              {held ? 'here' : 'free'}
+                            </Text>
+                          </Pressable>
+                        ))}
+                        {held && gaps === 0 ? (
+                          <Pressable
+                            style={[styles.gap, styles.gapActive]}
+                            onPress={() => held && executeDrop(held, { shelfId: row.shelfId })}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Move the bin to the end of ${row.name}`}
+                            testID={`map-drop-end-${key}`}
+                          >
+                            <Ionicons name="download-outline" size={14} color={colors.amber} />
+                            <Text style={[styles.gapText, styles.gapTextActive]}>here</Text>
+                          </Pressable>
+                        ) : null}
+                        {row.bins.length === 0 && gaps === 0 && !held ? (
+                          <Text style={styles.rowEmpty}>no bins yet</Text>
+                        ) : null}
+                      </View>
                     </View>
-                  </View>
-                );
-              })}
-            </View>
-          );
-        })}
+                  );
+                })}
+              </View>
+            );
+          })}
 
-        <Text style={styles.foot}>
-          {total} bin{total === 1 ? '' : 's'} drawn, laid out the way they are filed.
-          {held ? '' : ' Hold a bin to move it.'}
-        </Text>
-      </ScrollView>
-      {undo && (
-        // box-none so only the label and UNDO themselves take touches. This
-        // is a full-width bar pinned across the bottom of a live map for six
-        // seconds, and it used to swallow every tap in that band — so the
-        // first thing you hit when a cell "would not respond" was UNDO, which
-        // reversed the move you had just made. The content padding below
-        // keeps cells out from under it in the first place.
-        <View style={styles.snackbar} pointerEvents="box-none" testID="map-undo-snackbar">
-          <Text style={styles.snackbarText} numberOfLines={1}>
-            {undo.label}
+          <Text style={styles.foot}>
+            {total} bin{total === 1 ? '' : 's'} drawn, laid out the way they are filed.
+            {held ? '' : ' Hold a bin to move it.'}
           </Text>
-          <Pressable
-            onPress={() => {
-              undo.revert();
-              if (undoTimer.current) clearTimeout(undoTimer.current);
-              setUndo(null);
-            }}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Undo the move"
-            testID="map-undo"
-          >
-            <Text style={styles.snackbarUndo}>UNDO</Text>
-          </Pressable>
-        </View>
-      )}
-      {dragging && heldFind ? (
-        <Animated.View style={[styles.ghost, ghostStyle]} pointerEvents="none">
-          <Text style={styles.ghostCode} numberOfLines={1}>
-            {heldFind.cell.code}
-          </Text>
-          <Text style={styles.ghostName} numberOfLines={1}>
-            {heldFind.cell.name}
-          </Text>
-        </Animated.View>
-      ) : null}
-      <PromptModal request={prompt} onClose={() => setPrompt(null)} />
-    </View>
+        </ScrollView>
+        {undo && (
+          // box-none so only the label and UNDO themselves take touches. This
+          // is a full-width bar pinned across the bottom of a live map for six
+          // seconds, and it used to swallow every tap in that band — so the
+          // first thing you hit when a cell "would not respond" was UNDO, which
+          // reversed the move you had just made. The content padding below
+          // keeps cells out from under it in the first place.
+          <View style={styles.snackbar} pointerEvents="box-none" testID="map-undo-snackbar">
+            <Text style={styles.snackbarText} numberOfLines={1}>
+              {undo.label}
+            </Text>
+            <Pressable
+              onPress={() => {
+                undo.revert();
+                if (undoTimer.current) clearTimeout(undoTimer.current);
+                setUndo(null);
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Undo the move"
+              testID="map-undo"
+            >
+              <Text style={styles.snackbarUndo}>UNDO</Text>
+            </Pressable>
+          </View>
+        )}
+        {dragging && heldFind ? (
+          <Animated.View style={[styles.ghost, ghostStyle]} pointerEvents="none">
+            <Text style={styles.ghostCode} numberOfLines={1}>
+              {heldFind.cell.code}
+            </Text>
+            <Text style={styles.ghostName} numberOfLines={1}>
+              {heldFind.cell.name}
+            </Text>
+          </Animated.View>
+        ) : null}
+        <PromptModal request={prompt} onClose={() => setPrompt(null)} />
+      </View>
     </GestureDetector>
   );
 }

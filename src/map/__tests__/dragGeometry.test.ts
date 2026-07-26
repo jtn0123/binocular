@@ -1,4 +1,11 @@
-import { cellAt, resolveDrop, rowAt, type CellRect, type RowRect } from '../dragGeometry';
+import {
+  cellAt,
+  composeWall,
+  resolveDrop,
+  rowAt,
+  type CellRect,
+  type RowRect,
+} from '../dragGeometry';
 
 /**
  * Under the withdrawn drag this logic was a native `measureInWindow` fan-out
@@ -83,5 +90,95 @@ describe('resolving a release into a drop', () => {
 
   it('works with a negative offset, which overscroll produces', () => {
     expect(resolveDrop({ x: 50, y: -20 }, CELLS, ROWS, 'b')).toBeNull();
+  });
+});
+
+/**
+ * Composing the wall from the boxes each level reported.
+ *
+ * The first version added these up at the moment a child reported its layout,
+ * which meant reading its ancestors' offsets before they had arrived — React
+ * Native gives no ordering guarantee for `onLayout`, and a child commonly
+ * reports first. Every cell was recorded as if its area and row sat at the
+ * origin, so drops landed on whatever occupied the top of the wall.
+ */
+describe('composing the wall', () => {
+  const boxes = {
+    areas: new Map([['garage', { x: 0, y: 180, width: 400, height: 300 }]]),
+    rows: new Map([
+      ['shelf-1', { x: 0, y: 28, width: 400, height: 122 }],
+      ['shelf-2', { x: 0, y: 160, width: 400, height: 122 }],
+    ]),
+    cellsBoxes: new Map([
+      ['shelf-1', { x: 40, y: 34, width: 360, height: 76 }],
+      ['shelf-2', { x: 40, y: 34, width: 360, height: 76 }],
+    ]),
+    cells: new Map([
+      ['a', { x: 0, y: 0, width: 120, height: 76 }],
+      ['b', { x: 128, y: 0, width: 120, height: 76 }],
+      ['c', { x: 0, y: 0, width: 120, height: 76 }],
+    ]),
+  };
+  const model = {
+    rows: [
+      { rowKey: 'shelf-1', areaKey: 'garage', shelfId: 'shelf-1', binIds: ['a', 'b'] },
+      { rowKey: 'shelf-2', areaKey: 'garage', shelfId: 'shelf-2', binIds: ['c'] },
+    ],
+  };
+
+  it('adds every level of offset, once', () => {
+    const { cells } = composeWall(boxes, model);
+    // 180 (area) + 28 (row) + 34 (cells container) + 0 (cell)
+    expect(cells.find((c) => c.binId === 'a')).toMatchObject({ x: 40, y: 242 });
+    expect(cells.find((c) => c.binId === 'b')).toMatchObject({ x: 168, y: 242 });
+    // The second row sits 132 lower.
+    expect(cells.find((c) => c.binId === 'c')).toMatchObject({ x: 40, y: 374 });
+  });
+
+  it('places rows in the same space as the cells inside them', () => {
+    const { rows } = composeWall(boxes, model);
+    expect(rows).toEqual([
+      { rowKey: 'shelf-1', shelfId: 'shelf-1', y: 208, height: 122 },
+      { rowKey: 'shelf-2', shelfId: 'shelf-2', y: 340, height: 122 },
+    ]);
+    // A cell must land inside its own row's band, or a near-miss on the cell
+    // appends to a shelf the finger was never over.
+    const { cells } = composeWall(boxes, model);
+    const a = cells.find((c) => c.binId === 'a')!;
+    expect(a.y).toBeGreaterThanOrEqual(rows[0].y);
+    expect(a.y + a.height).toBeLessThanOrEqual(rows[0].y + rows[0].height);
+  });
+
+  /**
+   * Boxes are cached per bin and never expire, so a bin that has left the wall
+   * — deleted, or filtered out — leaves its rect behind at coordinates that
+   * now belong to whatever slid up into the gap. `cellAt` returns the first
+   * rect containing the point, so a leftover can win over the real cell and
+   * send a bin somewhere nobody pointed at. Walking the model, not the cache,
+   * is what stops that.
+   */
+  it('ignores boxes for bins that are no longer on the wall', () => {
+    const shrunk = {
+      rows: [{ rowKey: 'shelf-1', areaKey: 'garage', shelfId: 'shelf-1', binIds: ['a'] }],
+    };
+    const { cells, rows } = composeWall(boxes, shrunk);
+    expect(cells.map((c) => c.binId)).toEqual(['a']);
+    expect(rows.map((r) => r.rowKey)).toEqual(['shelf-1']);
+  });
+
+  /**
+   * Before every box has arrived, a partial sum is not a smaller error than a
+   * missing one — it is a confident wrong answer. Better to resolve to nothing
+   * and have the bin put down, which is obvious and undoable.
+   */
+  it('leaves out anything whose layout has not been reported', () => {
+    const { cells, rows } = composeWall({ ...boxes, areas: new Map() }, model);
+    expect(cells).toEqual([]);
+    expect(rows).toEqual([]);
+
+    const noCellsBox = composeWall({ ...boxes, cellsBoxes: new Map() }, model);
+    expect(noCellsBox.cells).toEqual([]);
+    // The rows are still placeable, so a drop onto a shelf still works.
+    expect(noCellsBox.rows).toHaveLength(2);
   });
 });
