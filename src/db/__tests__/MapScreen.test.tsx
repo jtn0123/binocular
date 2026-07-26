@@ -1,5 +1,5 @@
-import { fireEvent, render } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
+import { Alert, BackHandler } from 'react-native';
 
 import MapScreen from '../../../app/map';
 import { DbProvider } from '../../db/DbProvider';
@@ -315,6 +315,62 @@ describe('the map screen, driven by presses', () => {
       expect(screen.getByText(/Nothing to draw yet/)).toBeTruthy();
     } finally {
       empty.close();
+    }
+  });
+
+  /**
+   * The emptiness test used to be `mapSize(areas) === 0`, which counts BINS —
+   * so a workshop of shelves with nothing filed yet scored zero and got the
+   * one-sentence empty state, hiding the wall it was written to draw and the
+   * add-shelf and new-bin controls along with it. `buildMap` deliberately
+   * keeps empty shelves on the grounds that "hiding it would make the picture
+   * lie"; the screen disagreed with the module it calls.
+   */
+  it('draws a wall of empty shelves rather than declaring itself empty', async () => {
+    db.runSync('DELETE FROM items');
+    db.runSync('DELETE FROM bins');
+    const screen = await renderMap();
+
+    expect(screen.queryByText(/Nothing to draw yet/)).toBeNull();
+    expect(screen.getByText('Shelf A')).toBeTruthy();
+    expect(screen.getByText('Shelf B')).toBeTruthy();
+    // …and the controls that would let you fill them are still on screen.
+    expect(screen.getByLabelText('New bin on Shelf A')).toBeTruthy();
+  });
+
+  /**
+   * Holding a bin is a mode, and Android's back button is how you leave one.
+   * Without this the instinctive escape from an accidental lift was to leave
+   * the map entirely, losing your place on the wall.
+   */
+  it('hardware back puts the held bin down instead of leaving the map', async () => {
+    const handlers: (() => boolean)[] = [];
+    const spy = jest
+      .spyOn(BackHandler, 'addEventListener')
+      .mockImplementation((_event, handler) => {
+        handlers.push(handler as () => boolean);
+        return { remove: () => {} } as ReturnType<typeof BackHandler.addEventListener>;
+      });
+
+    try {
+      const screen = await renderMap();
+      // Nothing held: back is left alone, so the screen can be exited.
+      expect(handlers).toHaveLength(0);
+
+      await fireEvent(screen.getByTestId('map-cell-B-001'), 'longPress');
+      expect(screen.getByTestId('map-cancel-move')).toBeTruthy();
+      expect(handlers).toHaveLength(1);
+
+      // The handler claims the press rather than letting it navigate away…
+      let handled = false;
+      await act(async () => {
+        handled = handlers[handlers.length - 1]();
+      });
+      expect(handled).toBe(true);
+      // …and the bin is down.
+      expect(screen.queryByTestId('map-cancel-move')).toBeNull();
+    } finally {
+      spy.mockRestore();
     }
   });
 });

@@ -2,7 +2,16 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import {
+  Alert,
+  BackHandler,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from 'react-native';
 
 import { PromptModal, type PromptRequest } from '@/components/PromptModal';
 import { useDb } from '@/db/DbProvider';
@@ -34,6 +43,7 @@ import {
 import { logEvent } from '@/diagnostics/events';
 import { hapticShutter, hapticSuccess } from '@/lib/haptics';
 import { useFocusTick } from '@/lib/useFocusTick';
+import { DEFAULT_MAP_PREFS, loadMapPrefs, saveMapPrefs } from '@/settings/mapPrefs';
 import { colors, mono, radius, sp, type } from '@/theme';
 
 /**
@@ -92,7 +102,14 @@ export default function MapScreen() {
   const { highlight } = useLocalSearchParams<{ highlight?: string }>();
   const db = useDb();
   const router = useRouter();
-  useFocusTick();
+  // Refocusing has to recompute, not merely re-render. This return value used
+  // to be discarded while the memo below keyed only on a tick that map edits
+  // bumped — so a bin moved from bin detail, renamed, or deleted left the map
+  // drawing the arrangement it had cached on the way in. A deleted bin stayed
+  // as a cell that tapped through to "Bin not found". D21 puts the whole
+  // point plainly: a map that can drift from the filing answers "where is my
+  // X" with a lie. The blueprint was right; the render path was not.
+  const focusTick = useFocusTick();
 
   // Bumped after every mutation so the map redraws what the database says.
   const [tick, setTick] = useState(0);
@@ -105,7 +122,7 @@ export default function MapScreen() {
     const itemCounts = new Map(bins.map((b) => [b.id, itemsForBin(db, b.id).length]));
     return buildMap({ locations, shelves, bins, itemCounts });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [db, tick]);
+  }, [db, tick, focusTick]);
 
   const highlightIds = useMemo(
     () => (highlight ? highlight.split(',').filter(Boolean) : []),
@@ -121,7 +138,26 @@ export default function MapScreen() {
     [areas, held],
   );
 
-  const [heat, setHeat] = useState<HeatMode>('none');
+  const [heat, setHeat] = useState<HeatMode>(DEFAULT_MAP_PREFS.heat);
+  const [heatLoaded, setHeatLoaded] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void loadMapPrefs().then((prefs) => {
+      if (cancelled) return;
+      setHeat(prefs.heat);
+      setHeatLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  // Write back only once the load has landed, so the default cannot race
+  // ahead and overwrite what was stored.
+  useEffect(() => {
+    if (!heatLoaded) return;
+    void saveMapPrefs({ heat });
+  }, [heatLoaded, heat]);
+
   // Recomputed per render on purpose: staleness tints must not fossilize.
   const nowIso = new Date().toISOString();
 
@@ -152,12 +188,22 @@ export default function MapScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const areaYs = useRef<Record<string, number>>({});
   const rowYs = useRef<Record<string, number>>({});
+  // Cell offsets within their row. Without these the map scrolls to the top
+  // of a shelf, which on a wall whose bins wrap to five lines leaves the very
+  // cell you asked for below the fold — so "where is my X" delivers you to
+  // the right shelf and you hunt anyway, which is the hunting the feature
+  // exists to end. Row granularity was what arranging needed; answering needs
+  // cell granularity.
+  const cellYs = useRef<Record<string, number>>({});
   const scrolledOnce = useRef(false);
 
   const rowKey = (row: MapRow) => row.shelfId ?? 'unshelved';
 
-  const scrollToRow = useCallback((areaKey: string, key: string) => {
-    const y = (areaYs.current[areaKey] ?? 0) + (rowYs.current[key] ?? 0);
+  const scrollToCell = useCallback((areaKey: string, key: string, binId?: string) => {
+    const y =
+      (areaYs.current[areaKey] ?? 0) +
+      (rowYs.current[key] ?? 0) +
+      (binId ? cellYs.current[binId] ?? 0 : 0);
     scrollRef.current?.scrollTo({ y: Math.max(0, y - sp(6)), animated: true });
   }, []);
 
@@ -165,21 +211,22 @@ export default function MapScreen() {
     if (!focused || scrolledOnce.current) return;
     const areaKey = focused.area.locationId ?? 'unplaced';
     const key = rowKey(focused.row);
+    const binId = focused.cell.binId;
     // Give the rows one frame to report their layout before the first jump.
     const t = setTimeout(() => {
       scrolledOnce.current = true;
-      scrollToRow(areaKey, key);
+      scrollToCell(areaKey, key, binId);
     }, 120);
     return () => clearTimeout(t);
-  }, [focused, scrollToRow]);
+  }, [focused, scrollToCell]);
 
   const stepFocus = useCallback(() => {
     if (finds.length < 2) return;
     const next = (focusIndex + 1) % finds.length;
     setFocusIndex(next);
     const find = finds[next];
-    scrollToRow(find.area.locationId ?? 'unplaced', rowKey(find.row));
-  }, [finds, focusIndex, scrollToRow]);
+    scrollToCell(find.area.locationId ?? 'unplaced', rowKey(find.row), find.cell.binId);
+  }, [finds, focusIndex, scrollToCell]);
 
   // --------------------------------------------------------------- moving
   // A mirror of `held` that is readable synchronously, so a long press that
@@ -204,6 +251,25 @@ export default function MapScreen() {
     },
     [hold],
   );
+
+  /**
+   * Android hardware back puts the bin down rather than leaving the map.
+   *
+   * Holding a bin is a mode, and back is the system-wide gesture for leaving
+   * one. Without this the instinctive way out of a lift you did not mean to
+   * start was to exit the screen entirely — losing your place on the wall —
+   * and there was nothing else on a scrolled view offering an exit at all.
+   * Only registered while something is actually held, so ordinary back
+   * behaviour is untouched.
+   */
+  useEffect(() => {
+    if (!held) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      hold(null);
+      return true;
+    });
+    return () => sub.remove();
+  }, [held, hold]);
 
   const executeDrop = useCallback(
     (target: DropTarget) => {
@@ -318,25 +384,38 @@ export default function MapScreen() {
   };
 
   const total = mapSize(areas);
+  // `mapSize` counts bins, and this gate used to test that alone — so a
+  // workshop of four empty shelves scored zero and got one grey sentence,
+  // even though `buildMap` deliberately keeps empty shelves on the grounds
+  // that "hiding it would make the picture lie". It also took the map's own
+  // add-shelf and new-bin controls with it, leaving a screen with nothing to
+  // press. The wall is worth drawing before anything is on it.
+  const rowCount = areas.reduce((n, area) => n + area.rows.length, 0);
 
-  if (total === 0) {
+  if (total === 0 && rowCount === 0) {
     return (
       <ScrollView contentContainerStyle={styles.center}>
         <Stack.Screen options={{ title: 'Map' }} />
         <Text style={styles.dim}>
-          Nothing to draw yet. Once you have a bin or two, this shows them laid out by shelf.
+          Nothing to draw yet. Add a shelf in Browse, or photograph a bin, and the wall shows up
+          here laid out the way it is filed.
         </Text>
       </ScrollView>
     );
   }
 
   return (
-    <>
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.container}>
-        <Stack.Screen options={{ title: 'Map' }} />
-
-        {held ? (
-          <View style={[styles.banner, styles.bannerHold]}>
+    <View style={styles.screen}>
+      <Stack.Screen options={{ title: 'Map' }} />
+      {/*
+        The banner sits OUTSIDE the ScrollView on purpose. It used to be an
+        ordinary scrolling child, so the moment you scrolled to the shelf you
+        were aiming for, the label naming the bin in your hand and the only
+        cancel button both left the screen. A mode needs chrome that stays
+        put — that is most of what separates a mode from a mystery.
+      */}
+      {held ? (
+          <View style={[styles.banner, styles.bannerFixed, styles.bannerHold]}>
             <Ionicons name="move" size={18} color={colors.amber} />
             <View style={styles.bannerText}>
               <Text style={styles.bannerName} numberOfLines={1}>
@@ -350,7 +429,7 @@ export default function MapScreen() {
               onPress={() => hold(null)}
               accessibilityRole="button"
               accessibilityLabel="Cancel the move"
-              hitSlop={8}
+              hitSlop={12}
               testID="map-cancel-move"
             >
               <Ionicons name="close-circle" size={22} color={colors.textDim} />
@@ -358,7 +437,7 @@ export default function MapScreen() {
           </View>
         ) : highlightIds.length > 0 ? (
           focused ? (
-            <View style={styles.banner}>
+            <View style={[styles.banner, styles.bannerFixed]}>
               <Ionicons name="locate" size={18} color={colors.amber} />
               <View style={styles.bannerText}>
                 <Text style={styles.bannerName} numberOfLines={1}>
@@ -374,6 +453,7 @@ export default function MapScreen() {
                   onPress={stepFocus}
                   accessibilityRole="button"
                   accessibilityLabel={`Match ${focusIndex + 1} of ${finds.length}. Show the next one`}
+                  hitSlop={12}
                   testID="map-next-match"
                 >
                   <Text style={styles.nextCount}>
@@ -384,7 +464,7 @@ export default function MapScreen() {
               ) : null}
             </View>
           ) : (
-            <View style={styles.banner}>
+            <View style={[styles.banner, styles.bannerFixed]}>
               <Ionicons name="help-circle-outline" size={18} color={colors.textDim} />
               <Text style={styles.bannerWhere}>
                 {highlightIds.length === 1 ? 'That bin is not on the map.' : 'Those bins are not on the map.'}
@@ -393,6 +473,7 @@ export default function MapScreen() {
           )
         ) : null}
 
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.container}>
         <View style={styles.heatBar}>
           <Text style={styles.heatLabel}>Tint</Text>
           {(
@@ -408,6 +489,7 @@ export default function MapScreen() {
               onPress={() => setHeat(mode)}
               accessibilityRole="button"
               accessibilityLabel={`Tint cells by ${label}`}
+              hitSlop={8}
               testID={`map-heat-${mode}`}
             >
               <Text style={[styles.heatChipText, heat === mode && styles.heatChipTextOn]}>
@@ -441,7 +523,7 @@ export default function MapScreen() {
                     onPress={() => promptAddShelf(area.locationId!, area.name)}
                     accessibilityRole="button"
                     accessibilityLabel={`Add a shelf to ${area.name}`}
-                    hitSlop={8}
+                    hitSlop={12}
                     testID={`map-add-shelf-${areaKey}`}
                   >
                     <Ionicons name="add-circle-outline" size={18} color={colors.textDim} />
@@ -507,6 +589,9 @@ export default function MapScreen() {
                           heatStyle={tint(heatTier(cell, heat, nowIso), heat)}
                           onPress={() => onCellPress(cell, row)}
                           onLongPress={() => lift(cell.binId)}
+                          onLayout={(y) => {
+                            cellYs.current[cell.binId] = y;
+                          }}
                         />
                       ))}
                       {Array.from({ length: gaps }, (_, i) => (
@@ -560,7 +645,13 @@ export default function MapScreen() {
         </Text>
       </ScrollView>
       {undo && (
-        <View style={styles.snackbar} testID="map-undo-snackbar">
+        // box-none so only the label and UNDO themselves take touches. This
+        // is a full-width bar pinned across the bottom of a live map for six
+        // seconds, and it used to swallow every tap in that band — so the
+        // first thing you hit when a cell "would not respond" was UNDO, which
+        // reversed the move you had just made. The content padding below
+        // keeps cells out from under it in the first place.
+        <View style={styles.snackbar} pointerEvents="box-none" testID="map-undo-snackbar">
           <Text style={styles.snackbarText} numberOfLines={1}>
             {undo.label}
           </Text>
@@ -580,7 +671,7 @@ export default function MapScreen() {
         </View>
       )}
       <PromptModal request={prompt} onClose={() => setPrompt(null)} />
-    </>
+    </View>
   );
 }
 
@@ -629,6 +720,7 @@ function Cell({
   heatStyle,
   onPress,
   onLongPress,
+  onLayout,
 }: {
   cell: MapCell;
   found: boolean;
@@ -638,12 +730,15 @@ function Cell({
   heatStyle: ViewStyle | null;
   onPress: () => void;
   onLongPress: () => void;
+  /** Offset within its row, so a search can scroll to the cell not the shelf. */
+  onLayout: (y: number) => void;
 }) {
   const loud = focusedCell || heldCell;
   return (
     <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
+      onLayout={(e) => onLayout(e.nativeEvent.layout.y)}
       style={[
         styles.cell,
         cell.empty && styles.cellEmpty,
@@ -693,9 +788,12 @@ function Cell({
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.bg },
   container: {
     padding: sp(4),
-    paddingBottom: sp(12),
+    // Room for the undo snackbar, which is pinned over this content. Without
+    // it the bottom row of cells sits underneath the bar.
+    paddingBottom: sp(20),
     gap: sp(4),
     backgroundColor: colors.bg,
     flexGrow: 1,
@@ -730,16 +828,27 @@ const styles = StyleSheet.create({
     padding: sp(3),
   },
   bannerHold: { borderStyle: 'dashed' },
+  // Its own spacing, since it is no longer inside the scroll content's gap.
+  bannerFixed: { marginHorizontal: sp(4), marginTop: sp(4) },
   bannerText: { flex: 1, gap: 2 },
   bannerName: { color: colors.amber, fontFamily: mono, fontSize: 14 },
   bannerWhere: { color: colors.textDim, fontSize: 12 },
-  nextButton: { flexDirection: 'row', alignItems: 'center', gap: sp(1.5) },
+  nextButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(1.5),
+    // Was ~48x20dp — the smallest control on the screen, and the one you tap
+    // repeatedly to walk a multi-bin search result.
+    paddingHorizontal: sp(2),
+    paddingVertical: sp(2),
+  },
   nextCount: { color: colors.amber, fontFamily: mono, fontSize: 12 },
   heatBar: { flexDirection: 'row', alignItems: 'center', gap: sp(2) },
   heatLabel: { ...type.stamp },
   heatChip: {
-    paddingHorizontal: sp(2.5),
-    paddingVertical: sp(1),
+    paddingHorizontal: sp(3),
+    // ~26dp before; a work glove needs more than that.
+    paddingVertical: sp(2),
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.chipBorder,
