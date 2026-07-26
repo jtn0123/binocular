@@ -101,42 +101,34 @@ jobs:
           # Gradle fetches the platform and build-tools it actually needs.
           packages: ''
 
-      # Two caches, because the two halves of ~/.gradle want opposite keys.
+      # Gradle re-executed all 956 tasks on every run because this cached only
+      # ~/.gradle/caches — downloaded *dependencies*, not task outputs. With
+      # org.gradle.caching on (plugins/withBuildPerformance.js) those outputs
+      # land in ~/.gradle/caches/build-cache-1, inside the path below.
       #
-      # Caching all of it under one run-id key wrote a 2.27 GB entry on EVERY
-      # run — 40s to restore, 50s to save — and against GitHub's 10 GB per-repo
-      # quota only about four builds fit before eviction started throwing away
-      # the npm and jest caches too.
+      # The key must be unique per run: actions/cache skips saving entirely on
+      # an exact key hit ("Cache hit occurred on the primary key … not saving
+      # cache"), so a fixed key would restore an empty build cache and then
+      # discard everything the run just computed, forever.
       #
-      # Dependencies change only with the lockfile, so they key on it and are
-      # written once. `transforms-*` and `jars-*` sit here rather than being
-      # dropped: they are Android artifact transforms derived from those same
-      # dependencies and expensive to rebuild, and the first cut of this split
-      # omitted them — which would have cost time on EVERY run, not just the
-      # first.
-      #
-      # Task outputs (build-cache-1, populated because org.gradle.caching is on
-      # via plugins/withBuildPerformance.js) are what the run actually computes,
-      # so they keep a run-id suffix: actions/cache skips saving entirely on an
-      # exact key hit, and a fixed key would restore an empty build cache and
-      # then discard everything the run just computed, forever.
+      # This is deliberately the WHOLE caches directory, after splitting it up
+      # was tried and measured worse. modules-2 / transforms-* / jars-* are the
+      # obvious contents, but ~/.gradle/caches/<version>/ also holds
+      # executionHistory and fileHashes — Gradle's up-to-date checking database.
+      # Without those Gradle cannot tell which tasks are current, so it re-runs
+      # them even when build-cache-1 has the outputs, and assembleRelease went
+      # from 13m44s to over 20 minutes. The 2.27 GB entry is the price of a
+      # fast build; if it needs shrinking, shrink it by measuring, not by
+      # guessing which directories look like junk.
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.gradle/caches/modules-2
-            ~/.gradle/caches/transforms-*
-            ~/.gradle/caches/jars-*
+            ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-deps-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'plugins/**') }}
-          restore-keys: gradle-deps-${{ runner.os }}-
-
-      - uses: actions/cache@v4
-        with:
-          path: ~/.gradle/caches/build-cache-1
-          key: gradle-build-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'plugins/**') }}-${{ github.run_id }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'plugins/**') }}-${{ github.run_id }}
           restore-keys: |
-            gradle-build-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'plugins/**') }}-
-            gradle-build-${{ runner.os }}-
+            gradle-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'plugins/**') }}-
+            gradle-${{ runner.os }}-
 
       - run: npm ci
 
