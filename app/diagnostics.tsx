@@ -333,7 +333,9 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: sp(3) },
   toggleMain: { flex: 1, gap: 2 },
   toggleLabel: { color: colors.text, fontWeight: '600', fontSize: 15 },
-  buttonRow: { flexDirection: 'row', gap: sp(2.5) },
+  // Wraps: at large Android font scale a three-button row runs off the
+  // right edge, and Clear log was the one that went.
+  buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: sp(2.5) },
   primaryButton: {
     backgroundColor: colors.amber,
     paddingHorizontal: sp(4.5),
