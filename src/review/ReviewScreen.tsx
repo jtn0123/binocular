@@ -17,8 +17,8 @@ import { CodeTag } from '../components/CodeTag';
 import { PromptModal, type PromptRequest } from '../components/PromptModal';
 import { useDb } from '../db/DbProvider';
 import {
-  deleteItem,
-  deleteItemsForBin,
+  softDeleteItemInTransaction,
+  softDeleteItemsForBinInTransaction,
   getBin,
   getScan,
   insertItem,
@@ -299,7 +299,7 @@ export function ReviewScreen({
           insertChip(binId, chip);
         }
       } else if (mode === 'replace') {
-        deleteItemsForBin(db, binId);
+        softDeleteItemsForBinInTransaction(db, binId);
         for (const chip of chips.filter((c) => c.selected)) {
           insertChip(binId, chip);
         }
@@ -308,10 +308,10 @@ export function ReviewScreen({
           insertChip(binId, chip);
         }
         for (const chip of stillHere.filter((c) => !c.selected)) {
-          if (chip.matchedExistingId) deleteItem(db, chip.matchedExistingId);
+          if (chip.matchedExistingId) softDeleteItemInTransaction(db, chip.matchedExistingId);
         }
         for (const item of notSeen) {
-          if (!keepExisting[item.id]) deleteItem(db, item.id);
+          if (!keepExisting[item.id]) softDeleteItemInTransaction(db, item.id);
         }
       }
       updateScanStatus(db, scanId, 'confirmed', { resolvedAt: nowIso() });
@@ -433,7 +433,14 @@ export function ReviewScreen({
               onToggle={toggleChip}
               onEdit={setEditingKey}
             />
-            <ChipSection title="Still here" chips={stillHere} onToggle={toggleChip} onEdit={null} />
+            <ChipSection
+              title="Still here"
+              chips={stillHere}
+              onToggle={toggleChip}
+              onEdit={null}
+              deselectMeans="delete"
+              hint="Already in the bin. Unticking one removes it — recoverable from Recently deleted for 30 days."
+            />
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Not seen in this photo</Text>
               {notSeen.length === 0 ? (
@@ -595,15 +602,29 @@ function ChipSection({
   chips,
   onToggle,
   onEdit,
+  /**
+   * What deselecting a chip actually does.
+   *
+   * 'skip' declines to add something new; 'delete' removes an item the bin
+   * already holds. These were drawn identically, so the same grey chip meant
+   * "never mind" in one section and "delete this" one heading below — the
+   * only difference being which list it happened to be in.
+   */
+  deselectMeans = 'skip',
+  hint,
 }: {
   title: string;
   chips: DetectedChip[];
   onToggle: (key: string) => void;
   onEdit: ((key: string) => void) | null;
+  deselectMeans?: 'skip' | 'delete';
+  hint?: string;
 }) {
+  const destructive = deselectMeans === 'delete';
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
+      {hint ? <Text style={styles.dim}>{hint}</Text> : null}
       {chips.length === 0 ? (
         <Text style={styles.dim}>Nothing here.</Text>
       ) : (
@@ -613,19 +634,34 @@ function ChipSection({
               key={chip.key}
               testID={`chip-${chip.key}`}
               accessibilityState={{ selected: chip.selected }}
-              style={[styles.chip, !chip.selected && styles.chipUnselected]}
+              accessibilityLabel={
+                destructive && !chip.selected
+                  ? `${chip.name} — will be removed from the bin. Tap to keep it`
+                  : undefined
+              }
+              style={[
+                styles.chip,
+                !chip.selected && (destructive ? styles.chipRemoved : styles.chipUnselected),
+              ]}
               onPress={() => onToggle(chip.key)}
               onLongPress={onEdit ? () => onEdit(chip.key) : undefined}
             >
               {chip.confidence === 'medium' && <View style={styles.amberDot} testID="amber-dot" />}
-              <Text style={[styles.chipText, !chip.selected && styles.chipTextUnselected]}>
+              <Text
+                style={[
+                  styles.chipText,
+                  !chip.selected && (destructive ? styles.chipTextRemoved : styles.chipTextUnselected),
+                ]}
+              >
                 {chip.quantity > 1 ? `${chip.quantity}× ` : ''}
                 {chip.brand ? `${chip.brand} ` : ''}
                 {chip.name}
               </Text>
-              {chip.confidence === 'low' && !chip.selected && (
+              {destructive && !chip.selected ? (
+                <Text style={styles.chipMeta}>tap to keep</Text>
+              ) : chip.confidence === 'low' && !chip.selected ? (
                 <Text style={styles.chipMeta}>tap to include</Text>
-              )}
+              ) : null}
             </Pressable>
           ))}
         </View>

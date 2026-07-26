@@ -523,20 +523,50 @@ export interface DeletedItemRow {
   deleted_at: string;
 }
 
+/**
+ * Snapshot into deleted_items, then really delete (D17).
+ *
+ * Deliberately NOT wrapped in a transaction of its own: the review save
+ * writes a whole scan's worth of changes atomically and would otherwise be
+ * nesting one, which expo-sqlite cannot do — its `withTransactionSync` issues
+ * a real BEGIN. Callers that are not already in a transaction should use
+ * `softDeleteItem`.
+ */
+function snapshotAndDeleteItem(db: DbAdapter, itemId: string): void {
+  db.runSync(
+    `INSERT OR REPLACE INTO deleted_items
+     (id, bin_id, name, brand, category, quantity, label_text, photo_uri,
+      notes, low_stock_threshold, source_scan_id, created_at, deleted_at)
+     SELECT id, bin_id, name, brand, category, quantity, label_text, photo_uri,
+            notes, low_stock_threshold, source_scan_id, created_at, ?
+     FROM items WHERE id = ?`,
+    [nowIso(), itemId],
+  );
+  db.runSync('DELETE FROM items WHERE id = ?', [itemId]);
+}
+
 /** Delete = snapshot into deleted_items, then really delete (D17). */
 export function softDeleteItem(db: DbAdapter, itemId: string): void {
-  db.withTransactionSync(() => {
-    db.runSync(
-      `INSERT OR REPLACE INTO deleted_items
-       (id, bin_id, name, brand, category, quantity, label_text, photo_uri,
-        notes, low_stock_threshold, source_scan_id, created_at, deleted_at)
-       SELECT id, bin_id, name, brand, category, quantity, label_text, photo_uri,
-              notes, low_stock_threshold, source_scan_id, created_at, ?
-       FROM items WHERE id = ?`,
-      [nowIso(), itemId],
-    );
-    db.runSync('DELETE FROM items WHERE id = ?', [itemId]);
-  });
+  db.withTransactionSync(() => snapshotAndDeleteItem(db, itemId));
+}
+
+/**
+ * D17-covered delete for callers already inside a transaction.
+ *
+ * The review save used raw `deleteItem`/`deleteItemsForBin`, which meant the
+ * largest deletions in the app — every item a replace-mode save wipes, every
+ * "still here" chip deselected, every unseen item not explicitly kept — were
+ * the only ones in the app with no snapshot and no 30-day restore. D17 says
+ * inventory is recoverable; those paths quietly were not.
+ */
+export function softDeleteItemInTransaction(db: DbAdapter, itemId: string): void {
+  snapshotAndDeleteItem(db, itemId);
+}
+
+/** Every item in a bin, snapshotted first. Same transaction contract. */
+export function softDeleteItemsForBinInTransaction(db: DbAdapter, binId: string): void {
+  const rows = db.getAllSync<{ id: string }>('SELECT id FROM items WHERE bin_id = ?', [binId]);
+  for (const row of rows) snapshotAndDeleteItem(db, row.id);
 }
 
 export function listDeletedItems(db: DbAdapter): DeletedItemRow[] {
