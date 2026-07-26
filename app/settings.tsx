@@ -90,23 +90,54 @@ function KeySection({
         secureTextEntry
       />
       <View style={styles.buttonRow}>
+        {/*
+          This button used to relabel itself "Clear key" whenever the input
+          was empty — which is its state on every single open. The largest,
+          amber, primary control on the screen therefore defaulted to deleting
+          a write-only secret, with no confirmation, and then reported "Saved".
+          Saving and clearing are now separate: this one only ever saves, and
+          is inert with nothing to save.
+        */}
         <Pressable
-          style={styles.primaryButton}
+          style={[styles.primaryButton, !keyInput.trim() && styles.disabled]}
+          disabled={!keyInput.trim()}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !keyInput.trim() }}
+          accessibilityLabel={`Save the ${title}`}
+          testID="key-save"
           onPress={async () => {
             await onSave(keyInput);
             setKeyInput('');
           }}
         >
-          <Text style={styles.primaryLabel}>{keyInput.trim() ? 'Save key' : 'Clear key'}</Text>
+          <Text style={styles.primaryLabel}>Save key</Text>
         </Pressable>
         <Pressable
           style={[styles.secondaryButton, testing && styles.disabled]}
           disabled={testing}
+          accessibilityRole="button"
+          accessibilityLabel={`Test the ${title}`}
+          testID="key-test"
           onPress={async () => {
             setTesting(true);
             try {
               await onTest(keyInput.trim());
-              Alert.alert('Success', 'The API key works.');
+              // "It works" and "it is saved" are different facts, and this
+              // used to report the first as though it were both.
+              if (keyInput.trim()) {
+                Alert.alert('The key works', 'It has not been saved yet.', [
+                  { text: 'Not now', style: 'cancel' },
+                  {
+                    text: 'Save key',
+                    onPress: async () => {
+                      await onSave(keyInput);
+                      setKeyInput('');
+                    },
+                  },
+                ]);
+              } else {
+                Alert.alert('Success', 'The stored key works.');
+              }
             } catch (err) {
               Alert.alert('Connection failed', err instanceof Error ? err.message : String(err));
             } finally {
@@ -117,6 +148,33 @@ function KeySection({
           <Text style={styles.secondaryLabel}>{testing ? 'Testing…' : 'Test connection'}</Text>
         </Pressable>
       </View>
+      {hasStoredKey ? (
+        <Pressable
+          style={styles.dangerButton}
+          accessibilityRole="button"
+          accessibilityLabel={`Clear the stored ${title}`}
+          testID="key-clear"
+          onPress={() =>
+            Alert.alert(
+              'Clear the stored key?',
+              'Cloud recognition stops working until you enter a new one. A stored key cannot be read back, so you would have to paste it in again.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Clear key',
+                  style: 'destructive',
+                  onPress: async () => {
+                    await onSave('');
+                    setKeyInput('');
+                  },
+                },
+              ],
+            )
+          }
+        >
+          <Text style={styles.dangerLabel}>Clear key</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -293,7 +351,12 @@ export default function SettingsScreen() {
           setHasAnthropicKey(present);
           // Boolean only — key material never touches the log.
           logEvent(db, { kind: 'settings', name: 'key_changed', detail: { engine: 'claude', present } });
-          Alert.alert('Saved', 'Anthropic key updated in the secure store.');
+          Alert.alert(
+            present ? 'Saved' : 'Cleared',
+            present
+              ? 'Anthropic key updated in the secure store.'
+              : 'The Anthropic key has been removed from the secure store.',
+          );
         }}
         onTest={async (entered) => {
           const key = entered || (await getApiKey());
@@ -312,7 +375,12 @@ export default function SettingsScreen() {
           setHasOpenAiKey(present);
           // Boolean only — key material never touches the log.
           logEvent(db, { kind: 'settings', name: 'key_changed', detail: { engine: 'openai', present } });
-          Alert.alert('Saved', 'OpenAI key updated in the secure store.');
+          Alert.alert(
+            present ? 'Saved' : 'Cleared',
+            present
+              ? 'OpenAI key updated in the secure store.'
+              : 'The OpenAI key has been removed from the secure store.',
+          );
         }}
         onTest={async (entered) => {
           const key = entered || (await getOpenAiApiKey());
@@ -580,7 +648,18 @@ const styles = StyleSheet.create({
     padding: sp(3),
     fontSize: 15,
   },
-  buttonRow: { flexDirection: 'row', gap: sp(2.5) },
+  // Wraps because Android font scale can push a two-button row off the right
+  // edge, and a button you cannot see is a button you cannot press.
+  buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: sp(2.5) },
+  dangerButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: colors.dangerDim,
+    paddingHorizontal: sp(4.5),
+    paddingVertical: sp(3),
+    borderRadius: radius.md,
+  },
+  dangerLabel: { color: colors.danger, fontWeight: '600' },
   primaryButton: {
     backgroundColor: colors.amber,
     paddingHorizontal: sp(4.5),

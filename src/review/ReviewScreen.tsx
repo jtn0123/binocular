@@ -206,6 +206,36 @@ export function ReviewScreen({
     );
   }
 
+  /**
+   * Re-run recognition and take the result.
+   *
+   * Both retry buttons call this. They used not to: the queued-path button
+   * rebuilt the chips from the fresh `raw_response`, and the failed-path one
+   * simply awaited `processScan` and dropped what came back. `chips` was
+   * seeded once by a `useState` initializer, while `raw_response` was still
+   * null, so a retry that *succeeded* left the screen holding an empty list —
+   * and the draft effect above then persisted `chips: []`, making the loss
+   * survive a remount. Recognition you paid for twice should not be thrown
+   * away the second time.
+   */
+  async function retryRecognition() {
+    setRetrying(true);
+    try {
+      const r = await processScan(db, scanId);
+      if (r.outcome !== 'review') return;
+      const fresh = getScan(db, scanId);
+      if (!fresh?.raw_response) return;
+      try {
+        const result = RecognitionResult.parse(JSON.parse(fresh.raw_response));
+        setChips(buildDetectedChips(result, existingItems, knownTags, suggestFromHistory));
+      } catch {
+        // Unreadable response: leave the failed state for the next render.
+      }
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   if (scan.status === 'queued' || scan.status === 'processing' || retrying) {
     return (
       <View style={styles.center}>
@@ -214,27 +244,7 @@ export function ReviewScreen({
           {retrying ? 'Recognizing…' : 'Waiting for recognition — retry when you have signal.'}
         </Text>
         {!retrying && (
-          <Pressable
-            style={styles.primaryButton}
-            onPress={async () => {
-              setRetrying(true);
-              const r = await processScan(db, scanId);
-              setRetrying(false);
-              if (r.outcome === 'review') {
-                const fresh = getScan(db, scanId);
-                if (fresh?.raw_response) {
-                  try {
-                    const result = RecognitionResult.parse(JSON.parse(fresh.raw_response));
-                    setChips(
-                      buildDetectedChips(result, existingItems, knownTags, suggestFromHistory),
-                    );
-                  } catch {
-                    // fall through to failed state on next render
-                  }
-                }
-              }
-            }}
-          >
+          <Pressable style={styles.primaryButton} onPress={retryRecognition} testID="review-retry-queued">
             <Text style={styles.primaryLabel}>Retry now</Text>
           </Pressable>
         )}
@@ -250,14 +260,7 @@ export function ReviewScreen({
       <View style={styles.center}>
         <Text style={styles.errorTitle}>Recognition failed</Text>
         <Text style={styles.dim}>{scan.error ?? 'The response could not be read.'}</Text>
-        <Pressable
-          style={styles.primaryButton}
-          onPress={async () => {
-            setRetrying(true);
-            await processScan(db, scanId);
-            setRetrying(false);
-          }}
-        >
+        <Pressable style={styles.primaryButton} onPress={retryRecognition} testID="review-retry-failed">
           <Text style={styles.primaryLabel}>Retry</Text>
         </Pressable>
         <Pressable onPress={() => discard()}>

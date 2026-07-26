@@ -43,7 +43,7 @@ export default function BinPhotoScreen() {
     hapticShutter();
     try {
       const photo = await cameraRef.current.takePictureAsync();
-      const stored = persistPhoto(photo.uri, `cover-${bin.id}`);
+      const stored = persistPhoto(photo.uri, `cover-${bin.id}`, bin.cover_photo_uri);
       setBinCoverPhoto(db, bin.id, stored);
       router.back();
     } catch (err) {
