@@ -31,6 +31,7 @@ import {
   renameShelf,
   setShelfCapacity,
 } from '@/db/queries';
+import { logEvent } from '@/diagnostics/events';
 import { hapticShutter, hapticSuccess } from '@/lib/haptics';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { colors, mono, radius, sp, type } from '@/theme';
@@ -197,6 +198,18 @@ export default function MapScreen() {
       }
       const commit = () => {
         placeBin(db, { binId: plan.binId, shelfId: plan.shelfId, orderedIds: plan.orderedIds });
+        // "That bin is not where I left it" needs an answer, and the move
+        // writes the same shelf_id everything else reads — so without this
+        // there is no trace of it having happened here.
+        logEvent(db, {
+          kind: 'organize',
+          name: plan.crossShelf ? 'bin_moved' : 'bin_reordered',
+          detail: {
+            bin: heldFind?.cell.code ?? plan.binId,
+            to: plan.place,
+            position: plan.orderedIds.indexOf(plan.binId),
+          },
+        });
         hapticSuccess();
         hold(null);
         bump();

@@ -110,15 +110,31 @@ jobs:
       # an exact key hit ("Cache hit occurred on the primary key … not saving
       # cache"), so a fixed key would restore an empty build cache and then
       # discard everything the run just computed, forever.
+      # Split deliberately. Caching all of ~/.gradle/caches under a run-id key
+      # wrote a 2.27 GB entry on EVERY run — 40s to restore, 50s to save, and
+      # against GitHub's 10 GB per-repo quota only about four builds fit before
+      # eviction started throwing away the npm and jest caches too.
+      #
+      # Downloaded dependencies are large and change only with the lockfile, so
+      # they get a stable key and are written once. Task outputs are what the
+      # run actually computes, so they keep the run-id suffix: actions/cache
+      # skips saving on an exact key hit, and a fixed key there would restore
+      # an empty build cache and discard the run's work forever.
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.gradle/caches
+            ~/.gradle/caches/modules-2
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'plugins/**') }}-${{ github.run_id }}
+          key: gradle-deps-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'plugins/**') }}
+          restore-keys: gradle-deps-${{ runner.os }}-
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches/build-cache-1
+          key: gradle-build-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'plugins/**') }}-${{ github.run_id }}
           restore-keys: |
-            gradle-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'plugins/**') }}-
-            gradle-${{ runner.os }}-
+            gradle-build-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'plugins/**') }}-
+            gradle-build-${{ runner.os }}-
 
       - run: npm ci
 

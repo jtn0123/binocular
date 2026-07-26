@@ -24,7 +24,13 @@ export type EventKind =
   | 'crash'
   | 'settings'
   /** D20 visual memory: what the encoder did, and what it nearly matched. */
-  | 'memory';
+  | 'memory'
+  /**
+   * D21: a bin was moved or reordered on the map. "That bin is not where I
+   * left it" is otherwise unanswerable — the map writes the same `shelf_id`
+   * every breadcrumb reads, so a mistaken drop leaves no other trace.
+   */
+  | 'organize';
 
 export interface EventInput {
   kind: EventKind;

@@ -33,6 +33,8 @@ const KIND_COLOR: Record<string, string> = {
   scan: colors.amber,
   queue: colors.steel,
   memory: colors.steel,
+  // D21: a bin changing shelves is an inventory edit, so it reads as one.
+  organize: colors.amber,
 };
 
 function EventLine({ event }: { event: EventRow }) {

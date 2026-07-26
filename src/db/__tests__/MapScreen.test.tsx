@@ -15,6 +15,7 @@ import {
   type ShelfRow,
 } from '../../db/queries';
 import { runMigrations } from '../../db/schema';
+import { listEvents, setLoggingEnabled } from '../../diagnostics/events';
 
 // Reanimated reaches for the native worklets module on import, which does not
 // exist under jest — and its own shipped mock re-enters that same path. The
@@ -88,6 +89,7 @@ describe('the map screen, driven by presses', () => {
     mockParams = {};
     db = createNodeAdapter(':memory:');
     runMigrations(db);
+    setLoggingEnabled(true);
     const garage = createLocation(db, { name: 'Garage' });
     shelfA = createShelf(db, { locationId: garage.id, name: 'Shelf A' });
     shelfB = createShelf(db, { locationId: garage.id, name: 'Shelf B' });
@@ -162,6 +164,18 @@ describe('the map screen, driven by presses', () => {
       const codes = ['B-001', 'B-002'].map((c) => reopened.getByTestId(`map-cell-${c}`));
       expect(codes).toHaveLength(2);
       expect(getBin(db, bins[1].id)?.sort_order).toBe(0);
+    });
+
+    it('records the move, so an unexpected one can be traced', async () => {
+      // The map writes the same shelf_id every breadcrumb reads, so without
+      // this there is no evidence a bin was moved here rather than anywhere.
+      const screen = await renderMap();
+      await fireEvent(screen.getByTestId('map-cell-B-002'), 'longPress');
+      await fireEvent.press(screen.getByTestId('map-cell-B-001'));
+
+      const move = listEvents(db, 20).find((e) => e.kind === 'organize');
+      expect(move?.name).toBe('bin_reordered');
+      expect(JSON.parse(move?.detail ?? '{}')).toMatchObject({ bin: 'B-002', position: 0 });
     });
 
     it('dropping onto a free slot fills the gap', async () => {
