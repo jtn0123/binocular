@@ -2,6 +2,9 @@ import { createNodeAdapter, type NodeDbAdapter } from '../nodeAdapter';
 import {
   createBin,
   createBinsBulk,
+  getShelf,
+  placeBin,
+  setShelfCapacity,
   createLocation,
   createShelf,
   deleteBinIfEmpty,
@@ -139,6 +142,71 @@ describe('organization CRUD (blueprint Stage 2)', () => {
         [scan.id],
       );
       expect(remaining?.bin_id).toBeNull();
+    });
+  });
+
+  describe('map arrangement (D21)', () => {
+    it('new bins join the end of their shelf, in creation order', () => {
+      const loc = createLocation(db, { name: 'Garage' });
+      const shelf = createShelf(db, { locationId: loc.id, name: 'A' });
+      // Codes deliberately out of order: the stored order must win.
+      createBin(db, { name: 'x', shortCode: 'B-007', shelfId: shelf.id });
+      createBin(db, { name: 'y', shortCode: 'B-002', shelfId: shelf.id });
+      expect(listBinsForShelf(db, shelf.id).map((b) => b.short_code)).toEqual(['B-007', 'B-002']);
+    });
+
+    it('placeBin rewrites a shelf order', () => {
+      const loc = createLocation(db, { name: 'Garage' });
+      const shelf = createShelf(db, { locationId: loc.id, name: 'A' });
+      const [a, b, c] = createBinsBulk(db, { count: 3, shelfId: shelf.id });
+      placeBin(db, { binId: c.id, shelfId: shelf.id, orderedIds: [c.id, a.id, b.id] });
+      expect(listBinsForShelf(db, shelf.id).map((x) => x.id)).toEqual([c.id, a.id, b.id]);
+    });
+
+    it('placeBin re-homes a bin across shelves at the dropped position', () => {
+      const loc = createLocation(db, { name: 'Garage' });
+      const shelfA = createShelf(db, { locationId: loc.id, name: 'A' });
+      const shelfB = createShelf(db, { locationId: loc.id, name: 'B' });
+      const [a1, a2] = createBinsBulk(db, { count: 2, shelfId: shelfA.id });
+      const [b1] = createBinsBulk(db, { count: 1, shelfId: shelfB.id });
+
+      placeBin(db, { binId: a1.id, shelfId: shelfB.id, orderedIds: [a1.id, b1.id] });
+
+      expect(getBin(db, a1.id)?.shelf_id).toBe(shelfB.id);
+      expect(listBinsForShelf(db, shelfB.id).map((x) => x.id)).toEqual([a1.id, b1.id]);
+      // The shelf left behind keeps its own order without rewriting.
+      expect(listBinsForShelf(db, shelfA.id).map((x) => x.id)).toEqual([a2.id]);
+    });
+
+    it('moveBinToShelf appends to the destination order, not the front', () => {
+      const loc = createLocation(db, { name: 'Garage' });
+      const shelfA = createShelf(db, { locationId: loc.id, name: 'A' });
+      const shelfB = createShelf(db, { locationId: loc.id, name: 'B' });
+      const [a1] = createBinsBulk(db, { count: 1, shelfId: shelfA.id });
+      const [b1, b2] = createBinsBulk(db, { count: 2, shelfId: shelfB.id });
+
+      moveBinToShelf(db, a1.id, shelfB.id);
+      expect(listBinsForShelf(db, shelfB.id).map((x) => x.id)).toEqual([b1.id, b2.id, a1.id]);
+    });
+
+    it('shelf capacity is set, read back, and cleared', () => {
+      const loc = createLocation(db, { name: 'Garage' });
+      const shelf = createShelf(db, { locationId: loc.id, name: 'A' });
+      expect(getShelf(db, shelf.id)?.capacity).toBeNull();
+      setShelfCapacity(db, shelf.id, 8);
+      expect(getShelf(db, shelf.id)?.capacity).toBe(8);
+      setShelfCapacity(db, shelf.id, null);
+      expect(getShelf(db, shelf.id)?.capacity).toBeNull();
+    });
+
+    it('bins that predate the arrangement migration keep their short-code order', () => {
+      // Simulate migration-010 rows: everything at sort_order 0.
+      const loc = createLocation(db, { name: 'Garage' });
+      const shelf = createShelf(db, { locationId: loc.id, name: 'A' });
+      createBin(db, { name: 'x', shortCode: 'B-002', shelfId: shelf.id });
+      createBin(db, { name: 'y', shortCode: 'B-001', shelfId: shelf.id });
+      db.runSync('UPDATE bins SET sort_order = 0');
+      expect(listBinsForShelf(db, shelf.id).map((b) => b.short_code)).toEqual(['B-001', 'B-002']);
     });
   });
 

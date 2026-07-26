@@ -38,6 +38,8 @@ const ShelfRowSchema = z.object({
   location_id: z.string().min(1),
   name: z.string(),
   created_at: z.string(),
+  // Pre-D21 backups lack the arrangement fields — default them.
+  capacity: z.number().int().nullable().default(null),
 });
 
 const BinRowSchema = z.object({
@@ -48,6 +50,8 @@ const BinRowSchema = z.object({
   cover_photo_uri: z.string().nullable(),
   last_scanned_at: z.string().nullable(),
   created_at: z.string(),
+  // Pre-D21 backups lack the arrangement fields — default them.
+  sort_order: z.number().int().default(0),
 });
 
 const ItemRowSchema = z.object({
@@ -169,17 +173,15 @@ export function restoreAll(
       ]);
     }
     for (const s of dump.shelves) {
-      db.runSync('INSERT INTO shelves (id, location_id, name, created_at) VALUES (?, ?, ?, ?)', [
-        s.id,
-        s.location_id,
-        s.name,
-        s.created_at,
-      ]);
+      db.runSync(
+        'INSERT INTO shelves (id, location_id, name, created_at, capacity) VALUES (?, ?, ?, ?, ?)',
+        [s.id, s.location_id, s.name, s.created_at, s.capacity ?? null],
+      );
     }
     for (const b of dump.bins) {
       db.runSync(
-        `INSERT INTO bins (id, shelf_id, short_code, name, cover_photo_uri, last_scanned_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO bins (id, shelf_id, short_code, name, cover_photo_uri, last_scanned_at, created_at, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           b.id,
           b.shelf_id,
@@ -188,6 +190,7 @@ export function restoreAll(
           rewriteUri(b.cover_photo_uri),
           b.last_scanned_at,
           b.created_at,
+          b.sort_order ?? 0,
         ],
       );
     }

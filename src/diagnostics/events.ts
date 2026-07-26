@@ -24,7 +24,13 @@ export type EventKind =
   | 'crash'
   | 'settings'
   /** D20 visual memory: what the encoder did, and what it nearly matched. */
-  | 'memory';
+  | 'memory'
+  /**
+   * D21: a bin was moved or reordered on the map. "That bin is not where I
+   * left it" is otherwise unanswerable — the map writes the same `shelf_id`
+   * every breadcrumb reads, so a mistaken drop leaves no other trace.
+   */
+  | 'organize';
 
 export interface EventInput {
   kind: EventKind;
@@ -129,6 +135,44 @@ export function pruneEvents(db: DbAdapter, now: () => number = Date.now): number
     return before - countEvents(db);
   } catch {
     return 0;
+  }
+}
+
+export interface AbnormalExit {
+  /** Where the app was when it died — the most useful single fact. */
+  lastScreen: string | null;
+  /** Timestamp of the last thing the dead session managed to record. */
+  lastEventAt: string;
+}
+
+/**
+ * Whether the *previous* session ended without going to background.
+ *
+ * The D16 crash handler hooks JS `ErrorUtils`, so it can only ever see a JS
+ * error. A native crash — a bad JSI call, a worklet on a runtime that has
+ * gone away — kills the process outright, and the log shows a fresh
+ * `app_start` with no `app_background` before it and zero crashes recorded.
+ * That absence is the evidence, so this reads it: a session that never said
+ * goodbye did not exit, it died.
+ *
+ * Call this BEFORE recording the new `app_start`. Deliberately conservative:
+ * a user swiping the app away gets an `app_background` from Android first,
+ * so that is a clean exit and reports nothing.
+ */
+export function detectAbnormalExit(db: DbAdapter): AbnormalExit | null {
+  try {
+    const last = db.getFirstSync<EventRow>(
+      'SELECT * FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1',
+    );
+    // A fresh install has nothing to say about a previous session.
+    if (!last) return null;
+    if (last.kind === 'app' && last.name === 'app_background') return null;
+    const screen = db.getFirstSync<EventRow>(
+      "SELECT * FROM events WHERE kind = 'screen' ORDER BY created_at DESC, rowid DESC LIMIT 1",
+    );
+    return { lastScreen: screen?.name ?? null, lastEventAt: last.created_at };
+  } catch {
+    return null;
   }
 }
 

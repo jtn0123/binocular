@@ -9,7 +9,7 @@ import { useDb } from '../db/DbProvider';
 import { deviceContext, setNetworkContext } from './context';
 import { loadDiagnosticsEnabled } from './enabled';
 import { CRASH_FALLBACK_FILE, installErrorHandler } from './errorHandler';
-import { logEvent, pruneEvents } from './events';
+import { detectAbnormalExit, logEvent, pruneEvents } from './events';
 
 /**
  * Mounts once beside QueueRunner (blueprint D16): installs crash capture,
@@ -39,7 +39,26 @@ export function DiagnosticsRunner() {
       await loadDiagnosticsEnabled();
       disposeErrors = installErrorHandler(db, { appendFallback: appendCrashFallback });
       pruneEvents(db);
+      // Read the previous session's ending BEFORE this start is recorded:
+      // a process killed natively never gets to run the JS crash handler, so
+      // the only trace it leaves is a restart with no goodbye. Recording it
+      // as a crash is what makes it visible in the counts and the copied log
+      // — otherwise the screen cheerfully reports "0 crashes" mid-crash-loop.
+      const abnormal = detectAbnormalExit(db);
       logEvent(db, { kind: 'app', name: 'app_start', detail: { ...deviceContext() } });
+      if (abnormal) {
+        logEvent(db, {
+          kind: 'crash',
+          name: 'previous_session_died',
+          detail: {
+            message: `The app restarted without shutting down${
+              abnormal.lastScreen ? ` — last screen was ${abnormal.lastScreen}` : ''
+            }. No JS error was recorded, which points at a native crash.`,
+            lastScreen: abnormal.lastScreen,
+            lastEventAt: abnormal.lastEventAt,
+          },
+        });
+      }
       booted.current = true;
     })();
 

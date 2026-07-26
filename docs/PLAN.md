@@ -285,6 +285,58 @@ the cloud engine.
 
 ---
 
+## Map customization (blueprint D21, amended 2026-07-25)
+
+Post-roadmap work: the derived map proved worth opening, so the deferred half
+of D21 — arranging the wall on the picture of it — was built.
+
+### Tasks
+- [x] Migration 010: `bins.sort_order`, `shelves.capacity`. Existing rows land
+      at 0 and every bin query breaks ties by `short_code`, so a pre-migration
+      workshop keeps exactly the order it had.
+- [x] `src/db/mapView.ts`: `planDrop` (insert-before arithmetic, no-op
+      detection, cross-shelf flagging), `locateMany`, `rowGaps`, `heatTier` —
+      pure, so the arrangement rules are testable away from a screen.
+- [x] `placeBin` applies a plan in one transaction; `moveBinToShelf` appends
+      to the destination's order. Backups round-trip both columns and pre-D21
+      backups import with clean defaults.
+- [x] `app/map.tsx`: lift-and-place moving (cross-shelf drops confirm, per
+      §8.5), capacity gaps, item-count / staleness tints, multi-bin highlight
+      with a stepper, shelf add/rename/resize and new-bin in place.
+- [x] Home: a search matching ≥2 bins offers "show all N on the map".
+- [x] Screen-level tests that press the controls, plus the map button's route.
+
+### Withdrawn
+- [ ] ~~Finger-following drag~~ — built, shipped to the field phone, and
+      withdrawn in the same day. Wrapping every cell in a gesture-handler
+      detector driving reanimated worklets killed the process natively; the
+      event log showed an `app_start` seconds after every `screen//map` with
+      no `app_background` between. Tap-to-place covers the same ground. Do not
+      retry without testing on a device first.
+
+### Exit criteria
+- [x] Arrangement survives a reopen (asserted against the database, not the
+      render tree).
+- [x] Blueprint §11 invariants: no AI writes, no percentages, providers
+      untouched, offline-only, zod at the backup boundary, migrations
+      append-only.
+- [ ] Confirmed on the field-test phone that the map opens and stays open.
+
+## Diagnostics gaps found while field-testing the map
+
+### Tasks
+- [x] `Copy log`: the diagnostics zip needs a share target willing to take a
+      100 MB file, so it fails exactly when it is needed. Text to the
+      clipboard always works. Carries build, counts, memory, every crash and
+      the event tail — never the inventory, never photos.
+- [x] Export fix: `File.bytes()` returns a promise and JSZip accepts one, so
+      photos were read at `generateAsync` time, after the native handle was
+      released. `bytesSync` reads them there and then.
+- [x] `detectAbnormalExit`: a native crash never reaches the JS error handler,
+      so Diagnostics reported "0 crashes" throughout a crash loop. A session
+      whose last event was not `app_background` did not exit, it died — and is
+      recorded as a crash naming the last screen.
+
 ## Testing strategy (cross-stage)
 
 - **Unit (Jest):** migrations, zod schemas, prompt builder, QR payload

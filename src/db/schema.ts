@@ -251,6 +251,19 @@ CREATE TABLE item_embeddings (
 CREATE INDEX item_embeddings_model ON item_embeddings(model);
 `;
 
+/**
+ * D21 (amended): the map becomes an organizing surface. A bin's position
+ * within its shelf is a stored fact (`sort_order`), and a shelf may declare
+ * how many slots it physically has (`capacity`) so free space can be drawn
+ * as gaps. Existing rows all get sort_order 0; every query that orders bins
+ * breaks ties by short_code, so a pre-migration workshop keeps exactly the
+ * order it always drew in.
+ */
+const MIGRATION_010_MAP_ARRANGEMENT = `
+ALTER TABLE bins ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE shelves ADD COLUMN capacity INTEGER;
+`;
+
 export const MIGRATIONS: readonly string[] = [
   MIGRATION_001_INITIAL_SCHEMA,
   MIGRATION_002_FTS_TRIGGERS,
@@ -261,6 +274,7 @@ export const MIGRATIONS: readonly string[] = [
   MIGRATION_007_SEARCH_VOCAB,
   MIGRATION_008_TAGS,
   MIGRATION_009_ITEM_EMBEDDINGS,
+  MIGRATION_010_MAP_ARRANGEMENT,
 ];
 
 export function getSchemaVersion(db: DbAdapter): number {

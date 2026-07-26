@@ -26,14 +26,24 @@ export function collectPhotoUris(dump: BackupDump): string[] {
   return [...uris];
 }
 
-/** Adds photos under `photos/`; a missing file never blocks the export. */
+/**
+ * Adds photos under `photos/`; a missing file never blocks the export.
+ *
+ * `bytesSync` rather than `bytes` is load-bearing. `bytes()` returns a
+ * *promise*, and JSZip happily accepts one — so nothing is read here, and
+ * the read is deferred to `generateAsync`. By then the File's native handle
+ * has been released, and it fails with "Cannot use shared object that was
+ * already released" — thrown from generateAsync, outside this try/catch, so
+ * a single unreadable photo killed the whole export instead of being
+ * skipped. Reading synchronously keeps the failure where it can be handled.
+ */
 export function addPhotosToZip(zip: JSZip, uris: string[]): number {
   let added = 0;
   for (const uri of uris) {
     try {
       const file = new File(uri);
       if (file.exists) {
-        zip.file(`photos/${basename(uri)}`, file.bytes());
+        zip.file(`photos/${basename(uri)}`, file.bytesSync());
         added += 1;
       }
     } catch {
@@ -76,7 +86,9 @@ export interface ImportSummary {
 
 /** Restores a backup zip (picked by the user) into an empty database. */
 export async function importBackupZip(db: DbAdapter, zipUri: string): Promise<ImportSummary> {
-  const zip = await JSZip.loadAsync(new File(zipUri).bytes());
+  // Synchronous for the same reason as addPhotosToZip: handing loadAsync a
+  // promise defers the read until the native handle may already be gone.
+  const zip = await JSZip.loadAsync(new File(zipUri).bytesSync());
   const manifest = zip.file('binocular.json');
   if (!manifest) throw new Error('Not a Binocular backup — binocular.json is missing.');
   let manifestJson: unknown;

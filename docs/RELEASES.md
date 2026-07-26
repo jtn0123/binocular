@@ -24,10 +24,59 @@ Ad-hoc builds are published as **pre-releases**, which is why the app's
 URL resolves only to the newest *non*-pre-release and 404s while only ad-hoc
 builds exist. Push a `v*` tag when you want a build to be the "latest".
 
-Default build is **arm64-v8a only** (~60 MB instead of the ~181 MB four-ABI
-APK — it matters when the download happens on workshop Wi-Fi). Any phone from
-the last decade is arm64; the *Run workflow* dialog offers the wider ABI sets
-if a build ever has to run on something older or on an x86 emulator.
+Default build is **arm64-v8a only** — it matters when the download happens on
+workshop Wi-Fi. Any phone from the last decade is arm64; the *Run workflow*
+dialog offers the wider ABI sets if a build ever has to run on something older
+or on an x86 emulator.
+
+The single-ABI APK is currently **~100 MB**, not the ~60 MB this file claimed
+until the D20 on-device encoder landed: `react-native-executorch` ships large
+native libraries, and they dominate both the download and the ~14 minutes the
+Gradle step takes. Worth knowing before blaming the Wi-Fi.
+
+### When the build succeeds but nothing is published
+
+If the `build` job is green and `publish` fails with
+
+```
+HTTP 403: Resource not accessible by integration (…/releases)
+```
+
+it is **not** a workflow bug, and re-running it will not help. The job already
+declares `permissions: contents: write`, but that can only narrow what the
+repository grants — it cannot add a permission the repository withholds. Check,
+in order:
+
+1. **Settings → Actions → General → Workflow permissions.** If it reads *Read
+   repository contents and packages permissions*, switch it to *Read and write
+   permissions*. This is the usual cause, and it can change under you: build-35
+   published normally and build-38 was refused half an hour later from an
+   identical job definition.
+2. **Settings → Rules → Rulesets**, for a tag rule matching `build-*` or `v*`.
+   `gh release create` creates the tag, so a tag ruleset without an Actions
+   bypass refuses with the same message.
+
+The APK itself is unaffected — it is attached to the run as an artifact
+(Actions → the run → *Artifacts*), so once the setting is fixed, re-run **just
+the `publish` job**. It downloads that artifact; nothing is rebuilt, and the
+20 minutes are not paid twice. The workflow prints all of this into the run
+summary when the step fails.
+
+Note that a run artifact is *not* a substitute for a Release on the phone:
+artifacts download as a `.zip` and require a signed-in session, so the APK
+cannot be installed straight from one.
+
+### Getting the APK onto the phone
+
+This repository is **private**, so a release asset is served from a
+short-lived signed `release-assets.githubusercontent.com` URL. Two consequences
+that have each wasted an afternoon:
+
+- The link **expires**. Copying it out of a chat and opening it later gives an
+  error page; open the Release page and tap the asset again.
+- It only downloads in a browser **signed in to GitHub**. An in-app browser
+  inside a chat client usually is not, and fails silently. Open the release
+  page in Chrome itself.
 
 ## Installing on the phone
 
@@ -78,6 +127,27 @@ easier to have than to wish for.
 | *"A newer version is already installed"* | Downgrade — an older `versionCode` | Build again (run number always climbs), or `adb install -d` to force |
 | Local `run:android --variant release` now refuses to install | Local builds are `versionCode 1`, CI builds are `1000+` | `adb install -d -r android/app/build/outputs/apk/release/app-release.apk` |
 | Play Protect warns about an unknown developer | Sideloaded APK, no Play Store record | Expected; *Install anyway* |
+
+## Reporting a problem from the workshop
+
+**Settings → Open diagnostics → Copy log**, then paste it wherever the report
+goes. That is the reliable path and it should be the first thing tried.
+
+*Share diagnostics* next to it builds the full zip — the event log plus every
+photo — and hands it to the share sheet. It is richer, and it needs a share
+target willing to accept a 100 MB file, so it is the one that fails when you
+most need it. Copy log carries the build, the counts, the memory report, every
+crash in full and the last 120 events, and never the inventory or any photo,
+so it goes anywhere text goes.
+
+What the log is good for, from the case that prompted it: a **native** crash
+kills the process before any JavaScript runs, so the crash handler cannot see
+it and the screen will cheerfully say *0 crashes*. The tell is a fresh
+`app_start` with no `app_background` before it — the app restarted without
+ever shutting down. The app now recognises that pattern on the next launch and
+records it as a crash naming the last screen, but the raw event list shows it
+either way. If a screen "won't open", look for a restart a few seconds after
+its `screen//` line.
 
 ## The signing-key trade-off
 

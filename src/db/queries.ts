@@ -16,6 +16,8 @@ export interface ShelfRow {
   location_id: string;
   name: string;
   created_at: string;
+  /** D21: how many slots the shelf physically has; null = unsized. */
+  capacity: number | null;
 }
 
 export interface BinRow {
@@ -26,6 +28,8 @@ export interface BinRow {
   cover_photo_uri: string | null;
   last_scanned_at: string | null;
   created_at: string;
+  /** D21: position within its shelf; ties broken by short_code. */
+  sort_order: number;
 }
 
 /**
@@ -123,6 +127,7 @@ export function createShelf(
     location_id: input.locationId,
     name: input.name,
     created_at: nowIso(),
+    capacity: null,
   };
   db.runSync('INSERT INTO shelves (id, location_id, name, created_at) VALUES (?, ?, ?, ?)', [
     row.id,
@@ -151,6 +156,11 @@ export function renameShelf(db: DbAdapter, id: string, name: string): void {
   db.runSync('UPDATE shelves SET name = ? WHERE id = ?', [name, id]);
 }
 
+/** D21: declares how many slots a shelf has; null clears it back to unsized. */
+export function setShelfCapacity(db: DbAdapter, id: string, capacity: number | null): void {
+  db.runSync('UPDATE shelves SET capacity = ? WHERE id = ?', [capacity, id]);
+}
+
 /** Deletes a shelf; its bins become unassigned, never deleted. */
 export function deleteShelf(db: DbAdapter, id: string): void {
   db.withTransactionSync(() => {
@@ -173,10 +183,11 @@ export function createBin(
     cover_photo_uri: null,
     last_scanned_at: null,
     created_at: nowIso(),
+    sort_order: nextSortOrder(db, input.shelfId ?? null),
   };
   db.runSync(
-    `INSERT INTO bins (id, shelf_id, short_code, name, cover_photo_uri, last_scanned_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO bins (id, shelf_id, short_code, name, cover_photo_uri, last_scanned_at, created_at, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.id,
       row.shelf_id,
@@ -185,9 +196,19 @@ export function createBin(
       row.cover_photo_uri,
       row.last_scanned_at,
       row.created_at,
+      row.sort_order,
     ],
   );
   return row;
+}
+
+/** D21: new and moved bins join the end of their shelf's stored order. */
+function nextSortOrder(db: DbAdapter, shelfId: string | null): number {
+  const row = db.getFirstSync<{ n: number }>(
+    'SELECT COALESCE(MAX(sort_order) + 1, 0) AS n FROM bins WHERE shelf_id IS ?',
+    [shelfId],
+  );
+  return row?.n ?? 0;
 }
 
 export function getBin(db: DbAdapter, id: string): BinRow | null {
@@ -195,17 +216,20 @@ export function getBin(db: DbAdapter, id: string): BinRow | null {
 }
 
 export function listBins(db: DbAdapter): BinRow[] {
-  return db.getAllSync<BinRow>('SELECT * FROM bins ORDER BY short_code');
+  return db.getAllSync<BinRow>('SELECT * FROM bins ORDER BY sort_order, short_code');
 }
 
 export function listBinsForShelf(db: DbAdapter, shelfId: string): BinRow[] {
-  return db.getAllSync<BinRow>('SELECT * FROM bins WHERE shelf_id = ? ORDER BY short_code', [
-    shelfId,
-  ]);
+  return db.getAllSync<BinRow>(
+    'SELECT * FROM bins WHERE shelf_id = ? ORDER BY sort_order, short_code',
+    [shelfId],
+  );
 }
 
 export function listUnassignedBins(db: DbAdapter): BinRow[] {
-  return db.getAllSync<BinRow>('SELECT * FROM bins WHERE shelf_id IS NULL ORDER BY short_code');
+  return db.getAllSync<BinRow>(
+    'SELECT * FROM bins WHERE shelf_id IS NULL ORDER BY sort_order, short_code',
+  );
 }
 
 /** Bins by most recent activity — Home screen's "recent bins". */
@@ -220,9 +244,34 @@ export function renameBin(db: DbAdapter, id: string, name: string): void {
   db.runSync('UPDATE bins SET name = ? WHERE id = ?', [name, id]);
 }
 
-/** Move mode (blueprint §8.5): re-home a bin; null unassigns it. */
+/**
+ * Move mode (blueprint §8.5): re-home a bin; null unassigns it. The bin
+ * joins the end of the destination's stored order (D21).
+ */
 export function moveBinToShelf(db: DbAdapter, binId: string, shelfId: string | null): void {
-  db.runSync('UPDATE bins SET shelf_id = ? WHERE id = ?', [shelfId, binId]);
+  db.runSync('UPDATE bins SET shelf_id = ?, sort_order = ? WHERE id = ?', [
+    shelfId,
+    nextSortOrder(db, shelfId),
+    binId,
+  ]);
+}
+
+/**
+ * D21: executes a drop planned on the map — one transaction that re-homes
+ * the bin (when the drop crossed shelves) and writes the destination's
+ * whole order. Only relative order within a shelf matters, so bins left
+ * behind on the source shelf keep their values untouched.
+ */
+export function placeBin(
+  db: DbAdapter,
+  input: { binId: string; shelfId: string | null; orderedIds: readonly string[] },
+): void {
+  db.withTransactionSync(() => {
+    db.runSync('UPDATE bins SET shelf_id = ? WHERE id = ?', [input.shelfId, input.binId]);
+    input.orderedIds.forEach((id, index) => {
+      db.runSync('UPDATE bins SET sort_order = ? WHERE id = ?', [index, id]);
+    });
+  });
 }
 
 export function countItemsForBin(db: DbAdapter, binId: string): number {

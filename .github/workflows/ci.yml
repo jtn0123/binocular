@@ -15,6 +15,21 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+
+      # Without this every run re-transforms the whole React Native + Expo
+      # module graph through babel. React Native pulls modules in lazily, so
+      # that cost lands inside the first render() of a suite — which is inside
+      # a timed test — and ReviewScreen's first test blew jest's 5s default
+      # while taking 323ms locally against a warm cache. Keyed on the lockfile
+      # because that is what decides the transform output.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/jest
+          key: jest-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: jest-${{ runner.os }}-
+
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test -- --ci
+      # A GitHub runner has 2 cores; jest's default (cores - 1) still leaves
+      # workers fighting, and each worker pays its own module-registry cost.
+      - run: npm test -- --ci --cacheDirectory ~/.cache/jest --maxWorkers=2

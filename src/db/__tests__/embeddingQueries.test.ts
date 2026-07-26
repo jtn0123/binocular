@@ -126,9 +126,13 @@ describe('visual memory storage (D20, migration 009)', () => {
         for (let i = 0; i < 8; i++) old.execSync(MIGRATIONS[i]);
         old.execSync('PRAGMA user_version = 8');
       });
-      const bin = createBin(old, { name: 'Tools', shortCode: 'B-001' });
+      // Raw insert: the query helpers assume the *current* schema (createBin
+      // now writes sort_order, which a version-8 database does not have yet).
+      old.runSync(
+        "INSERT INTO bins (id, short_code, name, created_at) VALUES ('b1', 'B-001', 'Tools', '2026-01-01T00:00:00Z')",
+      );
       insertItem(old, {
-        binId: bin.id,
+        binId: 'b1',
         name: 'Existing item',
         category: 'hand_tool',
         photoUri: 'file:///photos/e.jpg',
