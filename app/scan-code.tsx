@@ -3,6 +3,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { CameraGate } from '@/components/CameraGate';
 import { useDb } from '@/db/DbProvider';
 import { getBin, getLocation, getShelf, moveBinToShelf } from '@/db/queries';
 import { parseQrPayload } from '@/qr/payload';
@@ -107,13 +108,14 @@ export default function ScanCodeScreen() {
   if (!permission) return <View style={styles.container} />;
   if (!permission.granted) {
     return (
-      <View style={styles.center}>
+      <>
         <Stack.Screen options={{ title: 'Scan label' }} />
-        <Text style={styles.permissionText}>Binocular needs the camera to scan labels.</Text>
-        <Pressable style={styles.grantButton} onPress={requestPermission}>
-          <Text style={styles.grantLabel}>Grant camera access</Text>
-        </Pressable>
-      </View>
+        <CameraGate
+          reason="to scan labels"
+          canAskAgain={permission.canAskAgain}
+          onRequest={() => void requestPermission()}
+        />
+      </>
     );
   }
 

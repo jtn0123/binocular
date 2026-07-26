@@ -5,6 +5,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { CameraGate } from '@/components/CameraGate';
 import { useDb } from '@/db/DbProvider';
 import { getBin, type ScanMode } from '@/db/queries';
 import { logEvent } from '@/diagnostics/events';
@@ -119,13 +120,14 @@ export default function CaptureScreen() {
   if (!permission) return <View style={styles.container} />;
   if (!permission.granted) {
     return (
-      <View style={styles.center}>
+      <>
         <Stack.Screen options={{ title: 'Camera' }} />
-        <Text style={styles.permissionText}>Binocular needs the camera to photograph bins.</Text>
-        <Pressable style={styles.shutterAlt} onPress={requestPermission}>
-          <Text style={styles.shutterAltLabel}>Grant camera access</Text>
-        </Pressable>
-      </View>
+        <CameraGate
+          reason="to photograph bins"
+          canAskAgain={permission.canAskAgain}
+          onRequest={() => void requestPermission()}
+        />
+      </>
     );
   }
 
@@ -200,11 +202,17 @@ export default function CaptureScreen() {
       }
       if (result.outcome === 'queued') {
         if (mode === 'find_it') {
-          Alert.alert(
-            'Search needs a connection',
-            'Photo lookup requires the cloud engine — try text search instead.',
-            [{ text: 'OK', onPress: () => router.back() }],
-          );
+          // Straight to the find screen, NOT back to the mode list.
+          //
+          // That screen already has the graceful degradation §8.3 asks for:
+          // it matches the photo against the items catalogued on this phone
+          // and offers "Not recognized — but this looks like…". Bouncing the
+          // user back here meant that branch could not be reached by ANY
+          // route, so the whole D20 cost — the downloaded encoder, the
+          // embeddings table, the backfill — bought nothing on the one screen
+          // that justified it. Its own copy explains the situation better
+          // than an alert could, and it is not a dead end.
+          router.replace(target);
           return;
         }
         Alert.alert(

@@ -3,6 +3,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { CameraGate } from '@/components/CameraGate';
 import { useDb } from '@/db/DbProvider';
 import { getBin, setBinCoverPhoto } from '@/db/queries';
 import { hapticShutter } from '@/lib/haptics';
@@ -27,13 +28,14 @@ export default function BinPhotoScreen() {
   if (!permission) return <View style={styles.container} />;
   if (!permission.granted) {
     return (
-      <View style={styles.center}>
+      <>
         <Stack.Screen options={{ title: 'Bin photo' }} />
-        <Text style={styles.permissionText}>Binocular needs the camera to photograph the bin.</Text>
-        <Pressable style={styles.grant} onPress={requestPermission}>
-          <Text style={styles.grantLabel}>Grant camera access</Text>
-        </Pressable>
-      </View>
+        <CameraGate
+          reason="to photograph the bin"
+          canAskAgain={permission.canAskAgain}
+          onRequest={() => void requestPermission()}
+        />
+      </>
     );
   }
 
