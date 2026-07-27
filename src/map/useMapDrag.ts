@@ -296,16 +296,24 @@ export function useMapDrag({
     [beginDrag, dragLive, enabled, finishDrag, grabX, grabY, trackDrag, x, y],
   );
 
+  // Memoized like everything else this hook hands out: the map screen clears
+  // the wall frames from an effect keyed on this identity, and a fresh
+  // function each render would re-run that effect on every render instead of
+  // on the transition it is written for.
+  const setWallFrame = useCallback((key: string, frame: WallShelfFrame) => {
+    wallFrames.current[key] = frame;
+  }, []);
+
+  const clearWallFrames = useCallback(() => {
+    wallFrames.current = {};
+  }, []);
+
   return {
     pan,
     dragging,
     slot,
     ghost: { x, y, scale, opacity },
-    setWallFrame: (key, frame) => {
-      wallFrames.current[key] = frame;
-    },
-    clearWallFrames: () => {
-      wallFrames.current = {};
-    },
+    setWallFrame,
+    clearWallFrames,
   };
 }

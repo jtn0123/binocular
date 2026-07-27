@@ -134,6 +134,42 @@ describe('checking GitHub', () => {
     } satisfies UpdateCheck);
   });
 
+  it('gives up when the network accepts the request and then says nothing', async () => {
+    // The failure mode a workshop actually has: not a refused connection but
+    // a silent one. Without the timeout the check button stays disabled and
+    // the section reads as frozen.
+    jest.useFakeTimers();
+    try {
+      const hangs = ((_url: string, init?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('Aborted')));
+        })) as unknown as typeof fetch;
+
+      const pending = checkForUpdate(1042, null, hangs);
+      jest.advanceTimersByTime(15_000);
+      await expect(pending).resolves.toEqual({ state: 'offline' } satisfies UpdateCheck);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('passes a signal the caller can be cut off by', async () => {
+    let seen: AbortSignal | undefined;
+    const spy = ((_url: string, init?: { signal?: AbortSignal }) => {
+      seen = init?.signal;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => [release()],
+      } as unknown as Response);
+    }) as unknown as typeof fetch;
+
+    await checkForUpdate(1042, null, spy);
+    expect(seen).toBeInstanceOf(AbortSignal);
+    // Cleared on the way out — a timer left armed would abort a later check.
+    expect(seen?.aborted).toBe(false);
+  });
+
   it('refuses a releases list that is not shaped like one', async () => {
     // D9: the boundary validates, so malformed JSON fails here rather than
     // as an undefined deep inside the settings screen.

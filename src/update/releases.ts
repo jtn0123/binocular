@@ -26,6 +26,9 @@ export const RELEASES_REPO = 'binocular';
 
 const RELEASES_API = `https://api.github.com/repos/${RELEASES_OWNER}/${RELEASES_REPO}/releases`;
 
+/** Long enough for a slow connection, short enough to not look frozen. */
+const CHECK_TIMEOUT_MS = 15_000;
+
 /**
  * Only the fields actually read. GitHub sends a hundred more per release and
  * validating them would turn every unrelated API addition into a parse
@@ -184,30 +187,48 @@ export async function checkForUpdate(
   token: string | null,
   fetchImpl: typeof fetch = fetch,
 ): Promise<UpdateCheck> {
-  let response: Response;
+  // A workshop's Wi-Fi is exactly the network that accepts a connection and
+  // then says nothing, and the button that started this is disabled until an
+  // answer comes back. `AbortSignal.timeout` is not dependable in React
+  // Native, so this is the controller-and-timer form.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
+
   try {
-    response = await fetchImpl(`${RELEASES_API}?per_page=10`, { headers: headers(token) });
-  } catch {
-    return { state: 'offline' };
+    let response: Response;
+    try {
+      response = await fetchImpl(`${RELEASES_API}?per_page=10`, {
+        headers: headers(token),
+        signal: controller.signal,
+      });
+    } catch {
+      return { state: 'offline' };
+    }
+
+    if (!response.ok) return failureFor(response.status, token !== null);
+
+    let parsed: unknown;
+    try {
+      parsed = await response.json();
+    } catch {
+      // Reading the body can be cut off by the same timeout, and "the network
+      // went quiet" is a different answer from "GitHub sent nonsense".
+      return controller.signal.aborted
+        ? { state: 'offline' }
+        : { state: 'failed', detail: 'GitHub sent something that was not JSON' };
+    }
+
+    const releases = ReleasesSchema.safeParse(parsed);
+    if (!releases.success) {
+      return { state: 'failed', detail: 'The releases list was not in the expected shape' };
+    }
+
+    const build = pickBuild(releases.data);
+    if (!build) return { state: 'none' };
+
+    const comparison = compareBuild(runningVersionCode, build.versionCode);
+    return { state: comparison, build };
+  } finally {
+    clearTimeout(timer);
   }
-
-  if (!response.ok) return failureFor(response.status, token !== null);
-
-  let parsed: unknown;
-  try {
-    parsed = await response.json();
-  } catch {
-    return { state: 'failed', detail: 'GitHub sent something that was not JSON' };
-  }
-
-  const releases = ReleasesSchema.safeParse(parsed);
-  if (!releases.success) {
-    return { state: 'failed', detail: 'The releases list was not in the expected shape' };
-  }
-
-  const build = pickBuild(releases.data);
-  if (!build) return { state: 'none' };
-
-  const comparison = compareBuild(runningVersionCode, build.versionCode);
-  return { state: comparison, build };
 }

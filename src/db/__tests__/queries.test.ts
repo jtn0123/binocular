@@ -64,7 +64,7 @@ describe('typed query helpers', () => {
     // so it asks once rather than once per bin.
     const full = createBin(db, { name: 'Bits', shortCode: 'B-001' });
     const other = createBin(db, { name: 'Screws', shortCode: 'B-002' });
-    createBin(db, { name: 'Empty', shortCode: 'B-003' });
+    const empty = createBin(db, { name: 'Empty', shortCode: 'B-003' });
     insertItem(db, { binId: full.id, name: 'Driver bits', category: 'bit_blade_accessory' });
     insertItem(db, { binId: full.id, name: 'Hole saw', category: 'bit_blade_accessory' });
     insertItem(db, { binId: other.id, name: 'M6 bolts', category: 'fastener' });
@@ -73,7 +73,9 @@ describe('typed query helpers', () => {
     expect(counts.get(full.id)).toBe(2);
     expect(counts.get(other.id)).toBe(1);
     // Absent rather than zero — the caller defaults what it does not find.
-    expect(counts.has('B-003')).toBe(false);
+    // Keyed by bin id, not short code: asserting on the code would pass no
+    // matter what the query returned.
+    expect(counts.has(empty.id)).toBe(false);
     expect(counts.size).toBe(2);
   });
 

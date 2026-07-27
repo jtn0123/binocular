@@ -70,22 +70,32 @@ export function UpdateSection({
     );
   };
 
+  // The secure store can refuse to answer — a locked keystore, a wiped key —
+  // and every one of these sits behind a button that stays disabled until its
+  // promise settles. An unguarded rejection would leave the section spinning
+  // with no way back, so each path has to land somewhere the user can act on.
   const check = async () => {
     setPhase({ kind: 'checking' });
-    const result = await checkForUpdate(build.buildNumber, await getGithubToken());
-    if (result.state === 'needs-token' || result.state === 'bad-token') setShowToken(true);
-    setPhase({ kind: 'checked', result });
+    try {
+      const result = await checkForUpdate(build.buildNumber, await getGithubToken());
+      if (result.state === 'needs-token' || result.state === 'bad-token') setShowToken(true);
+      setPhase({ kind: 'checked', result });
+    } catch (err) {
+      setPhase({ kind: 'idle' });
+      Alert.alert('Could not check for updates', describeError(err));
+    }
   };
 
   const download = async (available: AvailableBuild) => {
     setPhase({ kind: 'downloading', build: available, written: 0, total: available.asset.bytes });
-    const handle = downloadBuild(available, await getGithubToken(), (written, total) =>
-      setPhase((prev) =>
-        prev.kind === 'downloading' ? { ...prev, written, total } : prev,
-      ),
-    );
-    setCancel(() => handle.cancel);
     try {
+      // Inside the try on purpose: reading the token can fail, and doing it
+      // outside would strand the phase at `downloading` with a Stop button
+      // that has nothing to stop.
+      const handle = downloadBuild(available, await getGithubToken(), (written, total) =>
+        setPhase((prev) => (prev.kind === 'downloading' ? { ...prev, written, total } : prev)),
+      );
+      setCancel(() => handle.cancel);
       const file = await handle.done;
       // null means paused rather than finished; treat it as not-downloaded
       // rather than handing a partial file to the installer.
@@ -94,7 +104,7 @@ export function UpdateSection({
     } catch (err) {
       clearDownloads();
       setPhase({ kind: 'checked', result: { state: 'newer', build: available } });
-      const message = err instanceof Error ? err.message : String(err);
+      const message = describeError(err);
       // A cancel rejects the promise too, and that is not a failure worth an
       // alert — the user is the one who pressed it.
       if (!/abort|cancel/i.test(message)) {
@@ -119,47 +129,7 @@ export function UpdateSection({
       ) : null}
 
       <View style={styles.buttons}>
-        {phase.kind === 'downloading' ? (
-          <Pressable
-            style={styles.secondary}
-            onPress={() => cancel?.()}
-            accessibilityRole="button"
-            accessibilityLabel="Stop the download"
-            testID="update-cancel"
-          >
-            <Text style={styles.secondaryLabel}>Stop</Text>
-          </Pressable>
-        ) : phase.kind === 'ready' ? (
-          <Pressable
-            style={styles.primary}
-            onPress={() => {
-              void installBuild(phase.file).catch((err: unknown) =>
-                Alert.alert(
-                  'Android would not open the installer',
-                  `${err instanceof Error ? err.message : String(err)}\n\nAllow Binocular to install unknown apps in Android settings, then try again.`,
-                ),
-              );
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={`Install ${phase.build.title}`}
-            testID="update-install"
-          >
-            <Text style={styles.primaryLabel}>Install {phase.build.tag}</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            style={[styles.primary, phase.kind === 'checking' && styles.disabled]}
-            disabled={phase.kind === 'checking'}
-            onPress={() => void check()}
-            accessibilityRole="button"
-            accessibilityLabel="Check GitHub for a newer build"
-            testID="update-check"
-          >
-            <Text style={styles.primaryLabel}>
-              {phase.kind === 'checking' ? 'Checking…' : 'Check for updates'}
-            </Text>
-          </Pressable>
-        )}
+        <MainButton phase={phase} onStop={() => cancel?.()} onCheck={() => void check()} />
 
         {offerable ? (
           <Pressable
@@ -210,11 +180,17 @@ export function UpdateSection({
             testID="update-token-save"
             onPress={() => {
               const next = token.trim();
-              void setGithubToken(next.length > 0 ? next : null).then(() => {
-                setToken('');
-                onTokenChange(next.length > 0);
-                setPhase({ kind: 'idle' });
-              });
+              void setGithubToken(next.length > 0 ? next : null)
+                .then(() => {
+                  setToken('');
+                  onTokenChange(next.length > 0);
+                  setPhase({ kind: 'idle' });
+                })
+                // Silently swallowing this would leave someone typing a token
+                // that was never stored, and blaming the token next check.
+                .catch((err: unknown) =>
+                  Alert.alert('Could not save the token', describeError(err)),
+                );
             }}
           >
             <Text style={styles.secondaryLabel}>{token.trim() ? 'Save token' : 'Clear token'}</Text>
@@ -222,6 +198,76 @@ export function UpdateSection({
         </View>
       ) : null}
     </View>
+  );
+}
+
+function describeError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Whatever the one big button is right now — stop, install, or check. Its own
+ * component so the three states read as a list rather than as a ternary
+ * nested inside JSX, and so each keeps its own label and handler together.
+ */
+function MainButton({
+  phase,
+  onStop,
+  onCheck,
+}: {
+  phase: Phase;
+  onStop: () => void;
+  onCheck: () => void;
+}) {
+  if (phase.kind === 'downloading') {
+    return (
+      <Pressable
+        style={styles.secondary}
+        onPress={onStop}
+        accessibilityRole="button"
+        accessibilityLabel="Stop the download"
+        testID="update-cancel"
+      >
+        <Text style={styles.secondaryLabel}>Stop</Text>
+      </Pressable>
+    );
+  }
+
+  if (phase.kind === 'ready') {
+    return (
+      <Pressable
+        style={styles.primary}
+        onPress={() => {
+          void installBuild(phase.file).catch((err: unknown) =>
+            Alert.alert(
+              'Android would not open the installer',
+              `${describeError(err)}\n\nAllow Binocular to install unknown apps in Android settings, then try again.`,
+            ),
+          );
+        }}
+        accessibilityRole="button"
+        // The tag, matching the visible label — a screen reader should hear
+        // what the button says, not a different name for the same build.
+        accessibilityLabel={`Install ${phase.build.tag}`}
+        testID="update-install"
+      >
+        <Text style={styles.primaryLabel}>Install {phase.build.tag}</Text>
+      </Pressable>
+    );
+  }
+
+  const checking = phase.kind === 'checking';
+  return (
+    <Pressable
+      style={[styles.primary, checking && styles.disabled]}
+      disabled={checking}
+      onPress={onCheck}
+      accessibilityRole="button"
+      accessibilityLabel="Check GitHub for a newer build"
+      testID="update-check"
+    >
+      <Text style={styles.primaryLabel}>{checking ? 'Checking…' : 'Check for updates'}</Text>
+    </Pressable>
   );
 }
 
