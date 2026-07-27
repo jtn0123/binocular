@@ -8,6 +8,7 @@ import {
   insertItem,
   countScansByAttention,
   insertScan,
+  itemCountsByBin,
   itemsForBin,
   listBins,
   listRecentBins,
@@ -56,6 +57,26 @@ describe('typed query helpers', () => {
     expect(items).toHaveLength(2);
     expect(items.map((i) => i.name).sort()).toEqual(['Driver bits', 'Hole saw']);
     expect(items.find((i) => i.brand === 'Milwaukee')?.quantity).toBe(2);
+  });
+
+  it('counts every bin in one query, and says nothing about the empty ones', () => {
+    // The map draws a count on every cell and redraws after every mutation,
+    // so it asks once rather than once per bin.
+    const full = createBin(db, { name: 'Bits', shortCode: 'B-001' });
+    const other = createBin(db, { name: 'Screws', shortCode: 'B-002' });
+    const empty = createBin(db, { name: 'Empty', shortCode: 'B-003' });
+    insertItem(db, { binId: full.id, name: 'Driver bits', category: 'bit_blade_accessory' });
+    insertItem(db, { binId: full.id, name: 'Hole saw', category: 'bit_blade_accessory' });
+    insertItem(db, { binId: other.id, name: 'M6 bolts', category: 'fastener' });
+
+    const counts = itemCountsByBin(db);
+    expect(counts.get(full.id)).toBe(2);
+    expect(counts.get(other.id)).toBe(1);
+    // Absent rather than zero — the caller defaults what it does not find.
+    // Keyed by bin id, not short code: asserting on the code would pass no
+    // matter what the query returned.
+    expect(counts.has(empty.id)).toBe(false);
+    expect(counts.size).toBe(2);
   });
 
   it('walks a scan through its status lifecycle', () => {

@@ -39,6 +39,29 @@ export const colors = {
   chipSelectedBorder: '#8A7A2E',
 } as const;
 
+/**
+ * The map's shelf hardware (D21): the recess a board sits in, the plank the
+ * bins stand on, its uprights and slot ticks. Separate from `colors` because
+ * these are lighting on a drawn object rather than surfaces of the UI — the
+ * plank has a lit top edge and a shadowed face, and that pairing only makes
+ * sense together.
+ */
+export const shelf = {
+  /** The well a board is recessed into. */
+  well: '#0E1012',
+  wellBorder: '#23272B',
+  /** Lit top edge of the plank, and of a bin card standing on it. */
+  plankLit: '#5A626C',
+  /** The plank's shadowed face. */
+  plankFace: '#2E3338',
+  upright: '#414850',
+  tick: '#3A4046',
+  /** The shelf name stamped on the board — louder than a caption, quieter than ink. */
+  stamp: '#8F959D',
+  /** Slot labels: quieter than textFaint, which would compete with the bins. */
+  slotLabel: '#565C64',
+} as const;
+
 export const radius = { sm: 6, md: 10, lg: 14, xl: 20, pill: 999 } as const;
 
 /** 4pt spacing scale: sp(4) = 16. */

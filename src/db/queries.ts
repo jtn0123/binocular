@@ -281,6 +281,21 @@ export function countItemsForBin(db: DbAdapter, binId: string): number {
   return row?.n ?? 0;
 }
 
+/**
+ * How many items sit in every bin, in one query.
+ *
+ * The map needs a count for every cell it draws and redraws after every
+ * mutation and every screen focus, so asking per bin is a few hundred queries
+ * on the JS thread per redraw on a real wall. Bins with no items are absent
+ * from the result rather than zero — callers default what they do not find.
+ */
+export function itemCountsByBin(db: DbAdapter): Map<string, number> {
+  const rows = db.getAllSync<{ bin_id: string; n: number }>(
+    'SELECT bin_id, COUNT(*) AS n FROM items WHERE bin_id IS NOT NULL GROUP BY bin_id',
+  );
+  return new Map(rows.map((r) => [r.bin_id, r.n]));
+}
+
 /** Refuses to delete a bin that still has items — inventory is never lost. */
 export function deleteBinIfEmpty(db: DbAdapter, binId: string): boolean {
   if (countItemsForBin(db, binId) > 0) return false;

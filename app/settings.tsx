@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   Alert,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +13,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Link } from 'expo-router';
 
 import { exportBackupZip, exportInventoryCsv, importBackupZip } from '@/backup/backup';
+import { MapSettings } from '@/components/map/MapSettings';
 import {
   formatBytes,
   readStorageReport,
@@ -25,9 +25,12 @@ import { useDb } from '@/db/DbProvider';
 import { isDatabaseEmpty } from '@/db/backupQueries';
 import { countEmbeddings, countItemsWithPhotos } from '@/db/embeddingQueries';
 import { listSpendTotals, type SpendTotals } from '@/db/queries';
-import { buildInfo, describeBuild, RELEASES_URL } from '@/settings/build';
+import { UpdateSection } from '@/components/settings/UpdateSection';
+import { buildInfo } from '@/settings/build';
+import { DEFAULT_MAP_PREFS, loadMapPrefs, saveMapPrefs, type MapPrefs } from '@/settings/mapPrefs';
 import {
   getApiKey,
+  getGithubToken,
   getOpenAiApiKey,
   getProviderChoice,
   setApiKey,
@@ -157,6 +160,7 @@ export default function SettingsScreen() {
   }
   const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
   const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
+  const [hasGithubToken, setHasGithubToken] = useState(false);
   // Touches the filesystem, so unlike the SQLite-derived numbers below it is
   // read once on mount rather than on every render — and re-read after a
   // cleanup, which is the only thing that changes it from here.
@@ -203,11 +207,26 @@ export default function SettingsScreen() {
     }
   }
 
+  const [mapPrefs, setMapPrefs] = useState<MapPrefs>(DEFAULT_MAP_PREFS);
+  const setMapPref = <K extends keyof MapPrefs>(key: K, value: MapPrefs[K]) => {
+    // Derived from the committed state rather than this render's copy: two
+    // switches flipped before a re-render would otherwise have the second
+    // write drop the first, in memory and in what gets persisted.
+    setMapPrefs((prev) => {
+      const next = { ...prev, [key]: value };
+      void saveMapPrefs(next);
+      return next;
+    });
+    logEvent(db, { kind: 'settings', name: 'map_pref_changed', detail: { [key]: value } });
+  };
+
   useEffect(() => {
     void (async () => {
       setProvider(await getProviderChoice());
       setHasAnthropicKey((await getApiKey()) !== null);
       setHasOpenAiKey((await getOpenAiApiKey()) !== null);
+      setHasGithubToken((await getGithubToken()) !== null);
+      setMapPrefs(await loadMapPrefs());
     })();
   }, []);
 
@@ -337,6 +356,8 @@ export default function SettingsScreen() {
         </View>
       )}
 
+      <MapSettings prefs={mapPrefs} onChange={setMapPref} />
+
       <Text style={styles.sectionTitle}>Diagnostics</Text>
       <Text style={styles.hint}>
         A local event log records app lifecycle, scan timings, queue retries and crashes so a
@@ -353,25 +374,7 @@ export default function SettingsScreen() {
         </Pressable>
       </Link>
 
-      <Text style={styles.sectionTitle}>This build</Text>
-      <Text style={styles.hint} testID="build-line">
-        {describeBuild(build)}. Builds are published as GitHub Releases. The app does not check
-        for them — compare the build number above against the newest release yourself, then
-        install the APK over the top; your bins, items and photos are kept.
-      </Text>
-      <Pressable
-        style={styles.secondaryButton}
-        accessibilityRole="button"
-        accessibilityLabel="Open the GitHub releases page in your browser"
-        testID="open-releases"
-        onPress={() => {
-          void Linking.openURL(RELEASES_URL).catch(() =>
-            Alert.alert('Could not open the browser', RELEASES_URL),
-          );
-        }}
-      >
-        <Text style={styles.secondaryLabel}>Open releases page ↗</Text>
-      </Pressable>
+      <UpdateSection build={build} hasToken={hasGithubToken} onTokenChange={setHasGithubToken} />
 
       <Text style={styles.sectionTitle}>Visual memory</Text>
       <Text style={styles.hint} testID="visual-memory-line">

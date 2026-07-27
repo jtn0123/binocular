@@ -1,7 +1,6 @@
 import { fireEvent, render } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 
-import MapScreen from '../../../app/map';
+import MapScreen from '../../../app/(tabs)/map';
 import { DbProvider } from '../../db/DbProvider';
 import { createNodeAdapter, type NodeDbAdapter } from '../../db/nodeAdapter';
 import {
@@ -11,6 +10,7 @@ import {
   getBin,
   insertItem,
   listBinsForShelf,
+  listShelves,
   setShelfCapacity,
   type BinRow,
   type ShelfRow,
@@ -19,32 +19,45 @@ import { runMigrations } from '../../db/schema';
 import { listEvents, setLoggingEnabled } from '../../diagnostics/events';
 
 // Reanimated reaches for the native worklets module on import, which does not
-// exist under jest — and its own shipped mock re-enters that same path. The
-// screen only needs the chip to render, so a hand-rolled stand-in is enough.
+// exist under jest — and its own shipped mock re-enters that same path. Only
+// the ghost is animated, so a hand-rolled stand-in is enough.
 jest.mock('react-native-reanimated', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { View } = require('react-native');
+  const pass = (value: unknown) => value;
   return {
     __esModule: true,
     // gesture-handler builds its GestureDetector wrapper from this on import.
     default: { View, createAnimatedComponent: (c: unknown) => c },
+    View,
     useSharedValue: (initial: number) => ({ value: initial }),
     useAnimatedStyle: () => ({}),
     runOnJS: (fn: unknown) => fn,
+    withTiming: pass,
+    withRepeat: pass,
+    withSequence: pass,
+    cancelAnimation: () => undefined,
+    Easing: { inOut: () => undefined, ease: undefined },
   };
 });
 
 // The gesture layer is native; under jest the detector is a passthrough so the
-// tap/press path — the one that must always work — is what gets exercised.
+// tap/press path — the one that must always work, and the only one left when
+// the drag is switched off — is what gets exercised. The drag itself is
+// covered by src/map/__tests__/dragGeometry.test.ts, which is why that
+// arithmetic lives outside this screen.
 jest.mock('react-native-gesture-handler', () => {
   const chain: Record<string, unknown> = {};
   for (const method of [
     'activateAfterLongPress',
+    'enabled',
     'maxPointers',
     'shouldCancelWhenOutside',
+    'onBegin',
     'onStart',
     'onUpdate',
     'onEnd',
+    'onFinalize',
   ]) {
     chain[method] = () => chain;
   }
@@ -59,9 +72,10 @@ const mockPush = jest.fn();
 let mockParams: Record<string, string> = {};
 
 jest.mock('expo-router', () => ({
-  Stack: { Screen: () => null },
+  Link: ({ children }: { children: React.ReactNode }) => children,
   useLocalSearchParams: () => mockParams,
   useRouter: () => ({ push: mockPush }),
+  useNavigation: () => ({ setOptions: jest.fn() }),
   useFocusEffect: () => undefined,
 }));
 
@@ -78,16 +92,6 @@ describe('the map screen, driven by presses', () => {
   let shelfB: ShelfRow;
   let bins: BinRow[];
 
-  /**
-   * A cross-shelf drop is the §8.5 move, so it asks first. Answering "Move"
-   * is what a thumb does; leaving the alert unanswered is what the previous
-   * version of this test accidentally did, which is why it looked like the
-   * move had silently failed.
-   */
-  const confirmMoves = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
-    buttons?.find((b) => b.text === 'Move')?.onPress?.();
-  });
-
   const renderMap = () =>
     render(
       <DbProvider adapter={db}>
@@ -96,7 +100,6 @@ describe('the map screen, driven by presses', () => {
     );
 
   beforeEach(() => {
-    confirmMoves.mockClear();
     mockPush.mockClear();
     mockParams = {};
     db = createNodeAdapter(':memory:');
@@ -130,7 +133,7 @@ describe('the map screen, driven by presses', () => {
   describe('lifting and placing', () => {
     it('lifting is idempotent — a second lift of the same bin keeps it held', async () => {
       // On a device BOTH handlers fire for one long press: the pan gesture
-      // activates at 300 ms and Pressable's onLongPress at 500 ms. When
+      // activates at 400 ms and Pressable's onLongPress at 500 ms. When
       // lifting toggled, that second call put the bin straight back down —
       // the drag had nothing to carry and dropping did nothing at all.
       const screen = await renderMap();
@@ -203,34 +206,70 @@ describe('the map screen, driven by presses', () => {
       expect(screen.queryByTestId('map-undo-snackbar')).toBeNull();
     });
 
-    it('a cross-shelf drop asks first, then moves', async () => {
-      const screen = await renderMap();
-      await fireEvent(screen.getByTestId('map-cell-B-003'), 'longPress');
-      await fireEvent.press(screen.getByTestId('map-cell-B-001'));
-      expect(confirmMoves).toHaveBeenCalledWith(
-        'Move bin?',
-        expect.stringContaining('Garage › Shelf A'),
-        expect.anything(),
-      );
-      expect(getBin(db, bins[2].id)?.shelf_id).toBe(shelfA.id);
-    });
-
-    it('undo restores the shelf a bin was moved away from', async () => {
-      const screen = await renderMap();
-      await fireEvent(screen.getByTestId('map-cell-B-003'), 'longPress');
-      await fireEvent.press(screen.getByTestId('map-cell-B-001'));
-      expect(getBin(db, bins[2].id)?.shelf_id).toBe(shelfA.id);
-
-      await fireEvent.press(screen.getByTestId('map-undo'));
-      expect(getBin(db, bins[2].id)?.shelf_id).toBe(shelfB.id);
-    });
-
     it('dropping onto a free slot fills the gap', async () => {
       setShelfCapacity(db, shelfB.id, 4);
       const screen = await renderMap();
       await fireEvent(screen.getByTestId('map-cell-B-003'), 'longPress');
       // Slot 0 is the first free one after the single bin on Shelf B.
       await fireEvent.press(screen.getByTestId(`map-gap-${shelfB.id}-0`));
+      expect(getBin(db, bins[2].id)?.shelf_id).toBe(shelfB.id);
+    });
+  });
+
+  /**
+   * A drop that crosses shelves re-homes the bin — the §8.5 move — so it
+   * asks first, and the sheet has to say enough to answer with.
+   */
+  describe('the cross-shelf confirm', () => {
+    const moveWireOntoShelfA = async () => {
+      const screen = await renderMap();
+      await fireEvent(screen.getByTestId('map-cell-B-003'), 'longPress');
+      await fireEvent.press(screen.getByTestId('map-cell-B-001'));
+      return screen;
+    };
+
+    it('asks before re-homing, and says where from and where to', async () => {
+      const screen = await moveWireOntoShelfA();
+      expect(screen.getByTestId('map-move-confirm')).toBeTruthy();
+      expect(screen.getByText(/Garage › Shelf B/)).toBeTruthy();
+      expect(screen.getByText(/Garage › Shelf A, slot 1/)).toBeTruthy();
+      // Nothing has been written yet.
+      expect(getBin(db, bins[2].id)?.shelf_id).toBe(shelfB.id);
+    });
+
+    it('says the printed label does not follow the bin', async () => {
+      // People reasonably assume the tag on the tub carries its address. It
+      // carries an id, and a move that silently invalidated labels would be
+      // the worst kind of surprise.
+      const screen = await moveWireOntoShelfA();
+      expect(screen.getByText(/the printed label on the bin does not change/)).toBeTruthy();
+    });
+
+    it('confirming performs the move', async () => {
+      const screen = await moveWireOntoShelfA();
+      await fireEvent.press(screen.getByTestId('map-move-confirm-go'));
+      expect(getBin(db, bins[2].id)?.shelf_id).toBe(shelfA.id);
+    });
+
+    it('cancelling leaves the bin exactly where it was, and puts it down', async () => {
+      const screen = await moveWireOntoShelfA();
+      await fireEvent.press(screen.getByTestId('map-move-cancel'));
+      expect(getBin(db, bins[2].id)?.shelf_id).toBe(shelfB.id);
+      expect(screen.queryByTestId('map-cancel-move')).toBeNull();
+    });
+
+    it('warns when the destination is already full rather than refusing', async () => {
+      setShelfCapacity(db, shelfA.id, 2);
+      const screen = await moveWireOntoShelfA();
+      expect(screen.getByText(/only has 2 slots/)).toBeTruthy();
+    });
+
+    it('undo restores the shelf a bin was moved away from', async () => {
+      const screen = await moveWireOntoShelfA();
+      await fireEvent.press(screen.getByTestId('map-move-confirm-go'));
+      expect(getBin(db, bins[2].id)?.shelf_id).toBe(shelfA.id);
+
+      await fireEvent.press(screen.getByTestId('map-undo'));
       expect(getBin(db, bins[2].id)?.shelf_id).toBe(shelfB.id);
     });
   });
@@ -276,6 +315,65 @@ describe('the map screen, driven by presses', () => {
     });
   });
 
+  /**
+   * Searching the map searches the bins drawn on it. Item-level search is
+   * Home's job and arrives as `highlight`, which wins.
+   */
+  describe('searching the shelves', () => {
+    const search = async (text: string) => {
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId('map-search-toggle'));
+      await fireEvent.changeText(screen.getByTestId('map-search-input'), text);
+      return screen;
+    };
+
+    it('finds a bin by name and says where it is', async () => {
+      const screen = await search('screw');
+      expect(screen.getByText(/B-002 · Screws/)).toBeTruthy();
+      expect(screen.getByText('Garage › Shelf A')).toBeTruthy();
+    });
+
+    it('finds a bin by its short code too', async () => {
+      const screen = await search('B-003');
+      expect(screen.getByText(/B-003 · Wire/)).toBeTruthy();
+    });
+
+    it('walks every match, not just the first', async () => {
+      // 'B-00' matches all three; the banner has to be steppable.
+      const screen = await search('B-00');
+      expect(screen.getByText('1/3')).toBeTruthy();
+    });
+
+    it('says plainly when nothing on the shelves matches', async () => {
+      const screen = await search('nothing like this');
+      expect(screen.getByTestId('map-banner-nohits')).toBeTruthy();
+    });
+
+    it('closing the search puts the map back to idle', async () => {
+      const screen = await search('screw');
+      await fireEvent.press(screen.getByTestId('map-search-close'));
+      expect(screen.queryByTestId('map-search-input')).toBeNull();
+      expect(screen.queryByText(/B-002 · Screws/)).toBeNull();
+    });
+  });
+
+  describe('the whole-wall strip', () => {
+    it('is out of the way until asked for', async () => {
+      const screen = await renderMap();
+      expect(screen.queryByTestId('map-wall-strip')).toBeNull();
+
+      await fireEvent.press(screen.getByTestId('map-wall-toggle'));
+      expect(screen.getByTestId('map-wall-strip')).toBeTruthy();
+    });
+
+    it('draws a strip per shelf, including the one you are not looking at', async () => {
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId('map-wall-toggle'));
+      expect(screen.getByTestId(`map-wall-${shelfA.id}`)).toBeTruthy();
+      expect(screen.getByTestId(`map-wall-${shelfB.id}`)).toBeTruthy();
+    });
+  });
+
   describe('editing in place', () => {
     it('a new bin can be added to a shelf without leaving the map', async () => {
       const screen = await renderMap();
@@ -286,20 +384,62 @@ describe('the map screen, driven by presses', () => {
 
     it('a shelf can be renamed from the map', async () => {
       const screen = await renderMap();
-      await fireEvent.press(screen.getByLabelText('Rename Shelf A'));
-      await fireEvent.changeText(screen.getByTestId('prompt-input'), 'Top shelf');
-      await fireEvent.press(screen.getByTestId('prompt-submit'));
+      await fireEvent.press(screen.getByTestId(`map-edit-shelf-${shelfA.id}`));
+      await fireEvent.changeText(screen.getByTestId('map-shelf-name'), 'Top shelf');
+      await fireEvent(screen.getByTestId('map-shelf-name'), 'submitEditing');
       expect(screen.getByText('Top shelf')).toBeTruthy();
+    });
+
+    it('an empty shelf name is refused rather than saved', async () => {
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId(`map-edit-shelf-${shelfA.id}`));
+      await fireEvent.changeText(screen.getByTestId('map-shelf-name'), '   ');
+      await fireEvent(screen.getByTestId('map-shelf-name'), 'submitEditing');
+      expect(listShelves(db, shelfA.location_id).find((s) => s.id === shelfA.id)?.name).toBe(
+        'Shelf A',
+      );
     });
 
     it('a shelf can be given a slot count, and free slots appear', async () => {
       const screen = await renderMap();
-      await fireEvent.press(screen.getByLabelText('Set how many slots Shelf B has'));
-      await fireEvent.changeText(screen.getByTestId('prompt-input'), '3');
-      await fireEvent.press(screen.getByTestId('prompt-submit'));
-      // One bin on Shelf B, three slots — two gaps to fill.
+      await fireEvent.press(screen.getByTestId(`map-edit-shelf-${shelfB.id}`));
+      // Shelf B is unsized with one bin on it, so the first step up sizes it
+      // to two — honest about what is already there rather than guessing.
+      await fireEvent.press(screen.getByTestId('map-slots-up'));
+      expect(screen.getByTestId('map-slots-count')).toHaveTextContent('2');
+      await fireEvent.press(screen.getByTestId('map-sheet-done'));
       expect(screen.getByTestId(`map-gap-${shelfB.id}-0`)).toBeTruthy();
-      expect(screen.getByTestId(`map-gap-${shelfB.id}-1`)).toBeTruthy();
+    });
+
+    it('deleting a shelf keeps its bins, in the unshelved tray', async () => {
+      // Blueprint §11: inventory is never silently lost. The shelf is
+      // furniture; the bins that stood on it are not.
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId(`map-edit-shelf-${shelfB.id}`));
+      await fireEvent.press(screen.getByTestId('map-sheet-delete-shelf'));
+
+      expect(listShelves(db, shelfB.location_id).map((s) => s.id)).not.toContain(shelfB.id);
+      expect(getBin(db, bins[2].id)?.shelf_id).toBeNull();
+      expect(screen.getByTestId('map-cell-B-003')).toBeTruthy();
+    });
+
+    it('says a deleted shelf is gone for good rather than offering a dead UNDO', async () => {
+      // Recreating a shelf would mint a new id and every bin that pointed at
+      // the old one would lie, so the deletion really is final. A button that
+      // only dismisses itself would read as a move that silently failed.
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId(`map-edit-shelf-${shelfB.id}`));
+      await fireEvent.press(screen.getByTestId('map-sheet-delete-shelf'));
+
+      expect(screen.getByTestId('map-undo-snackbar')).toBeTruthy();
+      expect(screen.queryByTestId('map-undo')).toBeNull();
+      expect(screen.getByText(/removed for good/)).toBeTruthy();
+    });
+
+    it('warns what deleting a shelf will do to the bins on it', async () => {
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId(`map-edit-shelf-${shelfB.id}`));
+      expect(screen.getByText(/moves its 1 bin to the unshelved tray/)).toBeTruthy();
     });
   });
 

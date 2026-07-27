@@ -176,12 +176,22 @@ export function rowGaps(row: MapRow): number {
 
 // ------------------------------------------------------------------ moving
 
-/** Where a lifted bin is being dropped. */
+/**
+ * Where a lifted bin is being dropped.
+ *
+ * Two ways of naming the same place, because there are two ways to move a
+ * bin. A tap knows which bin it landed on and nothing about slots, so it
+ * says `beforeBinId`. A drag knows which gap the finger is over and not
+ * which bin used to be there, so it says `index` — counted over the row
+ * *without* the lifted bin, which is exactly what the drag measures.
+ */
 export interface DropTarget {
   /** The row receiving it; null = the unshelved row. */
   shelfId: string | null;
   /** Slot it lands in front of; omitted = the end of the row. */
   beforeBinId?: string;
+  /** Slot number in the row minus the lifted bin. Wins over `beforeBinId`. */
+  index?: number;
 }
 
 /**
@@ -222,9 +232,15 @@ export function planDrop(
   if (!destination) return null;
 
   const without = destination.row.bins.map((c) => c.binId).filter((id) => id !== binId);
-  const at = target.beforeBinId ? without.indexOf(target.beforeBinId) : -1;
+  const at =
+    target.index !== undefined
+      ? Math.max(0, Math.min(Math.trunc(target.index), without.length))
+      : target.beforeBinId
+        ? // A bin that is no longer there (a stale tap) means the end, not slot 0.
+          indexOrEnd(without, target.beforeBinId)
+        : without.length;
   const orderedIds = [...without];
-  orderedIds.splice(at === -1 ? without.length : at, 0, binId);
+  orderedIds.splice(at, 0, binId);
 
   const crossShelf = held.row.shelfId !== target.shelfId;
   const current = destination.row.bins.map((c) => c.binId);
@@ -233,6 +249,11 @@ export function planDrop(
   }
 
   return { binId, shelfId: target.shelfId, orderedIds, crossShelf, place: describePlace(destination) };
+}
+
+function indexOrEnd(ids: readonly string[], id: string): number {
+  const at = ids.indexOf(id);
+  return at === -1 ? ids.length : at;
 }
 
 // -------------------------------------------------------------------- heat
