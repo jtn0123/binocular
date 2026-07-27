@@ -7,15 +7,24 @@ import Constants from 'expo-constants';
  * (docs/RELEASES.md), "am I on the latest?" is a real question — and the
  * phone in the workshop is the one place that can't answer it from memory.
  *
- * There is **no update check here** — no polling, no version comparison. The
- * repository is private, so an anonymous check is impossible, and the
- * alternatives (a token shipped in the APK, or a service to stand up) are
- * both worse than one tap to the page that already lists every build.
+ * This file used to say there was **no update check**, on the grounds that
+ * the repository is private so an anonymous check is impossible, and that
+ * both workarounds — a token shipped in the APK, or a service to stand up —
+ * were worse than one tap to the page listing every build.
  *
- * So the UI must not claim otherwise. The row states the running build and
- * links out; it is labelled "Open releases page", not "Check for updates",
- * because a button that says it checks something had better check it. Same
- * honesty rule as D5 and D15: show what is known, never imply more.
+ * That reasoning still holds against both of those workarounds, and neither
+ * was taken. What it missed is a third option: the person who owns the
+ * repository supplies a read-only token themselves, and it lives in the
+ * platform secure store beside the vision API keys (blueprint Q1). Nothing
+ * secret is in the APK, so unzipping a build still yields no access. The
+ * check and the download live in `src/update`; this file stays the answer to
+ * "which build is this", which is the part that works with no network at all.
+ *
+ * The honesty rule that produced the original note is unchanged and now
+ * applies to more surface: the button says "Check for updates" because it
+ * does check, "unknown" is a state the UI shows rather than rounding to "up
+ * to date", and nothing claims to install anything — Android does that, and
+ * only after the user confirms it.
  */
 /**
  * The releases *list*, deliberately not `/releases/latest`: that URL resolves

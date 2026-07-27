@@ -8,6 +8,14 @@ import * as SecureStore from 'expo-secure-store';
 const ANTHROPIC_KEY = 'binocular.anthropic_api_key';
 const OPENAI_KEY = 'binocular.openai_api_key';
 const PROVIDER = 'binocular.vision_provider';
+/**
+ * A GitHub token, only so the app can see its own releases (`src/update`).
+ * Same rule as the vision keys and for the same reason: the repository is
+ * private, and the alternative — a token baked into the APK — would hand
+ * repository access to anyone who unzipped a build. This one is typed in by
+ * the person who owns the repository and never leaves the secure store.
+ */
+const GITHUB_TOKEN = 'binocular.github_token';
 
 export type ProviderChoice = 'fixture' | 'local' | 'claude' | 'openai';
 
@@ -34,6 +42,8 @@ export const getApiKey = () => getStoredKey(ANTHROPIC_KEY);
 export const setApiKey = (key: string | null) => setStoredKey(ANTHROPIC_KEY, key);
 export const getOpenAiApiKey = () => getStoredKey(OPENAI_KEY);
 export const setOpenAiApiKey = (key: string | null) => setStoredKey(OPENAI_KEY, key);
+export const getGithubToken = () => getStoredKey(GITHUB_TOKEN);
+export const setGithubToken = (token: string | null) => setStoredKey(GITHUB_TOKEN, token);
 
 export async function getProviderChoice(): Promise<ProviderChoice> {
   const stored = await SecureStore.getItemAsync(PROVIDER);

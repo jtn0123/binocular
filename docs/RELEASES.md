@@ -19,10 +19,12 @@ Both run `typecheck` + the Jest suite first — a release APK never ships from
 red code — then `expo prebuild` → `assembleRelease`, and publish the APK with
 install instructions and the commit list since the previous release.
 
-Ad-hoc builds are published as **pre-releases**, which is why the app's
-*Check for updates* opens `/releases` rather than `/releases/latest` — that
-URL resolves only to the newest *non*-pre-release and 404s while only ad-hoc
-builds exist. Push a `v*` tag when you want a build to be the "latest".
+Ad-hoc builds are published as **pre-releases**, and both the in-app check and
+the browser link therefore work from the releases *list* rather than
+`/releases/latest` — that URL resolves only to the newest *non*-pre-release
+and 404s while only ad-hoc builds exist. For the same reason the in-app check
+offers pre-releases: skipping them would mean ignoring the normal case. Push a
+`v*` tag when you want a build to be the "latest".
 
 Default build is **arm64-v8a only** — it matters when the download happens on
 workshop Wi-Fi. Any phone from the last decade is arm64; the *Run workflow*
@@ -77,6 +79,58 @@ that have each wasted an afternoon:
 - It only downloads in a browser **signed in to GitHub**. An in-app browser
   inside a chat client usually is not, and fails silently. Open the release
   page in Chrome itself.
+
+## Updating from inside the app
+
+**Settings → Updates → Check for updates.** The app asks GitHub which build is
+newest, compares it against the one running, and — if it is newer — offers to
+download the APK and hand it to Android's installer. Source is
+`src/update/`.
+
+### It needs a token, because the repository is private
+
+An anonymous read of a private repository's releases returns **404** — GitHub
+hides existence rather than admitting it — so the first check says it needs a
+token and offers a field for one.
+
+Create a **fine-grained personal access token** with read access to this
+repository only:
+
+> GitHub → Settings → Developer settings → Personal access tokens →
+> Fine-grained tokens → *Generate new token* → Repository access: **Only
+> select repositories** → `jtn0123/binocular` → Repository permissions →
+> **Contents: Read-only**.
+
+Paste it into the field in Settings. It goes into `expo-secure-store` next to
+the vision API keys and is used for exactly two requests: listing releases and
+downloading the asset.
+
+**No token is ever baked into a build.** That was the objection that kept this
+feature out for so long, and it still stands — what changed is that the token
+is typed in on the phone by the person who owns the repository, so unzipping
+an APK still yields no access to anything. If the repository is ever made
+public, the check works with no token at all and the field can stay empty.
+
+### What it does and does not do
+
+- It **cannot install silently**, and does not pretend to. Android shows its
+  own confirmation sheet; you tap Update there. The first time, Android will
+  ask to let Binocular install unknown apps — that is the
+  `REQUEST_INSTALL_PACKAGES` permission in `app.json`.
+- It **does not verify a checksum**, deliberately. A hash published beside the
+  file travels over the same connection as the file, so it proves nothing an
+  HTTPS download does not already. The check that matters is Android's: an APK
+  signed with a different key than the installed app is *refused*. That is
+  also why the signing-key section below matters so much.
+- It **compares version codes, not version names** — the workflow encodes the
+  code in the asset name (`…-vc1046.apk`), and that integer is what Android
+  itself compares. When either side has no version code (a dev build), the app
+  says so rather than claiming you are up to date.
+- The download is **~100 MB**. It reports bytes as it goes and can be stopped.
+
+The browser route below still works and is still the fallback: when there is
+no token, when a download fails on workshop Wi-Fi, or on any platform that
+cannot sideload.
 
 ## Installing on the phone
 
@@ -165,7 +219,16 @@ when blueprint Q1 (the API-key proxy) has to be answered. Not before.
 
 ## Scope note
 
-This is build-and-deliver plumbing only. It adds no runtime behaviour, no new
-dependency, and touches no blueprint decision — the roadmap (§10) and
-invariants (§11) are unaffected. `app.json` is stamped in the CI checkout
-only; the committed version stays whatever the repo says.
+The CI half of this is build-and-deliver plumbing only: it adds no runtime
+behaviour, and `app.json` is stamped in the CI checkout only, so the committed
+version stays whatever the repo says.
+
+The in-app updater is runtime behaviour and does add a dependency
+(`expo-intent-launcher`) and a permission (`REQUEST_INSTALL_PACKAGES`). It
+touches no blueprint decision — the roadmap (§10) is unaffected, and the
+invariants (§11) hold: it writes nothing to inventory, shows no percentages,
+imports no provider, keeps its token in the secure store like every other
+credential (Q1), validates GitHub's response with zod at the boundary (D9),
+and adds no migration. It is the one feature besides live recognition that
+needs the network, and it reports "could not reach GitHub" rather than
+degrading any screen that does not (I4).
