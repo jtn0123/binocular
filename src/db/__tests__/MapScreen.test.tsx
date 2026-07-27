@@ -423,6 +423,19 @@ describe('the map screen, driven by presses', () => {
       expect(screen.getByTestId('map-cell-B-003')).toBeTruthy();
     });
 
+    it('says a deleted shelf is gone for good rather than offering a dead UNDO', async () => {
+      // Recreating a shelf would mint a new id and every bin that pointed at
+      // the old one would lie, so the deletion really is final. A button that
+      // only dismisses itself would read as a move that silently failed.
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId(`map-edit-shelf-${shelfB.id}`));
+      await fireEvent.press(screen.getByTestId('map-sheet-delete-shelf'));
+
+      expect(screen.getByTestId('map-undo-snackbar')).toBeTruthy();
+      expect(screen.queryByTestId('map-undo')).toBeNull();
+      expect(screen.getByText(/removed for good/)).toBeTruthy();
+    });
+
     it('warns what deleting a shelf will do to the bins on it', async () => {
       const screen = await renderMap();
       await fireEvent.press(screen.getByTestId(`map-edit-shelf-${shelfB.id}`));

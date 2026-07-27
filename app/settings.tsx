@@ -207,9 +207,14 @@ export default function SettingsScreen() {
 
   const [mapPrefs, setMapPrefs] = useState<MapPrefs>(DEFAULT_MAP_PREFS);
   const setMapPref = <K extends keyof MapPrefs>(key: K, value: MapPrefs[K]) => {
-    const next = { ...mapPrefs, [key]: value };
-    setMapPrefs(next);
-    void saveMapPrefs(next);
+    // Derived from the committed state rather than this render's copy: two
+    // switches flipped before a re-render would otherwise have the second
+    // write drop the first, in memory and in what gets persisted.
+    setMapPrefs((prev) => {
+      const next = { ...prev, [key]: value };
+      void saveMapPrefs(next);
+      return next;
+    });
     logEvent(db, { kind: 'settings', name: 'map_pref_changed', detail: { [key]: value } });
   };
 

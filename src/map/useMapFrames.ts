@@ -80,6 +80,33 @@ export function useMapFrames(): MapFrames {
    * the same width, so a row is a uniform strip offset by its own sideways
    * scroll. That is what keeps the drag to one detector for the whole map.
    */
+  /**
+   * One row, summed down the whole chain: area → well → board → sideways
+   * strip scroll. Null when any link has not laid out yet — a row that cannot
+   * be placed exactly must not be placed approximately.
+   */
+  const measureRow = useCallback(
+    (area: LayoutRectangle, well: LayoutRectangle, row: MapRow): RowMeasurement | null => {
+      const key = rowKey(row);
+      const board = boardFrames.current[key];
+      const strip = stripFrames.current[key];
+      if (!board || !strip) return null;
+      const top = area.y + well.y + board.y - scrollY.current;
+      const left = area.x + well.x + board.x + strip.x - (stripScrollX.current[key] ?? 0);
+      return {
+        shelfId: row.shelfId,
+        top,
+        bottom: top + board.height,
+        cards: slotMidlines(left, row.bins.length).map((mid, i) => ({
+          binId: row.bins[i].binId,
+          x: mid - CARD_W / 2,
+          width: CARD_W,
+        })),
+      };
+    },
+    [rowKey],
+  );
+
   const measureRows = useCallback(
     (areas: readonly MapArea[]): RowMeasurement[] => {
       const rows: RowMeasurement[] = [];
@@ -89,27 +116,13 @@ export function useMapFrames(): MapFrames {
         const well = wellFrames.current[areaKey];
         if (!a || !well) return;
         area.rows.forEach((row) => {
-          const key = rowKey(row);
-          const board = boardFrames.current[key];
-          const strip = stripFrames.current[key];
-          if (!board || !strip) return;
-          const top = a.y + well.y + board.y - scrollY.current;
-          const left = a.x + well.x + board.x + strip.x - (stripScrollX.current[key] ?? 0);
-          rows.push({
-            shelfId: row.shelfId,
-            top,
-            bottom: top + board.height,
-            cards: slotMidlines(left, row.bins.length).map((mid, i) => ({
-              binId: row.bins[i].binId,
-              x: mid - CARD_W / 2,
-              width: CARD_W,
-            })),
-          });
+          const measured = measureRow(a, well, row);
+          if (measured) rows.push(measured);
         });
       });
       return rows;
     },
-    [areaKeyOf, rowKey],
+    [areaKeyOf, measureRow],
   );
 
   // Written from layout and scroll events, never during render — which is

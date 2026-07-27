@@ -74,6 +74,8 @@ export function MapToolbar({
             style={[styles.chip, heat === mode && styles.chipOn]}
             onPress={() => onHeat(mode)}
             accessibilityRole="button"
+            // Selection is colour-only otherwise, so all three read alike.
+            accessibilityState={{ selected: heat === mode }}
             accessibilityLabel={`Tint cells by ${label}`}
             testID={`map-heat-${mode}`}
           >

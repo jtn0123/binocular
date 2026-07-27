@@ -19,14 +19,19 @@ export interface ShelfMoves {
    */
   heldNow: () => string | null;
   hold: (binId: string | null) => void;
+  /** Puts down whatever is in hand. Stable, so the pan can depend on it. */
+  cancelHold: () => void;
   lift: (binId: string) => void;
   executeDrop: (binId: string, target: DropTarget) => void;
   /** Bin that just landed, for the settle ring. */
   settling: string | null;
   confirm: (MoveConfirmRequest & { commit: () => void }) | null;
   cancelConfirm: () => void;
-  undo: { label: string; revert: () => void } | null;
+  /** `revert` is null when the thing that happened cannot be taken back. */
+  undo: { label: string; revert: (() => void) | null } | null;
   offerUndo: (label: string, revert: () => void) => void;
+  /** Says what happened without offering to undo it. */
+  notify: (label: string) => void;
   takeUndo: () => void;
   clearUndo: () => void;
 }
@@ -61,7 +66,7 @@ export function useShelfMoves({
   // The same one-slot undo bin detail offers, for the same reason: a move is
   // one press away and was otherwise only reversible by doing it again
   // backwards — which means remembering where the bin actually came from.
-  const [undo, setUndo] = useState<{ label: string; revert: () => void } | null>(null);
+  const [undo, setUndo] = useState<{ label: string; revert: (() => void) | null } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -72,11 +77,23 @@ export function useShelfMoves({
     [],
   );
 
-  const offerUndo = useCallback((label: string, revert: () => void) => {
+  const say = useCallback((label: string, revert: (() => void) | null) => {
     if (undoTimer.current) clearTimeout(undoTimer.current);
     setUndo({ label, revert });
     undoTimer.current = setTimeout(() => setUndo(null), 6000);
   }, []);
+
+  const offerUndo = useCallback(
+    (label: string, revert: () => void) => say(label, revert),
+    [say],
+  );
+
+  /**
+   * The same strip without the UNDO button, for things that genuinely cannot
+   * be taken back — deleting a shelf, whose id no recreation would restore.
+   * Offering a button that does nothing reads as a silent failure.
+   */
+  const notify = useCallback((label: string) => say(label, null), [say]);
 
   const hold = useCallback((binId: string | null) => {
     heldRef.current = binId;
@@ -163,13 +180,15 @@ export function useShelfMoves({
   // without the React Compiler having to assume it might run during render.
   const heldNow = useCallback(() => heldRef.current, []);
 
+  const cancelHold = useCallback(() => hold(null), [hold]);
+
   const cancelConfirm = useCallback(() => {
     setConfirm(null);
     hold(null);
   }, [hold]);
 
   const takeUndo = useCallback(() => {
-    undo?.revert();
+    undo?.revert?.();
     if (undoTimer.current) clearTimeout(undoTimer.current);
     setUndo(null);
   }, [undo]);
@@ -180,6 +199,7 @@ export function useShelfMoves({
     held,
     heldNow,
     hold,
+    cancelHold,
     lift,
     executeDrop,
     settling,
@@ -187,6 +207,7 @@ export function useShelfMoves({
     cancelConfirm,
     undo,
     offerUndo,
+    notify,
     takeUndo,
     clearUndo,
   };

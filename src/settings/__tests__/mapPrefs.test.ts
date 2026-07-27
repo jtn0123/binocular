@@ -37,6 +37,32 @@ describe('map preference persistence', () => {
     expect(parseMapPrefs('{"dragEnabled":"yes"}')).toEqual(DEFAULT_MAP_PREFS);
   });
 
+  it('keeps the switches it can read when one is missing or unreadable', () => {
+    // Whole-object validation would reset someone's map the first time this
+    // file gains a preference: what is on disk predates the new key.
+    expect(parseMapPrefs('{"dragEnabled":false}')).toEqual({
+      dragEnabled: false,
+      showTicks: DEFAULT_MAP_PREFS.showTicks,
+    });
+    expect(parseMapPrefs('{"dragEnabled":"yes","showTicks":false}')).toEqual({
+      dragEnabled: DEFAULT_MAP_PREFS.dragEnabled,
+      showTicks: false,
+    });
+    // A preference this version does not know about is not a reason to reset.
+    expect(parseMapPrefs('{"dragEnabled":false,"fromTheFuture":7}')).toEqual({
+      dragEnabled: false,
+      showTicks: DEFAULT_MAP_PREFS.showTicks,
+    });
+  });
+
+  it('keeps the drag switch off once it has been turned off', async () => {
+    // The one that matters in the field: someone whose map closed itself
+    // turns the drag off, and it must still be off after a restart.
+    await saveMapPrefs({ ...DEFAULT_MAP_PREFS, dragEnabled: false });
+    getItemAsync.mockResolvedValueOnce(setItemAsync.mock.calls[0][1]);
+    await expect(loadMapPrefs()).resolves.toMatchObject({ dragEnabled: false });
+  });
+
   it('survives a secure-store that refuses to read', async () => {
     // A preference must never be able to break the screen it configures.
     getItemAsync.mockRejectedValueOnce(new Error('no keystore'));

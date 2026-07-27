@@ -23,7 +23,7 @@ import {
 import {
   createBin,
   deleteShelf,
-  itemsForBin,
+  itemCountsByBin,
   listBins,
   listLocations,
   listShelves,
@@ -87,7 +87,11 @@ export default function MapScreen() {
     const locations = listLocations(db);
     const shelves = locations.flatMap((l) => listShelves(db, l.id));
     const bins = listBins(db);
-    const itemCounts = new Map(bins.map((b) => [b.id, itemsForBin(db, b.id).length]));
+    // One grouped count rather than one query per bin: this memo re-runs on
+    // every mutation and every screen focus, and a real wall is a few hundred
+    // bins. Bins with no items are absent from the map, hence the `?? 0`.
+    const counted = itemCountsByBin(db);
+    const itemCounts = new Map(bins.map((b) => [b.id, counted.get(b.id) ?? 0]));
     return buildMap({ locations, shelves, bins, itemCounts });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [db, tick]);
@@ -130,7 +134,10 @@ export default function MapScreen() {
   const wantedIds = highlightIds.length > 0 ? highlightIds : queryIds;
   const finds = useMemo(() => locateMany(areas, wantedIds), [areas, wantedIds]);
   const [focusIndex, setFocusIndex] = useState(0);
-  const focused = finds.length > 0 ? finds[Math.min(focusIndex, finds.length - 1)] : null;
+  // Clamped once and used everywhere: a new `highlight` can shrink the match
+  // set without resetting the step counter, and the banner read "3/2".
+  const focusAt = finds.length > 0 ? Math.min(focusIndex, finds.length - 1) : 0;
+  const focused = finds.length > 0 ? finds[focusAt] : null;
 
   // ------------------------------------------------------- layout and moves
   const frames = useMapFrames();
@@ -144,9 +151,21 @@ export default function MapScreen() {
     frames,
     onLift: moves.lift,
     onDrop: moves.executeDrop,
-    onCancel: () => moves.hold(null),
+    // Stable identities only: `useMapDrag` memoizes the pan on these, and an
+    // inline arrow would rebuild the gesture on every render — including the
+    // many renders a drag itself produces.
+    onCancel: moves.cancelHold,
     onDragStart: moves.clearUndo,
   });
+
+  // The strip's frames are window rectangles measured while it is on screen.
+  // Closing it unmounts the strip but would leave them registered, and a drag
+  // released over that band of screen would be filed against a shelf that is
+  // no longer drawn there.
+  const clearWallFrames = drag.clearWallFrames;
+  useEffect(() => {
+    if (!wallOpen) clearWallFrames();
+  }, [clearWallFrames, wallOpen]);
 
   useEffect(() => {
     if (!focused || scrolledOnce.current) return;
@@ -240,14 +259,14 @@ export default function MapScreen() {
         viaWall={slot?.viaWall ?? false}
         held={moves.held !== null && dragging === null}
         heldLabel={heldLabel(areas, moves.held)}
-        onCancelHold={() => moves.hold(null)}
+        onCancelHold={moves.cancelHold}
         focused={
           focused
             ? { code: focused.cell.code, name: focused.cell.name, where: describePlace(focused) }
             : null
         }
         findCount={finds.length}
-        findIndex={focusIndex}
+        findIndex={focusAt}
         onStepFocus={stepFocus}
         searching={searchOpen && query.trim().length > 0}
         query={query.trim()}
@@ -360,15 +379,17 @@ export default function MapScreen() {
           <Text style={styles.snackbarText} numberOfLines={1}>
             {moves.undo.label}
           </Text>
-          <Pressable
-            onPress={moves.takeUndo}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Undo the move"
-            testID="map-undo"
-          >
-            <Text style={styles.snackbarUndo}>UNDO</Text>
-          </Pressable>
+          {moves.undo.revert ? (
+            <Pressable
+              onPress={moves.takeUndo}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Undo the move"
+              testID="map-undo"
+            >
+              <Text style={styles.snackbarUndo}>UNDO</Text>
+            </Pressable>
+          ) : null}
         </View>
       )}
 
@@ -402,14 +423,14 @@ export default function MapScreen() {
           });
           setSheet(null);
           bump();
-          moves.offerUndo(
+          // Said, not offered: recreating a shelf would mint a new id, and
+          // every bin that pointed at the old one would lie. An UNDO button
+          // that only dismisses itself reads as a silent failure, so this
+          // announces the deletion without one.
+          moves.notify(
             target.binCount > 0
-              ? `${target.name} removed — its bins are in the tray`
-              : `${target.name} removed`,
-            () => {
-              // Deliberately not restorable: recreating a shelf would mint a
-              // new id, and every bin that pointed at the old one would lie.
-            },
+              ? `${target.name} removed for good — its bins are in the tray`
+              : `${target.name} removed for good`,
           );
         }}
         onClose={() => setSheet(null)}

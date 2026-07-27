@@ -81,43 +81,52 @@ export function BinCard({
       accessibilityLabel={describe(cell, state)}
       testID={`map-cell-${cell.code}`}
     >
-      {state.ghosted ? null : (
-        <>
-          <View style={styles.head}>
-            <View style={styles.well}>
-              {cell.photoUri ? (
-                <Image source={{ uri: cell.photoUri }} style={styles.photo} contentFit="cover" />
-              ) : (
-                <Ionicons
-                  name={state.held ? 'move' : 'cube-outline'}
-                  size={13}
-                  color={loud ? colors.amberInkOn : colors.textFaint}
-                />
-              )}
-            </View>
-            <Text style={[styles.count, loud && styles.inkOn]} numberOfLines={1}>
-              {state.held ? 'lifted' : countLabel(cell.items)}
-            </Text>
-          </View>
-
-          <Text style={[styles.name, loud && styles.inkOnName]} numberOfLines={2}>
-            {cell.name}
-          </Text>
-
-          {/* The recessed label holder: a dark well with the amber tag in it. */}
-          <View style={[styles.holder, loud && styles.holderLoud]}>
-            <View style={[styles.tag, loud && styles.tagLoud]}>
-              <Text style={[styles.tagText, loud && styles.tagTextLoud]} numberOfLines={1}>
-                {cell.code}
-              </Text>
-            </View>
-          </View>
-        </>
-      )}
+      {state.ghosted ? null : <CardFace cell={cell} held={state.held} loud={loud} />}
 
       {state.held ? <HeldPulse /> : null}
       {state.settling ? <SettleRing /> : null}
     </Pressable>
+  );
+}
+
+/**
+ * What the card shows when the bin is actually standing there — everything
+ * except the dashed hole a drag leaves behind. Its own component so the card
+ * body stays a short list of states rather than a nest of them.
+ */
+function CardFace({ cell, held, loud }: { cell: MapCell; held: boolean; loud: boolean }) {
+  return (
+    <>
+      <View style={styles.head}>
+        <View style={styles.well}>
+          {cell.photoUri ? (
+            <Image source={{ uri: cell.photoUri }} style={styles.photo} contentFit="cover" />
+          ) : (
+            <Ionicons
+              name={held ? 'move' : 'cube-outline'}
+              size={13}
+              color={loud ? colors.amberInkOn : colors.textFaint}
+            />
+          )}
+        </View>
+        <Text style={[styles.count, loud && styles.inkOn]} numberOfLines={1}>
+          {held ? 'lifted' : countLabel(cell.items)}
+        </Text>
+      </View>
+
+      <Text style={[styles.name, loud && styles.inkOnName]} numberOfLines={2}>
+        {cell.name}
+      </Text>
+
+      {/* The recessed label holder: a dark well with the amber tag in it. */}
+      <View style={[styles.holder, loud && styles.holderLoud]}>
+        <View style={[styles.tag, loud && styles.tagLoud]}>
+          <Text style={[styles.tagText, loud && styles.tagTextLoud]} numberOfLines={1}>
+            {cell.code}
+          </Text>
+        </View>
+      </View>
+    </>
   );
 }
 
@@ -163,11 +172,9 @@ function countLabel(items: number): string {
 function describe(cell: MapCell, state: BinCardState): string {
   const what = `${cell.code} ${cell.name}, ${countLabel(cell.items)}`;
   const found = state.match || state.focused ? ' — a bin you are looking for' : '';
-  const how = state.held
-    ? ' — in hand, tap to put it back down'
-    : state.holding
-      ? ' — tap to place the held bin in front of it'
-      : '. Hold to pick it up';
+  let how = '. Hold to pick it up';
+  if (state.held) how = ' — in hand, tap to put it back down';
+  else if (state.holding) how = ' — tap to place the held bin in front of it';
   return `${what}${found}${how}`;
 }
 

@@ -1,8 +1,7 @@
 import { StyleSheet, Switch, Text, View } from 'react-native';
 
+import type { MapPrefs } from '@/settings/mapPrefs';
 import { colors, sp, type } from '@/theme';
-
-import type { MapPrefs } from '../../settings/mapPrefs';
 
 /**
  * The map's settings.

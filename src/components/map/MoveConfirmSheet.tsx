@@ -73,8 +73,8 @@ export function MoveConfirmSheet({
             <View style={styles.warn}>
               <Ionicons name="warning-outline" size={15} color={colors.danger} />
               <Text style={styles.warnText}>
-                {request.destination} only has {request.overCapacity} slots. It will still take the
-                bin — the shelf just reads over.
+                {request.destination} only has {slotLabel(request.overCapacity)}. It will still take
+                the bin — the shelf just reads over.
               </Text>
             </View>
           ) : null}
@@ -108,6 +108,11 @@ export function MoveConfirmSheet({
       ) : null}
     </Modal>
   );
+}
+
+/** A one-slot shelf reads "only has 1 slot", not "1 slots". */
+function slotLabel(slots: number): string {
+  return `${slots} slot${slots === 1 ? '' : 's'}`;
 }
 
 const styles = StyleSheet.create({

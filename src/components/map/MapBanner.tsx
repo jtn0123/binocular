@@ -11,6 +11,10 @@ import { colors, mono, radius, sp } from '@/theme';
  * dragging, the exact slot the bin would land in; searching, which match of
  * how many. The states are exclusive on purpose — two banners stacked is how
  * the previous version lost the one that mattered.
+ *
+ * Every state is a live region: this line is the only thing that says what the
+ * map is doing, so a screen reader that has to be navigated to it hears about
+ * a lift or a landing slot only by accident.
  */
 export interface MapBannerProps {
   /** Under the finger right now. */
@@ -43,7 +47,7 @@ export function MapBanner(props: MapBannerProps) {
 
   if (props.searching) {
     return (
-      <View style={styles.quiet} testID="map-banner-nohits">
+      <View style={styles.quiet} accessibilityLiveRegion="polite" testID="map-banner-nohits">
         <Ionicons name="search-outline" size={18} color={colors.textFaint} />
         <Text style={styles.where}>Nothing on the shelves matches “{props.query}”.</Text>
       </View>
@@ -52,7 +56,7 @@ export function MapBanner(props: MapBannerProps) {
 
   if (props.wantedButMissing) {
     return (
-      <View style={styles.banner}>
+      <View style={styles.banner} accessibilityLiveRegion="polite">
         <Ionicons name="help-circle-outline" size={18} color={colors.textDim} />
         <Text style={styles.where}>That bin is not on the map.</Text>
       </View>
@@ -60,7 +64,7 @@ export function MapBanner(props: MapBannerProps) {
   }
 
   return (
-    <View style={styles.quiet}>
+    <View style={styles.quiet} accessibilityLiveRegion="polite">
       <Ionicons name="hand-left-outline" size={18} color={colors.textDim} />
       <View style={styles.text}>
         <Text style={styles.summary} numberOfLines={1}>
@@ -81,7 +85,11 @@ function DragBanner({
   viaWall,
 }: MapBannerProps & { dragged: MapCell }) {
   return (
-    <View style={[styles.banner, styles.active]} testID="map-banner-drag">
+    <View
+      style={[styles.banner, styles.active]}
+      accessibilityLiveRegion="polite"
+      testID="map-banner-drag"
+    >
       <Ionicons name="move" size={18} color={colors.amber} />
       <View style={styles.text}>
         <Text style={styles.name} numberOfLines={1}>
@@ -101,7 +109,7 @@ function DragBanner({
 
 function HeldBanner({ heldLabel, onCancelHold }: MapBannerProps) {
   return (
-    <View style={[styles.banner, styles.active]}>
+    <View style={[styles.banner, styles.active]} accessibilityLiveRegion="polite">
       <Ionicons name="move" size={18} color={colors.amber} />
       <View style={styles.text}>
         <Text style={styles.name} numberOfLines={1}>
@@ -131,7 +139,7 @@ function FoundBanner({
   onStepFocus,
 }: MapBannerProps & { focused: { code: string; name: string; where: string } }) {
   return (
-    <View style={styles.banner}>
+    <View style={styles.banner} accessibilityLiveRegion="polite">
       <Ionicons name="locate" size={18} color={colors.amber} />
       <View style={styles.text}>
         <Text style={styles.name} numberOfLines={1}>

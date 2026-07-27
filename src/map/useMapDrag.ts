@@ -46,6 +46,12 @@ export interface MapDrag {
   };
   /** Registers a wall strip's window-space frame as a drop target. */
   setWallFrame: (key: string, frame: WallShelfFrame) => void;
+  /**
+   * Forgets every registered wall frame. Call it when the strip is hidden:
+   * the frames are window rectangles, and a stale one keeps matching the
+   * region of screen the strip used to occupy.
+   */
+  clearWallFrames: () => void;
 }
 
 /**
@@ -122,14 +128,23 @@ export function useMapDrag({
    * view-relative space; each target is compared in the space it was measured
    * in, and the two are never mixed.
    */
-  const wallHit = useCallback((absX: number, absY: number): DropSlot | null => {
-    for (const [key, frame] of Object.entries(wallFrames.current)) {
-      if (absX < frame.x - 4 || absX > frame.x + frame.width + 4) continue;
-      if (absY < frame.y - 3 || absY > frame.y + frame.height + 3) continue;
-      return { shelfId: key === 'unshelved' ? null : key, index: -1, viaWall: true };
-    }
-    return null;
-  }, []);
+  const wallHit = useCallback(
+    (absX: number, absY: number): DropSlot | null => {
+      for (const [key, frame] of Object.entries(wallFrames.current)) {
+        if (absX < frame.x - 4 || absX > frame.x + frame.width + 4) continue;
+        if (absY < frame.y - 3 || absY > frame.y + frame.height + 3) continue;
+        const shelfId = key === 'unshelved' ? null : key;
+        // A shelf deleted while the strip is open leaves its cell registered
+        // until the strip lays out again. Dropping onto a shelf that no
+        // longer exists would resolve to nothing, so ignore the stale cell
+        // and let the boards underneath answer instead.
+        if (!areas.some((area) => area.rows.some((row) => row.shelfId === shelfId))) continue;
+        return { shelfId, index: -1, viaWall: true };
+      }
+      return null;
+    },
+    [areas],
+  );
 
   const resolveSlot = useCallback(
     (point: DragPoint): DropSlot | null => {
@@ -154,6 +169,30 @@ export function useMapDrag({
       autoScroll.current = null;
     }
   }, [dragLive]);
+
+  /**
+   * Declared above `beginDrag` because the edge auto-scroll routes its ticks
+   * through it: the clock runs at 16 ms, and setting state unconditionally
+   * there re-renders the whole map sixty times a second while a finger rests
+   * at the edge. The equality guard below is what makes that cost nothing.
+   */
+  const trackDrag = useCallback(
+    (point: DragPoint) => {
+      if (!draggingRef.current) return;
+      pointer.current = point;
+      const next = resolveSlot(point);
+      const before = slotRef.current;
+      slotRef.current = next;
+      if (
+        before?.shelfId !== next?.shelfId ||
+        before?.index !== next?.index ||
+        before?.viaWall !== next?.viaWall
+      ) {
+        setSlot(next);
+      }
+    },
+    [resolveSlot],
+  );
 
   const beginDrag = useCallback(
     (point: DragPoint) => {
@@ -195,29 +234,10 @@ export function useMapDrag({
         const step = autoScrollStep(p.y, { top: 0, bottom: box.height });
         if (step === 0) return;
         frames.scrollTo(frames.getScrollY() + step);
-        slotRef.current = resolveSlot(p);
-        setSlot(slotRef.current);
+        trackDrag(p);
       }, 16);
     },
-    [areas, dragLive, frames, grabX, grabY, onDragStart, onLift, opacity, resolveSlot, scale, x, y],
-  );
-
-  const trackDrag = useCallback(
-    (point: DragPoint) => {
-      if (!draggingRef.current) return;
-      pointer.current = point;
-      const next = resolveSlot(point);
-      const before = slotRef.current;
-      slotRef.current = next;
-      if (
-        before?.shelfId !== next?.shelfId ||
-        before?.index !== next?.index ||
-        before?.viaWall !== next?.viaWall
-      ) {
-        setSlot(next);
-      }
-    },
-    [resolveSlot],
+    [areas, dragLive, frames, grabX, grabY, onDragStart, onLift, opacity, scale, trackDrag, x, y],
   );
 
   const finishDrag = useCallback(() => {
@@ -283,6 +303,9 @@ export function useMapDrag({
     ghost: { x, y, scale, opacity },
     setWallFrame: (key, frame) => {
       wallFrames.current[key] = frame;
+    },
+    clearWallFrames: () => {
+      wallFrames.current = {};
     },
   };
 }

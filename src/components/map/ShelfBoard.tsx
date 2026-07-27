@@ -58,64 +58,10 @@ export interface ShelfBoardProps {
 }
 
 export function ShelfBoard(props: ShelfBoardProps) {
-  const { row, lit, landingIndex, draggingBinId, heldBinId, showTicks } = props;
-  const holding = heldBinId !== null || draggingBinId !== null;
+  const { row, lit, showTicks } = props;
   const over = row.capacity !== null && row.bins.length > row.capacity;
-  const gaps = rowGaps(row);
   const key = row.shelfId ?? 'unshelved';
-
-  // Cards in draw order, with the landing placeholder spliced into the slot
-  // the drag reports. The lifted bin keeps its place as a hole, so the row
-  // never reflows out from under the finger. `seen` counts only the cards the
-  // drag can see — the same footing the reported index was measured on.
-  const cards: React.ReactNode[] = [];
-  let seen = 0;
-  for (const cell of row.bins) {
-    const dragged = cell.binId === draggingBinId;
-    if (!dragged && landingIndex === seen) {
-      cards.push(<LandingSlot key="landing" index={landingIndex} />);
-    }
-    if (!dragged) seen++;
-    cards.push(
-      <BinCard
-        key={cell.binId}
-        cell={cell}
-        state={cardState(props, cell)}
-        heatStyle={props.heatFor(cell)}
-        onPress={() => props.onCellPress(cell)}
-        onLongPress={() => props.onCellLongPress(cell)}
-      />,
-    );
-  }
-  if (landingIndex !== null && landingIndex >= seen) {
-    cards.push(<LandingSlot key="landing" index={landingIndex} />);
-  }
-
-  // Declared space that is still free. One is consumed while a landing slot
-  // is showing, so the row does not appear to grow as a bin arrives.
-  const free = Math.max(0, gaps - (landingIndex !== null ? 1 : 0));
-  for (let i = 0; i < free; i++) {
-    cards.push(
-      <SlotPlaceholder
-        key={`gap-${i}`}
-        holding={holding}
-        rowName={row.name}
-        onPress={props.onDropAtEnd}
-        testID={`map-gap-${key}-${i}`}
-      />,
-    );
-  }
-  if (holding && free === 0 && landingIndex === null) {
-    cards.push(
-      <SlotPlaceholder
-        key="end"
-        holding
-        rowName={row.name}
-        onPress={props.onDropAtEnd}
-        testID={`map-drop-end-${key}`}
-      />,
-    );
-  }
+  const cards = buildCards(props, key);
 
   return (
     <View style={styles.board} onLayout={props.onLayout} testID={`map-board-${key}`}>
@@ -176,6 +122,72 @@ export function ShelfBoard(props: ShelfBoardProps) {
       </View>
     </View>
   );
+}
+
+/**
+ * Everything standing in the strip, in draw order: the bins, the landing
+ * placeholder spliced into the slot the drag reports, and the free slots after
+ * them. Out of the render body because the splicing is the fiddly part of this
+ * component and reads better on its own.
+ *
+ * The lifted bin keeps its place as a hole, so the row never reflows out from
+ * under the finger. `seen` counts only the cards the drag can see — the same
+ * footing the reported index was measured on.
+ */
+function buildCards(props: ShelfBoardProps, key: string): React.ReactNode[] {
+  const { row, landingIndex, draggingBinId, heldBinId } = props;
+  const holding = heldBinId !== null || draggingBinId !== null;
+  const cards: React.ReactNode[] = [];
+  let seen = 0;
+
+  for (const cell of row.bins) {
+    const dragged = cell.binId === draggingBinId;
+    if (!dragged && landingIndex === seen) {
+      cards.push(<LandingSlot key="landing" index={landingIndex} />);
+    }
+    if (!dragged) seen++;
+    cards.push(
+      <BinCard
+        key={cell.binId}
+        cell={cell}
+        state={cardState(props, cell)}
+        heatStyle={props.heatFor(cell)}
+        onPress={() => props.onCellPress(cell)}
+        onLongPress={() => props.onCellLongPress(cell)}
+      />,
+    );
+  }
+  if (landingIndex !== null && landingIndex >= seen) {
+    cards.push(<LandingSlot key="landing" index={landingIndex} />);
+  }
+
+  // Declared space that is still free. One is consumed while a landing slot
+  // is showing, so the row does not appear to grow as a bin arrives.
+  const free = Math.max(0, rowGaps(row) - (landingIndex !== null ? 1 : 0));
+  for (let i = 0; i < free; i++) {
+    cards.push(
+      <SlotPlaceholder
+        key={`gap-${i}`}
+        holding={holding}
+        rowName={row.name}
+        onPress={props.onDropAtEnd}
+        testID={`map-gap-${key}-${i}`}
+      />,
+    );
+  }
+  if (holding && free === 0 && landingIndex === null) {
+    cards.push(
+      <SlotPlaceholder
+        key="end"
+        holding
+        rowName={row.name}
+        onPress={props.onDropAtEnd}
+        testID={`map-drop-end-${key}`}
+      />,
+    );
+  }
+
+  return cards;
 }
 
 function cardState(props: ShelfBoardProps, cell: MapCell): BinCardState {

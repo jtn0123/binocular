@@ -33,9 +33,15 @@ export const DEFAULT_MAP_PREFS: MapPrefs = {
   showTicks: true,
 };
 
+/**
+ * Per field rather than all-or-nothing: a required object would throw away a
+ * user's whole map setup the first time this file gains a preference, because
+ * what is already on disk would not have the new key. Each field falls back on
+ * its own, so an unreadable one resets and the rest survive.
+ */
 const MapPrefsSchema = z.object({
-  dragEnabled: z.boolean(),
-  showTicks: z.boolean(),
+  dragEnabled: z.boolean().catch(DEFAULT_MAP_PREFS.dragEnabled),
+  showTicks: z.boolean().catch(DEFAULT_MAP_PREFS.showTicks),
 });
 
 export function parseMapPrefs(raw: string | null): MapPrefs {
