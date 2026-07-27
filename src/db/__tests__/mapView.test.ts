@@ -287,6 +287,73 @@ describe('planning a drop (D21)', () => {
     expect(planDrop(areas(), 'ghost', { shelfId: 's1' })).toBeNull();
     expect(planDrop(areas(), 'b1', { shelfId: 'nope' })).toBeNull();
   });
+
+  /**
+   * The drag names a slot, not a neighbour. Indexes are counted over the row
+   * *without* the lifted bin, which is what the on-screen measurement reports
+   * — the lifted card is drawn as a hole and the landing slot stands in it.
+   */
+  describe('by slot index (the drag path)', () => {
+    it('drops into the slot the finger is over', () => {
+      // Shelf A without b3 is [b1, b2]; slot 1 is the gap between them.
+      expect(planDrop(areas(), 'b3', { shelfId: 's1', index: 1 })?.orderedIds).toEqual([
+        'b1',
+        'b3',
+        'b2',
+      ]);
+    });
+
+    it('slot zero is the front of the row', () => {
+      expect(planDrop(areas(), 'b3', { shelfId: 's1', index: 0 })?.orderedIds).toEqual([
+        'b3',
+        'b1',
+        'b2',
+      ]);
+    });
+
+    it('dragging right past a neighbour really lands past it', () => {
+      // The off-by-one that made a rightward drag settle back in its own gap:
+      // b1 lifted leaves [b2, b3], so slot 2 is the end and slot 1 is between.
+      expect(planDrop(areas(), 'b1', { shelfId: 's1', index: 1 })?.orderedIds).toEqual([
+        'b2',
+        'b1',
+        'b3',
+      ]);
+      expect(planDrop(areas(), 'b1', { shelfId: 's1', index: 2 })?.orderedIds).toEqual([
+        'b2',
+        'b3',
+        'b1',
+      ]);
+    });
+
+    it('a slot past the end of the row clamps to the end rather than vanishing', () => {
+      // Releasing over the empty half of a short shelf reports a big index.
+      expect(planDrop(areas(), 'b1', { shelfId: 's1', index: 99 })?.orderedIds).toEqual([
+        'b2',
+        'b3',
+        'b1',
+      ]);
+    });
+
+    it('carries a slot across shelves, still flagged as the move that asks', () => {
+      expect(planDrop(areas(), 'b1', { shelfId: 's2', index: 0 })).toMatchObject({
+        orderedIds: ['b1', 'b4'],
+        crossShelf: true,
+        place: 'Garage › Shelf B',
+      });
+    });
+
+    it('a slot that changes nothing is still nothing', () => {
+      // b1 is already first; slot 0 of [b2, b3] puts it back exactly there.
+      expect(planDrop(areas(), 'b1', { shelfId: 's1', index: 0 })).toBeNull();
+    });
+
+    it('an index wins over a stale beforeBinId rather than fighting it', () => {
+      expect(
+        planDrop(areas(), 'b3', { shelfId: 's1', index: 0, beforeBinId: 'b2' })?.orderedIds,
+      ).toEqual(['b3', 'b1', 'b2']);
+    });
+  });
 });
 
 describe('heat tinting (D21)', () => {

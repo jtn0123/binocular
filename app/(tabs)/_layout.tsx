@@ -67,6 +67,20 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/*
+        The map is a tab rather than a screen you get sent to (D21): it is
+        where the workshop is arranged, not just a picture of it, and
+        arranging is something you go and do. Browse stays the searchable
+        list. Deep links still work — `/map?highlight=…` resolves here,
+        because the `(tabs)` group is not part of the path.
+      */}
+      <Tabs.Screen
+        name="map"
+        options={{
+          title: 'Map',
+          tabBarIcon: ({ color, size }) => <Ionicons name="map" size={size} color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

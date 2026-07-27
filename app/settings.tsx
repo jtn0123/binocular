@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -26,6 +27,7 @@ import { isDatabaseEmpty } from '@/db/backupQueries';
 import { countEmbeddings, countItemsWithPhotos } from '@/db/embeddingQueries';
 import { listSpendTotals, type SpendTotals } from '@/db/queries';
 import { buildInfo, describeBuild, RELEASES_URL } from '@/settings/build';
+import { DEFAULT_MAP_PREFS, loadMapPrefs, saveMapPrefs, type MapPrefs } from '@/settings/mapPrefs';
 import {
   getApiKey,
   getOpenAiApiKey,
@@ -203,11 +205,20 @@ export default function SettingsScreen() {
     }
   }
 
+  const [mapPrefs, setMapPrefs] = useState<MapPrefs>(DEFAULT_MAP_PREFS);
+  const setMapPref = <K extends keyof MapPrefs>(key: K, value: MapPrefs[K]) => {
+    const next = { ...mapPrefs, [key]: value };
+    setMapPrefs(next);
+    void saveMapPrefs(next);
+    logEvent(db, { kind: 'settings', name: 'map_pref_changed', detail: { [key]: value } });
+  };
+
   useEffect(() => {
     void (async () => {
       setProvider(await getProviderChoice());
       setHasAnthropicKey((await getApiKey()) !== null);
       setHasOpenAiKey((await getOpenAiApiKey()) !== null);
+      setMapPrefs(await loadMapPrefs());
     })();
   }, []);
 
@@ -336,6 +347,40 @@ export default function SettingsScreen() {
           </Text>
         </View>
       )}
+
+      <Text style={styles.sectionTitle}>Map</Text>
+      <View style={styles.switchRow}>
+        <View style={styles.switchBody}>
+          <Text style={styles.switchLabel}>Drag bins to rearrange</Text>
+          <Text style={styles.hint}>
+            Hold a bin and it follows your finger to the slot you want. Turning this off leaves
+            the map fully usable — hold a bin to lift it, then tap where it goes. Switch it off
+            if the map ever closes itself while you are arranging.
+          </Text>
+        </View>
+        <Switch
+          value={mapPrefs.dragEnabled}
+          onValueChange={(on) => setMapPref('dragEnabled', on)}
+          trackColor={{ false: colors.borderStrong, true: colors.amber }}
+          thumbColor={colors.text}
+          accessibilityLabel="Drag bins to rearrange the map"
+          testID="map-drag-switch"
+        />
+      </View>
+      <View style={styles.switchRow}>
+        <View style={styles.switchBody}>
+          <Text style={styles.switchLabel}>Show slot ticks</Text>
+          <Text style={styles.hint}>Marks the divisions along each shelf edge.</Text>
+        </View>
+        <Switch
+          value={mapPrefs.showTicks}
+          onValueChange={(on) => setMapPref('showTicks', on)}
+          trackColor={{ false: colors.borderStrong, true: colors.amber }}
+          thumbColor={colors.text}
+          accessibilityLabel="Show slot ticks on shelves"
+          testID="map-ticks-switch"
+        />
+      </View>
 
       <Text style={styles.sectionTitle}>Diagnostics</Text>
       <Text style={styles.hint}>
@@ -554,6 +599,9 @@ const styles = StyleSheet.create({
   providerLabel: { color: colors.textDim, fontWeight: '600', fontSize: 13 },
   providerLabelActive: { color: colors.amberInkOn },
   hint: { ...type.dim, lineHeight: 18 },
+  switchRow: { flexDirection: 'row', alignItems: 'flex-start', gap: sp(3) },
+  switchBody: { flex: 1, gap: sp(1) },
+  switchLabel: { color: colors.text, fontSize: 15, fontWeight: '600' },
   estimate: { color: colors.amber, fontSize: 13, fontWeight: '600' },
   spendCard: {
     backgroundColor: colors.surface,

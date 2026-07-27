@@ -306,21 +306,67 @@ of D21 — arranging the wall on the picture of it — was built.
 - [x] Home: a search matching ≥2 bins offers "show all N on the map".
 - [x] Screen-level tests that press the controls, plus the map button's route.
 
-### Withdrawn
-- [ ] ~~Finger-following drag~~ — built, shipped to the field phone, and
+### Withdrawn, then rebuilt in a different shape
+- [x] ~~Finger-following drag~~ — built, shipped to the field phone, and
       withdrawn in the same day. Wrapping every cell in a gesture-handler
       detector driving reanimated worklets killed the process natively; the
       event log showed an `app_start` seconds after every `screen//map` with
       no `app_background` between. Tap-to-place covers the same ground. Do not
       retry without testing on a device first.
+- [x] Retried, deliberately, with the per-cell detector as the suspect:
+      **one** `Gesture.Pan` for the whole map and **one** animated node (the
+      ghost). Which bin was grabbed is a hit-test against measured frames, so
+      a wall of 40 bins costs one detector rather than 40. The pan activates
+      only after a 400 ms hold, so it never competes with the vertical map
+      scroll or a shelf's own sideways scroll.
+- [x] The drag rides *on top of* lift-and-place rather than replacing it: a
+      hold that never moves is exactly today's lift, and every tap path is
+      untouched. `Settings › Map › Drag bins to rearrange` switches the
+      gesture layer off and leaves the screen fully usable — which is also
+      the answer if the crash ever returns in the field.
+- [x] `src/map/dragGeometry.ts`: frozen-at-lift-off measurement and slot
+      hit-testing, pure and unit-tested. Two bugs the prototype found are
+      asserted there — the landing slot must not feed its own displacement
+      back into the index, and the lifted bin must be excluded from the
+      snapshot rather than counted.
+- [x] The gesture's live target lives on a ref, not React state: a pan can
+      finalize in the same task as its last update, and reading state there
+      commits the previous slot — which is what made an earlier version land
+      one slot short, but only sometimes.
+
+### Map as a tab, and the shelf-board redesign
+- [x] `app/map.tsx` → `app/(tabs)/map.tsx`. `/map?highlight=…` is unchanged
+      for every caller, because a route group is not part of the path.
+- [x] Shelves drawn as boards: bins standing in a strip on a plank, recessed
+      label holders, slot ticks, uprights, capacity gaps, unshelved tray with
+      no plank. Uniform card width is load-bearing, not cosmetic — it is what
+      makes the slot arithmetic in `dragGeometry` possible.
+- [x] Whole-wall strip (grid toggle): every shelf shrunk to a row of cells;
+      tap to jump, or drag a bin onto it to send it to that shelf without
+      scrolling. Drawn from the same derived data — no second truth (D21).
+- [x] Search on the map itself, over bin name and short code, sharing the
+      banner and stepper with Home's `highlight` hand-off.
+- [x] Shelf sheet replacing three icon buttons and their prompts: rename,
+      slot stepper, add bin, delete. Deleting a shelf moves its bins to the
+      unshelved tray and never destroys inventory (§11).
+- [x] Cross-shelf drops confirm in a sheet rather than an `Alert`, showing
+      where from, which slot, an over-capacity warning, and the fact that the
+      printed label does not follow the bin.
 
 ### Exit criteria
 - [x] Arrangement survives a reopen (asserted against the database, not the
       render tree).
 - [x] Blueprint §11 invariants: no AI writes, no percentages, providers
-      untouched, offline-only, zod at the backup boundary, migrations
-      append-only.
+      untouched, offline-only, zod at the backup and preference boundaries,
+      migrations append-only.
 - [ ] Confirmed on the field-test phone that the map opens and stays open.
+- [ ] **Confirmed on the field-test phone that the drag does not kill the
+      process.** Until this is ticked the feature is unproven, not fixed: the
+      single-detector rewrite is a reasoned hypothesis about the 2026-07-25
+      crash, not a diagnosis of it. If it recurs, turn the switch off and the
+      screen keeps working.
+- [ ] Confirmed on the field-test phone that a 400 ms hold and the drag that
+      follows it are usable with gloves on.
 
 ## Diagnostics gaps found while field-testing the map
 
