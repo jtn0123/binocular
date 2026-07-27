@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import type { MapRow } from '@/db/mapView';
 import { colors, mono, radius, sp, type } from '@/theme';
 
 /**
@@ -23,6 +24,17 @@ export interface ShelfDraft {
   name: string;
   capacity: number | null;
   binCount: number;
+}
+
+/** The sheet's view of a shelf, taken from the row the map already drew. */
+export function shelfDraft(row: MapRow, locationName: string): ShelfDraft {
+  return {
+    shelfId: row.shelfId!,
+    locationName,
+    name: row.name,
+    capacity: row.capacity,
+    binCount: row.bins.length,
+  };
 }
 
 export function ShelfSheet({

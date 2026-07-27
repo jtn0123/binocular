@@ -25,11 +25,20 @@ module.exports = defineConfig([
     //
     // Scoped to the two files that own the map's drag. Anything that is not
     // driving a gesture should still obey these rules.
-    files: ['app/(tabs)/map.tsx', 'src/components/map/BinCard.tsx'],
+    files: ['src/map/useMapDrag.ts', 'src/components/map/BinCard.tsx'],
     rules: {
       'react-hooks/immutability': 'off',
       'react-hooks/refs': 'off',
       'react-hooks/preserve-manual-memoization': 'off',
     },
+  },
+  {
+    // The map screen hands the drag's shared values to the ghost. It reads
+    // none of them itself — it only passes them through — but a shared value
+    // is a `{ value }` box, so the compiler counts the hand-off as reading a
+    // ref during render. Narrowed to that one rule: the screen is still held
+    // to the memoization and immutability rules.
+    files: ['app/(tabs)/map.tsx'],
+    rules: { 'react-hooks/refs': 'off' },
   },
 ]);
