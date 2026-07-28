@@ -226,6 +226,11 @@ export function ReviewScreen({
       const r = await processScan(db, scanId);
       if (r.outcome !== 'review') return;
       const fresh = getScan(db, scanId);
+      // Discarded while this was in flight. `processScan` has already written
+      // a status over the discard, so the row is resurrected either way — but
+      // loading its chips would also put the user back in a review they chose
+      // to throw away, which is the part they would notice.
+      if (fresh?.status === 'discarded') return;
       if (!fresh?.raw_response) return;
       try {
         const result = RecognitionResult.parse(JSON.parse(fresh.raw_response));
@@ -246,12 +251,19 @@ export function ReviewScreen({
           {retrying ? 'Recognizing…' : 'Waiting for recognition — retry when you have signal.'}
         </Text>
         {!retrying && (
-          <Pressable style={styles.primaryButton} onPress={retryRecognition} testID="review-retry-queued">
+          <Pressable
+            style={styles.primaryButton}
+            onPress={retryRecognition}
+            testID="review-retry-queued"
+          >
             <Text style={styles.primaryLabel}>Retry now</Text>
           </Pressable>
         )}
-        <Pressable onPress={() => discard()}>
-          <Text style={styles.link}>Discard scan</Text>
+        {/* Not while a retry is in flight: discarding mid-recognition writes
+            'discarded', and the request already on its way then writes its own
+            status straight over it. */}
+        <Pressable onPress={() => discard()} disabled={retrying}>
+          <Text style={[styles.link, retrying && styles.linkDisabled]}>Discard scan</Text>
         </Pressable>
       </View>
     );
@@ -262,7 +274,11 @@ export function ReviewScreen({
       <View style={styles.center}>
         <Text style={styles.errorTitle}>Recognition failed</Text>
         <Text style={styles.dim}>{scan.error ?? 'The response could not be read.'}</Text>
-        <Pressable style={styles.primaryButton} onPress={retryRecognition} testID="review-retry-failed">
+        <Pressable
+          style={styles.primaryButton}
+          onPress={retryRecognition}
+          testID="review-retry-failed"
+        >
           <Text style={styles.primaryLabel}>Retry</Text>
         </Pressable>
         <Pressable onPress={() => discard()}>
@@ -631,41 +647,52 @@ function ChipSection({
         <Text style={styles.dim}>Nothing here.</Text>
       ) : (
         <View style={styles.chipWrap}>
-          {chips.map((chip) => (
-            <Pressable
-              key={chip.key}
-              testID={`chip-${chip.key}`}
-              accessibilityState={{ selected: chip.selected }}
-              accessibilityLabel={
-                destructive && !chip.selected
-                  ? `${chip.name} — will be removed from the bin. Tap to keep it`
-                  : undefined
-              }
-              style={[
-                styles.chip,
-                !chip.selected && (destructive ? styles.chipRemoved : styles.chipUnselected),
-              ]}
-              onPress={() => onToggle(chip.key)}
-              onLongPress={onEdit ? () => onEdit(chip.key) : undefined}
-            >
-              {chip.confidence === 'medium' && <View style={styles.amberDot} testID="amber-dot" />}
-              <Text
+          {chips.map((chip) => {
+            // Extracted rather than nested in the JSX: two conditions decide
+            // one line of text, and as a nested ternary neither Sonar nor a
+            // reader could follow which case won.
+            const chipHint = !chip.selected
+              ? destructive
+                ? 'tap to keep'
+                : chip.confidence === 'low'
+                  ? 'tap to include'
+                  : null
+              : null;
+            return (
+              <Pressable
+                key={chip.key}
+                testID={`chip-${chip.key}`}
+                accessibilityState={{ selected: chip.selected }}
+                accessibilityLabel={
+                  destructive && !chip.selected
+                    ? `${chip.name} — will be removed from the bin. Tap to keep it`
+                    : undefined
+                }
                 style={[
-                  styles.chipText,
-                  !chip.selected && (destructive ? styles.chipTextRemoved : styles.chipTextUnselected),
+                  styles.chip,
+                  !chip.selected && (destructive ? styles.chipRemoved : styles.chipUnselected),
                 ]}
+                onPress={() => onToggle(chip.key)}
+                onLongPress={onEdit ? () => onEdit(chip.key) : undefined}
               >
-                {chip.quantity > 1 ? `${chip.quantity}× ` : ''}
-                {chip.brand ? `${chip.brand} ` : ''}
-                {chip.name}
-              </Text>
-              {destructive && !chip.selected ? (
-                <Text style={styles.chipMeta}>tap to keep</Text>
-              ) : chip.confidence === 'low' && !chip.selected ? (
-                <Text style={styles.chipMeta}>tap to include</Text>
-              ) : null}
-            </Pressable>
-          ))}
+                {chip.confidence === 'medium' && (
+                  <View style={styles.amberDot} testID="amber-dot" />
+                )}
+                <Text
+                  style={[
+                    styles.chipText,
+                    !chip.selected &&
+                      (destructive ? styles.chipTextRemoved : styles.chipTextUnselected),
+                  ]}
+                >
+                  {chip.quantity > 1 ? `${chip.quantity}× ` : ''}
+                  {chip.brand ? `${chip.brand} ` : ''}
+                  {chip.name}
+                </Text>
+                {chipHint ? <Text style={styles.chipMeta}>{chipHint}</Text> : null}
+              </Pressable>
+            );
+          })}
         </View>
       )}
     </View>
@@ -744,169 +771,166 @@ export function ChipEditor({
         style={styles.modalBackdrop}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
-          contentContainerStyle={styles.modalScroll}
-          keyboardShouldPersistTaps="handled"
-        >
-        <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>{chip ? 'Edit item' : 'Add item'}</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Name"
-            value={name}
-            onChangeText={(next) => {
-              setName(next);
-              // Autofill the tag from this workshop's own history, until the
-              // user picks one — then their choice always wins.
-              if (!tagTouched) {
-                const suggested = suggestTag(db, next, brand || null);
-                setCategory(suggested?.slug ?? FALLBACK_TAG);
-                setTagSuggested(suggested !== null);
-              }
-            }}
-            testID="editor-name"
-          />
-          {duplicate ? (
-            <Text style={styles.duplicateHint} testID="duplicate-hint">
-              You already have {duplicate.quantity > 1 ? `${duplicate.quantity}× ` : ''}
-              {duplicate.name}
-              {duplicate.binCode ? ` in ${duplicate.binCode}` : ''}
-              {duplicate.binName ? ` · ${duplicate.binName}` : ''}
-            </Text>
-          ) : null}
-          <TextInput
-            style={styles.input}
-            placeholder="Brand (optional)"
-            value={brand}
-            onChangeText={setBrand}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Quantity"
-            value={quantity}
-            onChangeText={setQuantity}
-            keyboardType="number-pad"
-            testID="editor-quantity"
-          />
-          <TextInput
-            style={[styles.input, styles.inputMultiline]}
-            placeholder="Notes (optional) — e.g. half used, borrowed from Dave"
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            testID="editor-notes"
-          />
-          <View style={styles.photoRow}>
-            {photoUri ? (
-              <Image source={{ uri: photoUri }} style={styles.photoThumb} contentFit="cover" />
-            ) : null}
-            <Pressable
-              testID="editor-photo"
-              accessibilityRole="button"
-              onPress={async () => {
-                const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
-                if (!result.canceled && result.assets[0]) setPhotoUri(result.assets[0].uri);
+        <ScrollView contentContainerStyle={styles.modalScroll} keyboardShouldPersistTaps="handled">
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{chip ? 'Edit item' : 'Add item'}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Name"
+              value={name}
+              onChangeText={(next) => {
+                setName(next);
+                // Autofill the tag from this workshop's own history, until the
+                // user picks one — then their choice always wins.
+                if (!tagTouched) {
+                  const suggested = suggestTag(db, next, brand || null);
+                  setCategory(suggested?.slug ?? FALLBACK_TAG);
+                  setTagSuggested(suggested !== null);
+                }
               }}
-            >
-              <Text style={styles.photoLink}>{photoUri ? 'Retake photo' : 'Add photo'}</Text>
-            </Pressable>
-            {photoUri ? (
-              <Pressable onPress={() => setPhotoUri(null)}>
-                <Text style={styles.photoLink}>Remove</Text>
-              </Pressable>
+              testID="editor-name"
+            />
+            {duplicate ? (
+              <Text style={styles.duplicateHint} testID="duplicate-hint">
+                You already have {duplicate.quantity > 1 ? `${duplicate.quantity}× ` : ''}
+                {duplicate.name}
+                {duplicate.binCode ? ` in ${duplicate.binCode}` : ''}
+                {duplicate.binName ? ` · ${duplicate.binName}` : ''}
+              </Text>
             ) : null}
-          </View>
-          <Text style={styles.tagHeading}>
-            Tag{tagSuggested && !tagTouched ? ' · from your past items' : ''}
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
-            {editorTags.map((tag) => (
+            <TextInput
+              style={styles.input}
+              placeholder="Brand (optional)"
+              value={brand}
+              onChangeText={setBrand}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Quantity"
+              value={quantity}
+              onChangeText={setQuantity}
+              keyboardType="number-pad"
+              testID="editor-quantity"
+            />
+            <TextInput
+              style={[styles.input, styles.inputMultiline]}
+              placeholder="Notes (optional) — e.g. half used, borrowed from Dave"
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              testID="editor-notes"
+            />
+            <View style={styles.photoRow}>
+              {photoUri ? (
+                <Image source={{ uri: photoUri }} style={styles.photoThumb} contentFit="cover" />
+              ) : null}
               <Pressable
-                key={tag.slug}
-                style={[styles.catChip, category === tag.slug && styles.catChipActive]}
-                onPress={() => {
-                  setCategory(tag.slug);
-                  setTagTouched(true);
-                  setTagSuggested(false);
-                }}
+                testID="editor-photo"
                 accessibilityRole="button"
-                accessibilityState={{ selected: category === tag.slug }}
+                onPress={async () => {
+                  const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+                  if (!result.canceled && result.assets[0]) setPhotoUri(result.assets[0].uri);
+                }}
               >
-                <Text style={[styles.catLabel, category === tag.slug && styles.catLabelActive]}>
-                  {tag.label}
-                </Text>
+                <Text style={styles.photoLink}>{photoUri ? 'Retake photo' : 'Add photo'}</Text>
               </Pressable>
-            ))}
-            {/*
+              {photoUri ? (
+                <Pressable onPress={() => setPhotoUri(null)}>
+                  <Text style={styles.photoLink}>Remove</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <Text style={styles.tagHeading}>
+              Tag{tagSuggested && !tagTouched ? ' · from your past items' : ''}
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
+              {editorTags.map((tag) => (
+                <Pressable
+                  key={tag.slug}
+                  style={[styles.catChip, category === tag.slug && styles.catChipActive]}
+                  onPress={() => {
+                    setCategory(tag.slug);
+                    setTagTouched(true);
+                    setTagSuggested(false);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: category === tag.slug }}
+                >
+                  <Text style={[styles.catLabel, category === tag.slug && styles.catLabelActive]}>
+                    {tag.label}
+                  </Text>
+                </Pressable>
+              ))}
+              {/*
               D19: when nothing in the vocabulary fits, inventing the right
               tag has to be cheaper than settling for "other" — otherwise the
               fallback silently becomes the most-used tag in the workshop.
             */}
-            <Pressable
-              style={[styles.catChip, styles.catChipNew]}
-              testID="new-tag"
-              accessibilityRole="button"
-              accessibilityLabel="Create a new tag"
-              onPress={() =>
-                setNewTagPrompt({
-                  title: 'New tag',
-                  placeholder: 'e.g. Marine, Garden, Spares',
-                  submitLabel: 'Create',
-                  onSubmit: (value) => {
-                    try {
-                      const created = createTag(db, value);
-                      setCategory(created.slug);
-                      setTagTouched(true);
-                      setTagSuggested(false);
-                      setTagTick((t) => t + 1);
-                      setNewTagPrompt(null);
-                    } catch (err) {
-                      // Duplicate or empty: TagError already says which, and
-                      // the prompt stays open so it can be corrected in place.
-                      Alert.alert(
-                        'Could not create that tag',
-                        err instanceof Error ? err.message : String(err),
-                      );
-                    }
-                  },
-                })
-              }
-            >
-              <Text style={styles.catLabelNew}>+ New tag</Text>
-            </Pressable>
-          </ScrollView>
-          <PromptModal request={newTagPrompt} onClose={() => setNewTagPrompt(null)} />
-          <View style={styles.modalActions}>
-            {onDelete && (
-              <Pressable onPress={onDelete} testID="editor-delete">
-                <Text style={styles.deleteLabel}>Delete</Text>
-              </Pressable>
-            )}
-            <View style={styles.modalActionsRight}>
-              <Pressable onPress={onCancel}>
-                <Text style={styles.link}>Cancel</Text>
-              </Pressable>
               <Pressable
-                testID="editor-save"
-                onPress={() => {
-                  const qty = Math.max(1, parseInt(quantity, 10) || 1);
-                  if (!name.trim()) return;
-                  onSave({
-                    name: name.trim(),
-                    brand: brand.trim() || null,
-                    category,
-                    quantity: qty,
-                    labelText: chip?.labelText ?? null,
-                    notes: notes.trim() || null,
-                    photoUri,
-                  });
-                }}
+                style={[styles.catChip, styles.catChipNew]}
+                testID="new-tag"
+                accessibilityRole="button"
+                accessibilityLabel="Create a new tag"
+                onPress={() =>
+                  setNewTagPrompt({
+                    title: 'New tag',
+                    placeholder: 'e.g. Marine, Garden, Spares',
+                    submitLabel: 'Create',
+                    onSubmit: (value) => {
+                      try {
+                        const created = createTag(db, value);
+                        setCategory(created.slug);
+                        setTagTouched(true);
+                        setTagSuggested(false);
+                        setTagTick((t) => t + 1);
+                        setNewTagPrompt(null);
+                      } catch (err) {
+                        // Duplicate or empty: TagError already says which, and
+                        // the prompt stays open so it can be corrected in place.
+                        Alert.alert(
+                          'Could not create that tag',
+                          err instanceof Error ? err.message : String(err),
+                        );
+                      }
+                    },
+                  })
+                }
               >
-                <Text style={styles.saveInline}>Save</Text>
+                <Text style={styles.catLabelNew}>+ New tag</Text>
               </Pressable>
+            </ScrollView>
+            <PromptModal request={newTagPrompt} onClose={() => setNewTagPrompt(null)} />
+            <View style={styles.modalActions}>
+              {onDelete && (
+                <Pressable onPress={onDelete} testID="editor-delete">
+                  <Text style={styles.deleteLabel}>Delete</Text>
+                </Pressable>
+              )}
+              <View style={styles.modalActionsRight}>
+                <Pressable onPress={onCancel}>
+                  <Text style={styles.link}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  testID="editor-save"
+                  onPress={() => {
+                    const qty = Math.max(1, parseInt(quantity, 10) || 1);
+                    if (!name.trim()) return;
+                    onSave({
+                      name: name.trim(),
+                      brand: brand.trim() || null,
+                      category,
+                      quantity: qty,
+                      labelText: chip?.labelText ?? null,
+                      notes: notes.trim() || null,
+                      photoUri,
+                    });
+                  }}
+                >
+                  <Text style={styles.saveInline}>Save</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
@@ -1029,6 +1053,7 @@ const styles = StyleSheet.create({
   },
   primaryLabel: { color: colors.amberInkOn, fontWeight: '700' },
   link: { color: colors.steel },
+  linkDisabled: { opacity: 0.4 },
   saveInline: { color: colors.amber, fontWeight: '800' },
   deleteLabel: { color: colors.danger, fontWeight: '600' },
   dim: { ...type.dim, textAlign: 'center' },

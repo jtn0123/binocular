@@ -386,6 +386,9 @@ export default function HomeScreen() {
           */}
           <FlatList
             data={recentBins}
+            // Same reason as the results list: the keyboard covers the
+            // rows you are scrolling to reach.
+            keyboardDismissMode="on-drag"
             ListHeaderComponent={
               <View style={styles.headerBlock}>
                 {scansWaiting > 0 && (

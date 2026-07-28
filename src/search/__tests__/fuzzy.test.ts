@@ -135,6 +135,32 @@ describe('plurals', () => {
     expect(bestMatch('battery', plural)).toBe('batteries');
   });
 
+  /**
+   * The mechanical endings run shortest-first, so "houses" offers "hous"
+   * before "house". Answering with the guess handed the user a non-word that
+   * merely prefixed a real one — and the suggestion is shown to them, so it
+   * has to be a word the workshop actually holds.
+   */
+  it('answers with the indexed word, not the stem that found it', () => {
+    const silentE = [
+      { term: 'house', doc: 2 },
+      { term: 'hose', doc: 5 },
+    ];
+    expect(pluralVariants('houses')).toEqual(['hous', 'house']);
+    expect(bestMatch('houses', silentE)).toBe('house');
+    expect(bestMatch('hoses', silentE)).toBe('hose');
+  });
+
+  it('prefers an exact indexed term over a longer one it prefixes', () => {
+    // "boxes" strips to "box", and both are in the index; the one the user
+    // typed the plural of wins over the one that merely starts with it.
+    const both = [
+      { term: 'boxwood', doc: 9 },
+      { term: 'box', doc: 1 },
+    ];
+    expect(bestMatch('boxes', both)).toBe('box');
+  });
+
   it('leaves a word the index already prefixes alone', () => {
     // "screw" prefixes "screw" — nothing to correct, and correcting anyway is
     // how a good token gets rewritten because a different one failed.

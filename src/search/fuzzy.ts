@@ -104,8 +104,21 @@ export function bestMatch(token: string, vocabulary: readonly VocabTerm[]): stri
   // Plural before typo: a plural is a spelling the user meant, not a mistake,
   // and it is the likelier explanation for a word that is otherwise perfectly
   // formed. Only accepted when the index really holds it.
+  //
+  // What comes back is the *indexed* term, never the guess that found it.
+  // `pluralVariants` strips endings mechanically, so "houses" produces "hous"
+  // before it produces "house" — and returning the guess offered the user a
+  // non-word that happened to prefix a real one. The variant is a way of
+  // looking things up, not an answer.
   for (const variant of pluralVariants(needle)) {
-    if (vocabulary.some((entry) => entry.term.startsWith(variant))) return variant;
+    const exact = vocabulary.find((entry) => entry.term === variant);
+    if (exact) return exact.term;
+    const prefixed = vocabulary
+      .filter((entry) => entry.term.startsWith(variant))
+      // Same tie-break as the edit-distance search below, so a suggestion is
+      // both the most useful one and the same every time.
+      .sort((a, b) => b.doc - a.doc || (a.term < b.term ? -1 : 1))[0];
+    if (prefixed) return prefixed.term;
   }
 
   let best: { term: string; distance: number; doc: number } | null = null;

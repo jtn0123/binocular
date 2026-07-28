@@ -226,12 +226,17 @@ export default function CaptureScreen() {
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (err) {
+      // Same reasoning as the abandoned check above, for the unhappy path:
+      // recognition that *fails* seconds after you walked away has no more
+      // right to interrupt you than recognition that succeeds. The scan is
+      // durable either way and the queue screen still has it.
+      if (abandoned.current) return;
       Alert.alert('Scan failed', err instanceof Error ? err.message : String(err), [
         { text: 'OK', onPress: () => setBusy('idle') },
       ]);
       return;
     } finally {
-      setBusy((b) => (b === 'capturing' ? 'idle' : b));
+      if (!abandoned.current) setBusy((b) => (b === 'capturing' ? 'idle' : b));
     }
   }
 

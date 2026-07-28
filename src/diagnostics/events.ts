@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { DbAdapter } from '../db/adapter';
 import { newId } from '../lib/id';
 import { nowIso } from '../lib/time';
@@ -181,6 +182,25 @@ export const RUNTIME_ID = newId();
  * remount inside a live process shares `RUNTIME_ID`, so a theme change is not
  * a death.
  */
+/**
+ * The `runtimeId` inside a stored event's detail, or null when it has none.
+ *
+ * Deliberately total: any JSON that is not an object with a string
+ * `runtimeId` reads as absent rather than throwing, because a diagnostics
+ * record must never be able to break the launch it is describing.
+ */
+const RuntimeDetail = z.object({ runtimeId: z.string() });
+
+function runtimeIdOf(detail: string | null | undefined): string | null {
+  if (!detail) return null;
+  try {
+    const parsed = RuntimeDetail.safeParse(JSON.parse(detail));
+    return parsed.success ? parsed.data.runtimeId : null;
+  } catch {
+    return null;
+  }
+}
+
 export function detectAbnormalExit(db: DbAdapter): AbnormalExit | null {
   try {
     // Every session opens with one of these, so it is the boundary between
@@ -194,7 +214,12 @@ export function detectAbnormalExit(db: DbAdapter): AbnormalExit | null {
     if (!lastStart) return null;
 
     // Same process mounting React again — not a death, however it looks.
-    if (lastStart.detail?.includes(`"runtimeId":"${RUNTIME_ID}"`)) return null;
+    //
+    // Parsed rather than substring-matched: `detail` is persisted JSON read
+    // back from SQLite, which makes it a trust boundary, and a session is
+    // declared dead or alive on the answer. A payload that is malformed, or
+    // predates the field, simply does not carry this runtime's id.
+    if (runtimeIdOf(lastStart.detail) === RUNTIME_ID) return null;
 
     const after = `AND (created_at > ? OR (created_at = ? AND rowid > ?))`;
     const args = [lastStart.created_at, lastStart.created_at, lastStart.rowid];
