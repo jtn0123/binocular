@@ -23,12 +23,7 @@ import {
 } from '@/db/queries';
 import { logEvent } from '@/diagnostics/events';
 import { useFocusTick } from '@/lib/useFocusTick';
-import {
-  searchBins,
-  searchItemsWithFallback,
-  searchPlaces,
-  type SearchResult,
-} from '@/search/fts';
+import { searchBins, searchItemsWithFallback, searchPlaces, type SearchResult } from '@/search/fts';
 import { colors, radius, sp, type } from '@/theme';
 
 function BinCard({
@@ -293,9 +288,7 @@ export default function HomeScreen() {
                   accessibilityLabel={`${place.kind === 'shelf' ? 'Shelf' : 'Location'} ${place.name}${
                     place.parentName ? ` in ${place.parentName}` : ''
                   }`}
-                  onPress={() =>
-                    router.push({ pathname: '/browse', params: { focus: place.id } })
-                  }
+                  onPress={() => router.push({ pathname: '/browse', params: { focus: place.id } })}
                 >
                   <Ionicons
                     name={place.kind === 'shelf' ? 'layers-outline' : 'home-outline'}
@@ -357,9 +350,10 @@ export default function HomeScreen() {
             keyExtractor={(r) => r.itemId}
             contentContainerStyle={{ gap: sp(2), paddingBottom: sp(8) }}
             keyboardShouldPersistTaps="handled"
-            ListEmptyComponent={
-              <Text style={styles.empty}>Nothing matches “{trimmed}” yet.</Text>
-            }
+            // Scrolling the results puts the keyboard away: with it up, the
+            // hit rows above leave the answer visible through a one-row gap.
+            keyboardDismissMode="on-drag"
+            ListEmptyComponent={<Text style={styles.empty}>Nothing matches “{trimmed}” yet.</Text>}
             renderItem={({ item: result }) => (
               <ResultRow
                 result={result}
@@ -383,73 +377,87 @@ export default function HomeScreen() {
         </>
       ) : (
         <>
-          {scansWaiting > 0 && (
-            <Pressable
-              style={styles.queueBanner}
-              onPress={() => router.push('/queue')}
-              accessibilityRole="button"
-              accessibilityLabel={
-                scans.review > 0
-                  ? `${scans.review} scan${scans.review === 1 ? '' : 's'} ready to review`
-                  : `${scansWaiting} scan${scansWaiting === 1 ? '' : 's'} in the queue`
-              }
-              testID="home-queue-banner"
-            >
-              <Ionicons
-                name={scans.review > 0 ? 'albums' : 'cloud-upload-outline'}
-                size={16}
-                color={colors.amber}
-              />
-              <Text style={styles.queueLabel}>
-                {scans.review > 0
-                  ? `${scans.review} ready to review`
-                  : scans.failed > 0 && scans.working === 0
-                    ? `${scans.failed} scan${scans.failed === 1 ? '' : 's'} need attention`
-                    : `${scans.working} scan${scans.working === 1 ? '' : 's'} recognizing…`}
-              </Text>
-              <Ionicons name="chevron-forward" size={15} color={colors.textFaint} />
-            </Pressable>
-          )}
-          {checkedOut.length > 0 && (
-            <View style={styles.statusBlock}>
-              <Text style={styles.stamp}>Checked out</Text>
-              {checkedOut.map((item) => (
-                <StatusRow
-                  key={item.id}
-                  item={item}
-                  detail={`with ${item.checked_out_to}`}
-                  actionLabel="Return"
-                  onAction={() => {
-                    returnItem(db, item.id);
-                    setTick((t) => t + 1);
-                  }}
-                  onOpen={() =>
-                    item.bin_id &&
-                    router.push({ pathname: '/bin/[id]', params: { id: item.bin_id } })
-                  }
-                />
-              ))}
-            </View>
-          )}
-          {lowStock.length > 0 && (
-            <View style={styles.statusBlock}>
-              <Text style={styles.stamp}>Running low</Text>
-              {lowStock.map((item) => (
-                <StatusRow
-                  key={item.id}
-                  item={item}
-                  detail={`${item.quantity} left (alert at ${item.low_stock_threshold})`}
-                  onOpen={() =>
-                    item.bin_id &&
-                    router.push({ pathname: '/bin/[id]', params: { id: item.bin_id } })
-                  }
-                />
-              ))}
-            </View>
-          )}
-          <Text style={styles.stamp}>Recent bins</Text>
+          {/*
+            These blocks used to sit ABOVE the list inside a flex:1
+            container, and both they and their queries are uncapped — so
+            lending six tools and flagging eight low-stock items squeezed
+            Recent bins down to nothing, with no way to scroll to it. As
+            the list header they scroll with everything else.
+          */}
           <FlatList
             data={recentBins}
+            // Same reason as the results list: the keyboard covers the
+            // rows you are scrolling to reach.
+            keyboardDismissMode="on-drag"
+            ListHeaderComponent={
+              <View style={styles.headerBlock}>
+                {scansWaiting > 0 && (
+                  <Pressable
+                    style={styles.queueBanner}
+                    onPress={() => router.push('/queue')}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      scans.review > 0
+                        ? `${scans.review} scan${scans.review === 1 ? '' : 's'} ready to review`
+                        : `${scansWaiting} scan${scansWaiting === 1 ? '' : 's'} in the queue`
+                    }
+                    testID="home-queue-banner"
+                  >
+                    <Ionicons
+                      name={scans.review > 0 ? 'albums' : 'cloud-upload-outline'}
+                      size={16}
+                      color={colors.amber}
+                    />
+                    <Text style={styles.queueLabel}>
+                      {scans.review > 0
+                        ? `${scans.review} ready to review`
+                        : scans.failed > 0 && scans.working === 0
+                          ? `${scans.failed} scan${scans.failed === 1 ? '' : 's'} need attention`
+                          : `${scans.working} scan${scans.working === 1 ? '' : 's'} recognizing…`}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={15} color={colors.textFaint} />
+                  </Pressable>
+                )}
+                {checkedOut.length > 0 && (
+                  <View style={styles.statusBlock}>
+                    <Text style={styles.stamp}>Checked out</Text>
+                    {checkedOut.map((item) => (
+                      <StatusRow
+                        key={item.id}
+                        item={item}
+                        detail={`with ${item.checked_out_to}`}
+                        actionLabel="Return"
+                        onAction={() => {
+                          returnItem(db, item.id);
+                          setTick((t) => t + 1);
+                        }}
+                        onOpen={() =>
+                          item.bin_id &&
+                          router.push({ pathname: '/bin/[id]', params: { id: item.bin_id } })
+                        }
+                      />
+                    ))}
+                  </View>
+                )}
+                {lowStock.length > 0 && (
+                  <View style={styles.statusBlock}>
+                    <Text style={styles.stamp}>Running low</Text>
+                    {lowStock.map((item) => (
+                      <StatusRow
+                        key={item.id}
+                        item={item}
+                        detail={`${item.quantity} left (alert at ${item.low_stock_threshold})`}
+                        onOpen={() =>
+                          item.bin_id &&
+                          router.push({ pathname: '/bin/[id]', params: { id: item.bin_id } })
+                        }
+                      />
+                    ))}
+                  </View>
+                )}
+                <Text style={styles.stamp}>Recent bins</Text>
+              </View>
+            }
             keyExtractor={(bin) => bin.id}
             contentContainerStyle={{ gap: sp(2.5), paddingBottom: sp(8) }}
             ListEmptyComponent={
@@ -477,6 +485,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg, padding: sp(4), gap: sp(3) },
+  headerBlock: { gap: sp(3), marginBottom: sp(3) },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -513,7 +522,12 @@ const styles = StyleSheet.create({
     padding: sp(2.5),
   },
   thumb: { width: 64, height: 64, borderRadius: radius.md, backgroundColor: colors.surfaceSunken },
-  thumbSm: { width: 46, height: 46, borderRadius: radius.md, backgroundColor: colors.surfaceSunken },
+  thumbSm: {
+    width: 46,
+    height: 46,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSunken,
+  },
   thumbEmpty: { alignItems: 'center', justifyContent: 'center' },
   cardMain: { flex: 1, gap: 3 },
   cardName: { ...type.h2 },

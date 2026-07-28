@@ -252,8 +252,18 @@ export default function BinDetailScreen() {
 
   function confirmDelete() {
     if (!bin) return;
-    if (items.length > 0) {
-      Alert.alert('Bin not empty', 'Move or remove its items first — inventory is never deleted.');
+    // `allItems`, not the filtered view. This read `items`, so a bin holding
+    // forty things looked empty whenever a filter hid them — the dialog said
+    // "This bin is empty", `deleteBinIfEmpty` correctly refused, and because
+    // the branch below only acts on success, Delete did nothing at all and
+    // said nothing about it.
+    if (allItems.length > 0) {
+      Alert.alert(
+        'Bin not empty',
+        `${bin.short_code} still holds ${allItems.length} item${
+          allItems.length === 1 ? '' : 's'
+        }. Move or remove them first — inventory is never deleted.`,
+      );
       return;
     }
     Alert.alert(`Delete ${bin.short_code}?`, 'This bin is empty; the label becomes invalid.', [
@@ -679,7 +689,7 @@ export default function BinDetailScreen() {
             quantity: item.quantity,
             labelText: item.label_text,
             notes: item.notes,
-            photoUri: persistPhoto(uri, `item-${item.id}`),
+            photoUri: persistPhoto(uri, `item-${item.id}`, item.photo_uri),
           });
           setSheetItem(null);
           refresh();
@@ -710,7 +720,7 @@ export default function BinDetailScreen() {
           if (editing) {
             const photoUri =
               values.photoUri && values.photoUri !== editing.photo_uri
-                ? persistPhoto(values.photoUri, `item-${editing.id}`)
+                ? persistPhoto(values.photoUri, `item-${editing.id}`, editing.photo_uri)
                 : values.photoUri;
             updateItem(db, editing.id, {
               name: values.name,

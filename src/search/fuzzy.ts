@@ -56,6 +56,37 @@ export function editDistanceWithin(a: string, b: string, max: number): number | 
 }
 
 /**
+ * Singular/plural spellings of a token, most confident first.
+ *
+ * Edit distance alone cannot bridge a plural: "batteries" is three edits from
+ * "battery" while the cap for a nine-letter token is two, so typing the final
+ * "s" of a word DELETED an answer that had been on screen a keystroke
+ * earlier — "batterie" corrected fine and "batteries" reported nothing. That
+ * is the worst shape a search failure can take, because it reads as the
+ * workshop genuinely not having one.
+ *
+ * Deliberately naive: workshop nouns are ordinary English, and every
+ * candidate is checked against the index before it is used, so this can only
+ * ever pick a word the workshop actually contains. §8.3's rule holds — a word
+ * the workshop lacks still reports nothing rather than inventing a match.
+ */
+export function pluralVariants(token: string): string[] {
+  const out: string[] = [];
+  const add = (word: string) => {
+    if (word.length >= 3 && word !== token && !out.includes(word)) out.push(word);
+  };
+  if (token.endsWith('ies')) add(`${token.slice(0, -3)}y`);
+  if (token.endsWith('es')) add(token.slice(0, -2));
+  if (token.endsWith('s') && !token.endsWith('ss')) add(token.slice(0, -1));
+  if (token.endsWith('y')) add(`${token.slice(0, -1)}ies`);
+  if (!token.endsWith('s')) {
+    add(`${token}s`);
+    add(`${token}es`);
+  }
+  return out;
+}
+
+/**
  * Best replacement for a token, or null if nothing is close enough.
  *
  * Ties break on how many items carry the term, then alphabetically — so the
@@ -69,6 +100,26 @@ export function bestMatch(token: string, vocabulary: readonly VocabTerm[]): stri
   // it is some *other* token in the query that found nothing. Correcting it
   // anyway is how "deck scrws" would turn into "dock screws".
   if (vocabulary.some((entry) => entry.term.startsWith(needle))) return null;
+
+  // Plural before typo: a plural is a spelling the user meant, not a mistake,
+  // and it is the likelier explanation for a word that is otherwise perfectly
+  // formed. Only accepted when the index really holds it.
+  //
+  // What comes back is the *indexed* term, never the guess that found it.
+  // `pluralVariants` strips endings mechanically, so "houses" produces "hous"
+  // before it produces "house" — and returning the guess offered the user a
+  // non-word that happened to prefix a real one. The variant is a way of
+  // looking things up, not an answer.
+  for (const variant of pluralVariants(needle)) {
+    const exact = vocabulary.find((entry) => entry.term === variant);
+    if (exact) return exact.term;
+    const prefixed = vocabulary
+      .filter((entry) => entry.term.startsWith(variant))
+      // Same tie-break as the edit-distance search below, so a suggestion is
+      // both the most useful one and the same every time.
+      .sort((a, b) => b.doc - a.doc || (a.term < b.term ? -1 : 1))[0];
+    if (prefixed) return prefixed.term;
+  }
 
   let best: { term: string; distance: number; doc: number } | null = null;
   for (const entry of vocabulary) {

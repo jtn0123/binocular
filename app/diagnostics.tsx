@@ -188,15 +188,34 @@ export default function DiagnosticsScreen() {
           disabled={busy}
           accessibilityRole="button"
           accessibilityLabel="Share diagnostics"
-          onPress={async () => {
-            setBusy(true);
-            try {
-              await exportDiagnosticsZip(db);
-            } catch (err) {
-              Alert.alert('Export failed', err instanceof Error ? err.message : String(err));
-            } finally {
-              setBusy(false);
-            }
+          onPress={() => {
+            const share = async (includeInventory: boolean) => {
+              setBusy(true);
+              try {
+                await exportDiagnosticsZip(db, { includeInventory });
+              } catch (err) {
+                Alert.alert('Export failed', err instanceof Error ? err.message : String(err));
+              } finally {
+                setBusy(false);
+              }
+            };
+            // This used to send the whole workshop and every photo without
+            // asking — from a button labelled "Share diagnostics", beside one
+            // promising the opposite. Sharing a log and sharing an inventory
+            // are different decisions, so they are asked as different ones.
+            Alert.alert(
+              'What should the zip contain?',
+              'The log is the build, counts, crashes and recent events. The full bundle also includes every bin, item and photo in the workshop.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Log only', onPress: () => void share(false) },
+                {
+                  text: 'Everything',
+                  style: 'destructive',
+                  onPress: () => void share(true),
+                },
+              ],
+            );
           }}
         >
           <Text style={styles.primaryLabel}>Share diagnostics</Text>
@@ -314,7 +333,9 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: sp(3) },
   toggleMain: { flex: 1, gap: 2 },
   toggleLabel: { color: colors.text, fontWeight: '600', fontSize: 15 },
-  buttonRow: { flexDirection: 'row', gap: sp(2.5) },
+  // Wraps: at large Android font scale a three-button row runs off the
+  // right edge, and Clear log was the one that went.
+  buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: sp(2.5) },
   primaryButton: {
     backgroundColor: colors.amber,
     paddingHorizontal: sp(4.5),

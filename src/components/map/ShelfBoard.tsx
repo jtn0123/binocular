@@ -71,6 +71,7 @@ export function ShelfBoard(props: ShelfBoardProps) {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.strip}
+        testID={`map-strip-${key}`}
         onLayout={props.onRowLayout}
         onScroll={props.onRowScroll}
         scrollEventThrottle={16}

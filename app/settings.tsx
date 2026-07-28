@@ -1,13 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import * as DocumentPicker from 'expo-document-picker';
 import { Link } from 'expo-router';
@@ -62,17 +54,41 @@ function KeySection({
   title,
   placeholder,
   hasStoredKey,
+  idPrefix,
   onSave,
   onTest,
 }: {
   title: string;
   placeholder: string;
   hasStoredKey: boolean;
+  /**
+   * Scopes this section's testIDs. Both providers render a KeySection, so
+   * fixed ids would appear twice in one tree — `getByTestId` throws on that,
+   * and anything selecting by id would be picking a provider at random.
+   */
+  idPrefix: string;
   onSave: (key: string) => Promise<void>;
   onTest: (enteredKey: string) => Promise<void>;
 }) {
   const [keyInput, setKeyInput] = useState('');
   const [testing, setTesting] = useState(false);
+
+  /**
+   * Persist, then clear the box — in that order, and only on success.
+   *
+   * Trimmed because `onTest` already trims: without this you could test a
+   * pasted key, be told it works, and save a *different* string with the
+   * newline still on the end. A secure-store write can also reject, and an
+   * unhandled rejection would leave the box cleared as though it had worked.
+   */
+  const save = async (raw: string) => {
+    try {
+      await onSave(raw.trim());
+      setKeyInput('');
+    } catch (err) {
+      Alert.alert('Could not save the key', err instanceof Error ? err.message : String(err));
+    }
+  };
 
   return (
     <View style={styles.keySection}>
@@ -90,23 +106,48 @@ function KeySection({
         secureTextEntry
       />
       <View style={styles.buttonRow}>
+        {/*
+          This button used to relabel itself "Clear key" whenever the input
+          was empty — which is its state on every single open. The largest,
+          amber, primary control on the screen therefore defaulted to deleting
+          a write-only secret, with no confirmation, and then reported "Saved".
+          Saving and clearing are now separate: this one only ever saves, and
+          is inert with nothing to save.
+        */}
         <Pressable
-          style={styles.primaryButton}
-          onPress={async () => {
-            await onSave(keyInput);
-            setKeyInput('');
-          }}
+          style={[styles.primaryButton, !keyInput.trim() && styles.disabled]}
+          disabled={!keyInput.trim()}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !keyInput.trim() }}
+          accessibilityLabel={`Save the ${title}`}
+          testID={`${idPrefix}-key-save`}
+          onPress={() => void save(keyInput)}
         >
-          <Text style={styles.primaryLabel}>{keyInput.trim() ? 'Save key' : 'Clear key'}</Text>
+          <Text style={styles.primaryLabel}>Save key</Text>
         </Pressable>
         <Pressable
           style={[styles.secondaryButton, testing && styles.disabled]}
           disabled={testing}
+          accessibilityRole="button"
+          accessibilityLabel={`Test the ${title}`}
+          testID={`${idPrefix}-key-test`}
           onPress={async () => {
             setTesting(true);
             try {
               await onTest(keyInput.trim());
-              Alert.alert('Success', 'The API key works.');
+              // "It works" and "it is saved" are different facts, and this
+              // used to report the first as though it were both.
+              if (keyInput.trim()) {
+                Alert.alert('The key works', 'It has not been saved yet.', [
+                  { text: 'Not now', style: 'cancel' },
+                  {
+                    text: 'Save key',
+                    onPress: () => void save(keyInput),
+                  },
+                ]);
+              } else {
+                Alert.alert('Success', 'The stored key works.');
+              }
             } catch (err) {
               Alert.alert('Connection failed', err instanceof Error ? err.message : String(err));
             } finally {
@@ -117,6 +158,30 @@ function KeySection({
           <Text style={styles.secondaryLabel}>{testing ? 'Testing…' : 'Test connection'}</Text>
         </Pressable>
       </View>
+      {hasStoredKey ? (
+        <Pressable
+          style={styles.dangerButton}
+          accessibilityRole="button"
+          accessibilityLabel={`Clear the stored ${title}`}
+          testID={`${idPrefix}-key-clear`}
+          onPress={() =>
+            Alert.alert(
+              'Clear the stored key?',
+              'Cloud recognition stops working until you enter a new one. A stored key cannot be read back, so you would have to paste it in again.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Clear key',
+                  style: 'destructive',
+                  onPress: () => void save(''),
+                },
+              ],
+            )
+          }
+        >
+          <Text style={styles.dangerLabel}>Clear key</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -272,14 +337,14 @@ export default function SettingsScreen() {
         ))}
       </View>
       <Text style={styles.hint}>
-        Fixture returns canned results and works fully offline. Local runs ML Kit on-device
-        (dev build only) — generic names, no brands or labels, works with no connection and no
-        key. Claude and OpenAI do full recognition and each needs its own API key below.
+        Fixture returns canned results and works fully offline. Local runs ML Kit on-device (dev
+        build only) — generic names, no brands or labels, works with no connection and no key.
+        Claude and OpenAI do full recognition and each needs its own API key below.
       </Text>
       {(provider === 'claude' || provider === 'openai') && (
         <Text style={styles.estimate} testID="scan-estimate">
-          ≈ {formatUsd(estimateScanCost(provider).usd)} per scan (estimate at bundled{' '}
-          {PRICES_AS_OF} prices — actual spend below is measured)
+          ≈ {formatUsd(estimateScanCost(provider).usd)} per scan (estimate at bundled {PRICES_AS_OF}{' '}
+          prices — actual spend below is measured)
         </Text>
       )}
 
@@ -287,13 +352,23 @@ export default function SettingsScreen() {
         title="Anthropic API key (Claude)"
         placeholder="sk-ant-…"
         hasStoredKey={hasAnthropicKey}
+        idPrefix="anthropic"
         onSave={async (key) => {
           await setApiKey(key);
           const present = key.trim().length > 0;
           setHasAnthropicKey(present);
           // Boolean only — key material never touches the log.
-          logEvent(db, { kind: 'settings', name: 'key_changed', detail: { engine: 'claude', present } });
-          Alert.alert('Saved', 'Anthropic key updated in the secure store.');
+          logEvent(db, {
+            kind: 'settings',
+            name: 'key_changed',
+            detail: { engine: 'claude', present },
+          });
+          Alert.alert(
+            present ? 'Saved' : 'Cleared',
+            present
+              ? 'Anthropic key updated in the secure store.'
+              : 'The Anthropic key has been removed from the secure store.',
+          );
         }}
         onTest={async (entered) => {
           const key = entered || (await getApiKey());
@@ -306,13 +381,23 @@ export default function SettingsScreen() {
         title="OpenAI API key"
         placeholder="sk-…"
         hasStoredKey={hasOpenAiKey}
+        idPrefix="openai"
         onSave={async (key) => {
           await setOpenAiApiKey(key);
           const present = key.trim().length > 0;
           setHasOpenAiKey(present);
           // Boolean only — key material never touches the log.
-          logEvent(db, { kind: 'settings', name: 'key_changed', detail: { engine: 'openai', present } });
-          Alert.alert('Saved', 'OpenAI key updated in the secure store.');
+          logEvent(db, {
+            kind: 'settings',
+            name: 'key_changed',
+            detail: { engine: 'openai', present },
+          });
+          Alert.alert(
+            present ? 'Saved' : 'Cleared',
+            present
+              ? 'OpenAI key updated in the secure store.'
+              : 'The OpenAI key has been removed from the secure store.',
+          );
         }}
         onTest={async (entered) => {
           const key = entered || (await getOpenAiApiKey());
@@ -324,8 +409,8 @@ export default function SettingsScreen() {
       <Text style={styles.sectionTitle}>Cloud spend</Text>
       {spend.length === 0 ? (
         <Text style={styles.hint}>
-          No cloud scans yet. Once a cloud engine runs, its real cost shows here — measured
-          from each API&apos;s own usage numbers, never guessed.
+          No cloud scans yet. Once a cloud engine runs, its real cost shows here — measured from
+          each API&apos;s own usage numbers, never guessed.
         </Text>
       ) : (
         <View style={styles.spendCard} testID="spend-card">
@@ -350,8 +435,7 @@ export default function SettingsScreen() {
             );
           })}
           <Text style={styles.hint}>
-            Measured from API usage fields (D15). Dollar amounts use prices bundled{' '}
-            {PRICES_AS_OF}.
+            Measured from API usage fields (D15). Dollar amounts use prices bundled {PRICES_AS_OF}.
           </Text>
         </View>
       )}
@@ -361,8 +445,8 @@ export default function SettingsScreen() {
       <Text style={styles.sectionTitle}>Diagnostics</Text>
       <Text style={styles.hint}>
         A local event log records app lifecycle, scan timings, queue retries and crashes so a
-        problem in the field can be diagnosed afterwards. Nothing is ever uploaded — you share
-        it only when you choose to.
+        problem in the field can be diagnosed afterwards. Nothing is ever uploaded — you share it
+        only when you choose to.
       </Text>
       <Link href="/diagnostics" asChild>
         <Pressable
@@ -491,8 +575,8 @@ export default function SettingsScreen() {
 
       <Text style={styles.sectionTitle}>Data</Text>
       <Text style={styles.hint}>
-        The backup zip holds everything — bins, items, scan history, and photos. CSV is one row
-        per item for Excel/Sheets. Import only restores into an empty database.
+        The backup zip holds everything — bins, items, scan history, and photos. CSV is one row per
+        item for Excel/Sheets. Import only restores into an empty database.
       </Text>
       <Link href="/tags" asChild>
         <Pressable
@@ -541,7 +625,13 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   // Extra bottom padding keeps the last section above the gesture bar.
-  container: { padding: sp(4), paddingBottom: sp(12), gap: sp(3), backgroundColor: colors.bg, flexGrow: 1 },
+  container: {
+    padding: sp(4),
+    paddingBottom: sp(12),
+    gap: sp(3),
+    backgroundColor: colors.bg,
+    flexGrow: 1,
+  },
   sectionTitle: { ...type.stamp, marginTop: sp(2) },
   keySection: { gap: sp(2.5) },
   providerRow: { flexDirection: 'row', gap: sp(2) },
@@ -580,7 +670,18 @@ const styles = StyleSheet.create({
     padding: sp(3),
     fontSize: 15,
   },
-  buttonRow: { flexDirection: 'row', gap: sp(2.5) },
+  // Wraps because Android font scale can push a two-button row off the right
+  // edge, and a button you cannot see is a button you cannot press.
+  buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: sp(2.5) },
+  dangerButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: colors.dangerDim,
+    paddingHorizontal: sp(4.5),
+    paddingVertical: sp(3),
+    borderRadius: radius.md,
+  },
+  dangerLabel: { color: colors.danger, fontWeight: '600' },
   primaryButton: {
     backgroundColor: colors.amber,
     paddingHorizontal: sp(4.5),

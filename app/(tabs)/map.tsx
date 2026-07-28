@@ -286,9 +286,14 @@ export default function MapScreen() {
       ) : null}
 
       <GestureDetector gesture={drag.pan}>
-        <View style={styles.mapArea} onLayout={(e) => frames.setViewport(e.nativeEvent.layout)}>
+        <View
+          style={styles.mapArea}
+          testID="map-viewport"
+          onLayout={(e) => frames.setViewport(e.nativeEvent.layout)}
+        >
           <ScrollView
             ref={frames.scrollRef}
+            testID="map-scroll"
             contentContainerStyle={styles.container}
             scrollEnabled={dragging === null}
             scrollEventThrottle={16}
@@ -300,6 +305,7 @@ export default function MapScreen() {
                 <View
                   key={areaKey}
                   style={styles.area}
+                  testID={`map-area-${areaKey}`}
                   onLayout={(e) => frames.setAreaFrame(areaKey, e.nativeEvent.layout)}
                 >
                   <View style={styles.areaHead}>
@@ -312,6 +318,7 @@ export default function MapScreen() {
                       whole chain. */}
                   <View
                     style={styles.well}
+                    testID={`map-well-${areaKey}`}
                     onLayout={(e) => frames.setWellFrame(areaKey, e.nativeEvent.layout)}
                   >
                     <View pointerEvents="none" style={[styles.upright, styles.uprightLeft]} />
