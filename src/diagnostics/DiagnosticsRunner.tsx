@@ -50,6 +50,11 @@ export function DiagnosticsRunner() {
     // failure would throw.
     const disposeErrors = installErrorHandler(db, { appendFallback: appendCrashFallback });
 
+    // The AppState subscription is created inside the async block below, so
+    // cleanup may run before it exists — hence the holder and the flag.
+    let appStateSub: ReturnType<typeof AppState.addEventListener> | null = null;
+    let disposed = false;
+
     void (async () => {
       await loadDiagnosticsEnabled();
       pruneEvents(db);
@@ -72,13 +77,30 @@ export function DiagnosticsRunner() {
         });
       }
       booted.current = true;
+
+      // Registered here, after `app_start` is on disk, and not beside the
+      // other listeners below.
+      //
+      // `detectAbnormalExit` decides a session died by finding no
+      // `app_background` *after* the last `app_start`. Subscribing before
+      // that row exists means a backgrounding during the SecureStore await —
+      // the user switching away while the app is still opening, which is
+      // exactly when they would — records the goodbye too early to count.
+      // Next launch then reports a death that never happened, and the whole
+      // point of this detector is that it is believed.
+      appStateSub = AppState.addEventListener('change', (state) => {
+        if (state === 'active' || state === 'background') {
+          logEvent(db, { kind: 'app', name: `app_${state}` });
+        }
+      });
+      // And if it went to the background while we were waiting, say so now
+      // rather than losing the event to the gap.
+      if (AppState.currentState === 'background') {
+        logEvent(db, { kind: 'app', name: 'app_background' });
+      }
+      if (disposed) appStateSub.remove();
     })();
 
-    const appStateSub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' || state === 'background') {
-        logEvent(db, { kind: 'app', name: `app_${state}` });
-      }
-    });
     const unsubscribeNet = NetInfo.addEventListener((state) => {
       setNetworkContext(state.type, state.isConnected);
       logEvent(db, {
@@ -89,7 +111,8 @@ export function DiagnosticsRunner() {
     });
 
     return () => {
-      appStateSub.remove();
+      disposed = true;
+      appStateSub?.remove();
       unsubscribeNet();
       disposeErrors();
     };
