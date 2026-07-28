@@ -138,6 +138,11 @@ export default function CaptureScreen() {
     hapticShutter();
     try {
       const photo = await cameraRef.current.takePictureAsync();
+      // Walked away while the shutter was still working. Everything after
+      // this point either persists the photo or navigates on the strength of
+      // it, so the guards further in are too late — `submit` has already
+      // started by then. A cancelled capture must leave nothing behind.
+      if (abandoned.current) return;
       const shot = { uri: photo.uri, width: photo.width, height: photo.height };
       if (confirmBeforeSending) {
         // A blurry frame on a cloud engine costs real money and a round trip
@@ -149,11 +154,12 @@ export default function CaptureScreen() {
       }
       await submit(shot);
     } catch (err) {
+      if (abandoned.current) return;
       Alert.alert('Capture failed', err instanceof Error ? err.message : String(err), [
         { text: 'OK', onPress: () => setBusy('idle') },
       ]);
     } finally {
-      setBusy((b) => (b === 'capturing' ? 'idle' : b));
+      if (!abandoned.current) setBusy((b) => (b === 'capturing' ? 'idle' : b));
     }
   }
 

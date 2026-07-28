@@ -497,11 +497,7 @@ export function updateItem(
 
 /** Re-home a single item (field-test ask: items were stuck in their bin). */
 export function moveItemToBin(db: DbAdapter, itemId: string, binId: string): void {
-  db.runSync('UPDATE items SET bin_id = ?, updated_at = ? WHERE id = ?', [
-    binId,
-    nowIso(),
-    itemId,
-  ]);
+  db.runSync('UPDATE items SET bin_id = ?, updated_at = ? WHERE id = ?', [binId, nowIso(), itemId]);
 }
 
 /** Shelf + location breadcrumb for a bin (Home cards, labels). */
@@ -790,12 +786,17 @@ export function updateScanStatus(
   status: ScanStatus,
   extra: { rawResponse?: string | null; error?: string | null; resolvedAt?: string | null } = {},
 ): void {
+  // Discarding is final, and the guard belongs here rather than at the call
+  // sites: recognition is already in flight when a scan is thrown away, and
+  // it finishes by writing 'review' or 'failed' over the discard — putting
+  // the scan back in the queue the user had just cleared it from. Refusing
+  // the write is the only place that covers every caller, present and future.
   db.runSync(
     `UPDATE scans SET status = ?,
        raw_response = COALESCE(?, raw_response),
        error = COALESCE(?, error),
        resolved_at = COALESCE(?, resolved_at)
-     WHERE id = ?`,
+     WHERE id = ? AND status != 'discarded'`,
     [status, extra.rawResponse ?? null, extra.error ?? null, extra.resolvedAt ?? null, id],
   );
 }
@@ -813,7 +814,13 @@ export function recordScanUsage(
 ): void {
   db.runSync(
     'UPDATE scans SET engine = ?, input_tokens = ?, output_tokens = ?, cost_usd = ? WHERE id = ?',
-    [usage.engine, usage.inputTokens ?? null, usage.outputTokens ?? null, usage.costUsd ?? null, id],
+    [
+      usage.engine,
+      usage.inputTokens ?? null,
+      usage.outputTokens ?? null,
+      usage.costUsd ?? null,
+      id,
+    ],
   );
 }
 

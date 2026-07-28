@@ -226,10 +226,10 @@ export function ReviewScreen({
       const r = await processScan(db, scanId);
       if (r.outcome !== 'review') return;
       const fresh = getScan(db, scanId);
-      // Discarded while this was in flight. `processScan` has already written
-      // a status over the discard, so the row is resurrected either way — but
-      // loading its chips would also put the user back in a review they chose
-      // to throw away, which is the part they would notice.
+      // Discarded while this was in flight. `updateScanStatus` now refuses to
+      // write over a discard, so the row stays thrown away; this stops the
+      // screen loading chips for it and putting the user back in a review
+      // they had walked out of.
       if (fresh?.status === 'discarded') return;
       if (!fresh?.raw_response) return;
       try {
@@ -647,55 +647,76 @@ function ChipSection({
         <Text style={styles.dim}>Nothing here.</Text>
       ) : (
         <View style={styles.chipWrap}>
-          {chips.map((chip) => {
-            // Extracted rather than nested in the JSX: two conditions decide
-            // one line of text, and as a nested ternary neither Sonar nor a
-            // reader could follow which case won.
-            const chipHint = !chip.selected
-              ? destructive
-                ? 'tap to keep'
-                : chip.confidence === 'low'
-                  ? 'tap to include'
-                  : null
-              : null;
-            return (
-              <Pressable
-                key={chip.key}
-                testID={`chip-${chip.key}`}
-                accessibilityState={{ selected: chip.selected }}
-                accessibilityLabel={
-                  destructive && !chip.selected
-                    ? `${chip.name} — will be removed from the bin. Tap to keep it`
-                    : undefined
-                }
-                style={[
-                  styles.chip,
-                  !chip.selected && (destructive ? styles.chipRemoved : styles.chipUnselected),
-                ]}
-                onPress={() => onToggle(chip.key)}
-                onLongPress={onEdit ? () => onEdit(chip.key) : undefined}
-              >
-                {chip.confidence === 'medium' && (
-                  <View style={styles.amberDot} testID="amber-dot" />
-                )}
-                <Text
-                  style={[
-                    styles.chipText,
-                    !chip.selected &&
-                      (destructive ? styles.chipTextRemoved : styles.chipTextUnselected),
-                  ]}
-                >
-                  {chip.quantity > 1 ? `${chip.quantity}× ` : ''}
-                  {chip.brand ? `${chip.brand} ` : ''}
-                  {chip.name}
-                </Text>
-                {chipHint ? <Text style={styles.chipMeta}>{chipHint}</Text> : null}
-              </Pressable>
-            );
-          })}
+          {chips.map((chip) => (
+            <ChipRow
+              key={chip.key}
+              chip={chip}
+              destructive={destructive}
+              onToggle={() => onToggle(chip.key)}
+              onEdit={onEdit ? () => onEdit(chip.key) : undefined}
+            />
+          ))}
         </View>
       )}
     </View>
+  );
+}
+
+/**
+ * One chip.
+ *
+ * Extracted from `ChipSection`'s map because that callback had grown to carry
+ * the hint, the accessibility label and two style branches at once — twenty
+ * points of cognitive complexity by Sonar's count, which is a fair reading of
+ * how hard it had become to see which case won. The conditions are the same;
+ * they are just each visible on their own now.
+ */
+function ChipRow({
+  chip,
+  destructive,
+  onToggle,
+  onEdit,
+}: {
+  chip: DetectedChip;
+  /** Deselecting means removal, not merely declining to add. */
+  destructive: boolean;
+  onToggle: () => void;
+  onEdit?: () => void;
+}) {
+  let hint: string | null = null;
+  if (!chip.selected) {
+    if (destructive) hint = 'tap to keep';
+    else if (chip.confidence === 'low') hint = 'tap to include';
+  }
+  const removing = destructive && !chip.selected;
+
+  return (
+    <Pressable
+      testID={`chip-${chip.key}`}
+      accessibilityState={{ selected: chip.selected }}
+      accessibilityLabel={
+        removing ? `${chip.name} — will be removed from the bin. Tap to keep it` : undefined
+      }
+      style={[
+        styles.chip,
+        !chip.selected && (destructive ? styles.chipRemoved : styles.chipUnselected),
+      ]}
+      onPress={onToggle}
+      onLongPress={onEdit}
+    >
+      {chip.confidence === 'medium' && <View style={styles.amberDot} testID="amber-dot" />}
+      <Text
+        style={[
+          styles.chipText,
+          !chip.selected && (destructive ? styles.chipTextRemoved : styles.chipTextUnselected),
+        ]}
+      >
+        {chip.quantity > 1 ? `${chip.quantity}× ` : ''}
+        {chip.brand ? `${chip.brand} ` : ''}
+        {chip.name}
+      </Text>
+      {hint ? <Text style={styles.chipMeta}>{hint}</Text> : null}
+    </Pressable>
   );
 }
 

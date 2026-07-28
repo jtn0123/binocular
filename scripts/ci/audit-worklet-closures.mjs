@@ -166,7 +166,7 @@ async function findViolations(code, filename) {
             // shape as the `sp(3)` that killed the process.
             if (ALLOWED_CALLEES.has(name) && fromApprovedModule(binding, t)) return;
             if (!binding) return; // a global; not ours to police
-            if (binding.scope.block === body.node) return; // defined inside
+            if (declaredInside(binding, body)) return;
             if (isWorkletDeclaration(binding, t)) return;
 
             violations.push({
@@ -182,6 +182,22 @@ async function findViolations(code, filename) {
   });
 
   return violations;
+}
+
+/**
+ * Whether a binding was declared anywhere inside the worklet body.
+ *
+ * Walking the scope chain rather than comparing to the body node directly: a
+ * helper declared inside an `if` or a `for` sits in that block's own scope,
+ * not the function's, so an identity check calls a perfectly local function
+ * "captured" and fails the build for correct code. A false positive in a
+ * gate is worse than a gap — it teaches people the check is noise.
+ */
+function declaredInside(binding, body) {
+  for (let scope = binding.scope; scope; scope = scope.parent) {
+    if (scope.block === body.node) return true;
+  }
+  return false;
 }
 
 /**
@@ -310,11 +326,29 @@ export function Scrolling({ offset }) {
 }
 `;
 
+/**
+ * A helper declared inside an `if` *within* the worklet. Local, safe, and the
+ * shape an identity-based scope check wrongly reports.
+ */
+const SELF_TEST_NESTED_LOCAL = `
+import { useAnimatedStyle } from 'react-native-reanimated';
+export function NestedLocal({ dragY }) {
+  return useAnimatedStyle(() => {
+    if (dragY.value > 0) {
+      const halve = (n) => n / 2;
+      return { transform: [{ translateY: halve(dragY.value) }] };
+    }
+    return { transform: [{ translateY: 0 }] };
+  });
+}
+`;
+
 async function selfTest() {
   const broken = await findViolations(SELF_TEST_SOURCE, 'self-test-broken.tsx');
   const fixed = await findViolations(SELF_TEST_FIXED, 'self-test-fixed.tsx');
   const shadowed = await findViolations(SELF_TEST_SHADOWED, 'self-test-shadowed.tsx');
   const imported = await findViolations(SELF_TEST_IMPORTED, 'self-test-imported.tsx');
+  const nestedLocal = await findViolations(SELF_TEST_NESTED_LOCAL, 'self-test-nested.tsx');
   const reaction = await findViolations(SELF_TEST_REACTION, 'self-test-reaction.tsx');
   const scroll = await findViolations(SELF_TEST_SCROLL, 'self-test-scroll.tsx');
 
@@ -346,6 +380,14 @@ async function selfTest() {
     console.error(
       'SELF-TEST FAILED: a `clamp` genuinely imported from Reanimated was flagged.\n' +
         `False positives make the audit unusable. Got: ${JSON.stringify(imported)}`,
+    );
+    return 1;
+  }
+  if (nestedLocal.length > 0) {
+    console.error(
+      'SELF-TEST FAILED: a helper declared inside an `if` within the worklet was\n' +
+        'flagged as captured. It is local and safe; a gate that fails correct code\n' +
+        `gets ignored, which costs more than the bug it catches. Got: ${JSON.stringify(nestedLocal)}`,
     );
     return 1;
   }
