@@ -429,6 +429,12 @@ export function useMapDrag({
     if (!binId) return;
     geometry.current = freezeGeometry(frames.measureRows(areas), frames.getScrollY(), binId);
     // The old slot named a shelf on the rack that just left the screen.
+    //
+    // `trackDrag` below would clear it too, since it only keeps a slot it can
+    // still resolve. This does not rely on that: it only takes one early
+    // return added to `trackDrag` for a stale outline to survive a page, and
+    // an outline pointing at a shelf that is no longer on screen is a promise
+    // about where a bin will land that the drop will not keep.
     slotRef.current = null;
     setSlot(null);
     const point = pointer.current;

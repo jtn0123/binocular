@@ -150,6 +150,23 @@ describe('the way out of an over-full shelf', () => {
     const rack = areas[0];
     expect(overflowTarget(areas, rack, rack.rows[0])?.shelfId).toBeNull();
   });
+
+  it('offers the tray no way out of itself', () => {
+    // The tray is where overflow goes, so it is the one row with nowhere to
+    // send anything. Offering "move it to the tray" to a bin already in the
+    // tray is a quick fix that fixes nothing.
+    const areas = withTray(
+      buildMap(
+        input({
+          locations: [loc('l1', 'R1 · Door')],
+          shelves: [shelf('s1', 'l1', 'Top', 1)],
+          bins: [bin('b1', 's1', 'B-001'), bin('b2', null, 'B-002')],
+        }),
+      ),
+    );
+    const tray = areas.find((a) => a.locationId === null)!;
+    expect(overflowTarget(areas, tray, tray.rows[0])).toBeNull();
+  });
 });
 
 describe('the unshelved tray', () => {
@@ -203,6 +220,14 @@ describe('moving a stack of bins at once', () => {
     // the stack goes to the end rather than in front of a bin about to move.
     const plan = planMultiDrop(areas, ['b1', 'b3'], { shelfId: 's2', beforeBinId: 'b3' });
     expect(plan?.orderedIds).toEqual(['b4', 'b1', 'b3']);
+  });
+
+  it('lands at the end when aimed at a bin that is not on that shelf', () => {
+    // The bin you tapped can have moved, or been deleted, between the tap and
+    // the drop. The end of the row is somewhere real; halfway through a shelf
+    // that no longer contains it is not.
+    const plan = planMultiDrop(areas, ['b1'], { shelfId: 's2', beforeBinId: 'b9' });
+    expect(plan?.orderedIds).toEqual(['b3', 'b4', 'b1']);
   });
 
   it('returns null for a move that would change nothing', () => {

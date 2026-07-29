@@ -119,12 +119,17 @@ describe('a drag, from finger down to finger up', () => {
     }),
   );
 
+  /** What the shelves currently measure as; paging swaps this out. */
+  let measured: RowMeasurement[] = rows;
+  let scrollY = 0;
+  let scrollTo: jest.Mock;
+
   /** Only the four the drag actually reads; the rest would be dead weight. */
   const frames = {
-    getScrollY: () => 0,
+    getScrollY: () => scrollY,
     getViewport: () => ({ x: 0, y: 0, width: 360, height: 600 }),
-    scrollTo: () => undefined,
-    measureRows: () => rows,
+    scrollTo: (y: number) => scrollTo(y),
+    measureRows: () => measured,
   } as unknown as MapFrames;
 
   let onLift: jest.Mock;
@@ -156,6 +161,9 @@ describe('a drag, from finger down to finger up', () => {
   };
 
   beforeEach(() => {
+    measured = rows;
+    scrollY = 0;
+    scrollTo = jest.fn();
     onLift = jest.fn();
     onDrop = jest.fn();
     onEdgeDrop = jest.fn();
@@ -263,6 +271,130 @@ describe('a drag, from finger down to finger up', () => {
     // A pan that activated on movement alone would steal every scroll of the
     // rack panel and every swipe along the wall.
     expect((await start()).pan.config.activateAfterLongPress).toBeGreaterThanOrEqual(300);
+  });
+
+  /**
+   * Paging the wall with a bin still in hand.
+   *
+   * The drop geometry is frozen at the lift so a drag cannot chase its own
+   * landing slot. That freeze then described a rack that had walked off the
+   * screen: resting on a rail pages the wall, and every drop afterwards was
+   * resolved against the shelves of the rack you had just left. It is
+   * invisible to every other test because the arithmetic is right — it is
+   * being done against the wrong shelves.
+   */
+  describe('re-freezing after the wall pages underneath', () => {
+    /** The rack you arrive at: one shelf, further down, with a card on it. */
+    const nextRack: RowMeasurement[] = [
+      { shelfId: 's9', top: 300, bottom: 400, cards: [{ binId: 'b7', x: 0, width: 100 }] },
+    ];
+
+    it('resolves the drop against the rack now on screen', async () => {
+      const gesture = await start();
+      gesture.down(50, 50);
+
+      measured = nextRack;
+      gesture.drag.refreeze();
+      // In front of the one card this rack holds, at a height that is bare
+      // board on the rack we came from.
+      gesture.move(10, 350);
+      gesture.up();
+
+      expect(onDrop).toHaveBeenCalledWith('b1', { shelfId: 's9', index: 0 });
+    });
+
+    it('drops the landing slot it was showing for the rack that left', async () => {
+      const gesture = await start();
+      gesture.down(50, 50);
+      gesture.move(50, 160);
+
+      measured = nextRack;
+      gesture.drag.refreeze();
+      // Released where the old rack's shelf used to be, which on this rack is
+      // bare board. Better to fly home than to land on a shelf by coincidence.
+      gesture.up();
+
+      expect(onDrop).not.toHaveBeenCalled();
+      expect(onCancel).toHaveBeenCalled();
+    });
+
+    it('does nothing at all when no bin is in hand', async () => {
+      const gesture = await start();
+      expect(() => gesture.drag.refreeze()).not.toThrow();
+      expect(onDrop).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * The clock that walks the map while a finger stays still.
+   *
+   * A finger parked at the top of the screen with a bin in hand has to be
+   * able to reach the shelf above it, and there are no move events to hang
+   * that off — so it runs on an interval. That same interval is what made a
+   * motionless hold resolve a slot and turned lift-and-place into a no-op.
+   */
+  describe('the edge auto-scroll', () => {
+    /** Runs the drag's 16 ms tick by hand, without waiting 16 ms. */
+    const withClock = async (play: (gesture: Awaited<ReturnType<typeof start>>) => void) => {
+      let tick: (() => void) | null = null;
+      const spy = jest
+        .spyOn(globalThis, 'setInterval')
+        .mockImplementation(((fn: () => void) => {
+          tick = fn;
+          return 1 as unknown as ReturnType<typeof setInterval>;
+        }) as typeof setInterval);
+      jest.spyOn(globalThis, 'clearInterval').mockImplementation(() => undefined);
+      try {
+        play(await start());
+        return { tick: () => tick?.() };
+      } finally {
+        spy.mockRestore();
+        (globalThis.clearInterval as unknown as jest.SpyInstance).mockRestore?.();
+      }
+    };
+
+    it('walks the map when the finger is held near the top edge', async () => {
+      const clock = await withClock((gesture) => {
+        gesture.down(50, 50);
+        gesture.move(50, 40);
+      });
+      clock.tick();
+
+      // Up, because the finger is at the top and the shelf it wants is above.
+      expect(scrollTo).toHaveBeenCalledWith(-10);
+    });
+
+    it('walks the other way at the bottom', async () => {
+      const clock = await withClock((gesture) => {
+        gesture.down(50, 50);
+        gesture.move(50, 580);
+      });
+      clock.tick();
+
+      expect(scrollTo).toHaveBeenCalledWith(10);
+    });
+
+    it('stays still while the finger is nowhere near an edge', async () => {
+      const clock = await withClock((gesture) => {
+        gesture.down(50, 50);
+        gesture.move(50, 300);
+      });
+      clock.tick();
+
+      expect(scrollTo).not.toHaveBeenCalled();
+    });
+
+    it('does not turn a motionless hold into a drag', async () => {
+      // The tick re-resolves the slot under the finger, which is precisely how
+      // a hold that never moved came to be treated as a drop.
+      const clock = await withClock((gesture) => gesture.down(50, 50));
+      clock.tick();
+      clock.tick();
+      clock.tick();
+
+      expect(scrollTo).toHaveBeenCalled();
+      expect(onDrop).not.toHaveBeenCalled();
+    });
   });
 
   describe('the side rails', () => {

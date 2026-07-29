@@ -588,6 +588,31 @@ strip along the bottom is the whole run of shelving.
       is what the drag hit-tests against: drawing cards centred while
       computing midlines flush left would land every drop one slot off and
       look perfectly correct in a snapshot.
+- [x] **A second pass over the same question, on the parts the first one
+      left.** Coverage of this branch's own code went 89% → 95% of statements
+      and 75% → 88% of branches, but the numbers are not the point; these four
+      were chosen because each could fail in a way nothing else would notice:
+      **The swipe's wiring (40% → 100%).** Its thresholds were already pinned
+      as arithmetic. What was not was the configuration that keeps it and the
+      drag out of each other's way — and that is invisible to a test of either
+      one alone: widen `activeOffsetX` to ±1 and the drag still passes every
+      test it has while the swipe quietly steals every scroll of the panel.
+      **`useMapFrames` (44% → 88%).** The bridge between four nested layouts
+      and the one space the drag hit-tests in. Everything downstream is exact,
+      so this is the last remaining way for a drop to land in the wrong slot
+      with every other test green. Forgetting the free slots in the cell count
+      — the bug the comment there warns about — now fails three tests.
+      **`refreeze` and the edge auto-scroll.** Both were device-only findings
+      with device-only proof. Paging mid-drag now has to resolve against the
+      rack on screen, and the 16 ms clock is driven by hand rather than waited
+      for, including the case that started all this: three ticks under a
+      motionless finger must still not turn a hold into a drop.
+      **Undo, against the database rather than the banner.** Mostly overlap
+      with the screen test — deliberately checked rather than assumed, by
+      breaking things and seeing which suite noticed. One did not overlap:
+      undo restoring a bin to the *tray* it was dragged out of. Break that and
+      the screen test still passes, which is how a one-way trip for a loose
+      bin would have shipped.
 - [ ] Confirmed on the field-test phone that paging, the rails, the swipe and
       the tray behave with gloves on. The swipe is the new unknown here: it is
       the first thing on this screen a mitten can trigger by accident.
