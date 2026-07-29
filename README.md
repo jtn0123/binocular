@@ -123,10 +123,12 @@ walk around; release is pre-wired to the debug keystore):
 npx expo run:android --variant release --device
 ```
 
-Away from the laptop, the same build comes from CI instead: Actions →
-**Android APK** → *Run workflow* (or push a `v*` tag) publishes a signed APK
-as a GitHub Release the phone can download and install **over** the existing
-app, keeping its bins, items and photos — see [`docs/RELEASES.md`](docs/RELEASES.md).
+Away from the laptop, the same build comes from CI instead, and mostly it comes
+by itself: merging anything that changes app code publishes a signed APK as a
+GitHub Release the phone can download and install **over** the existing app,
+keeping its bins, items and photos. A merge titled `feat:` or `fix:` also cuts
+a version and a changelog entry; Actions → **Release** → *Run workflow* builds
+one on demand. See [`docs/RELEASES.md`](docs/RELEASES.md).
 
 Recognition engines are chosen in **Settings**, where each cloud engine's API
 key is stored in `expo-secure-store` (never in the repo or bundle). The

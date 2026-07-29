@@ -1,8 +1,25 @@
-name: Android APK
+name: Release
 
 # Builds a standalone field-test APK and publishes it as a GitHub Release, so
 # the phone in the workshop can be updated from anywhere — no laptop, no Metro,
 # no cable. See docs/RELEASES.md for the install/update rules.
+#
+# Three ways a build happens, and they differ only in what the release is
+# called:
+#
+#   1. **A version was cut.** python-semantic-release reads the
+#      conventional-commit subjects merged since the last tag; `feat:` bumps
+#      the minor, `fix:`/`perf:` the patch, a `BREAKING CHANGE:` footer the
+#      major. It writes CHANGELOG.md, tags `vX.Y.Z` and creates the release,
+#      and this workflow attaches the APK to it.
+#   2. **App code changed but no version was cut** — a `chore:` or `refactor:`
+#      merge. Publishes `build-<run>` as a pre-release, the same as the
+#      by-hand builds have always done, so the phone can still get it.
+#   3. **Run workflow, by hand.** The same as (2), with the ABI choice exposed.
+#
+# A merge that touches only docs, tests or the blueprint builds nothing: the
+# APK would be byte-identical, and a 99 MB release for a typo is noise in the
+# very list the phone reads to find its next update.
 #
 # The APK is signed with the React Native template debug keystore that
 # `expo prebuild` generates (`android/app/debug.keystore`) — the same key that
@@ -13,7 +30,7 @@ name: Android APK
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
   workflow_dispatch:
     inputs:
       abis:
@@ -36,21 +53,224 @@ on:
       - 'scripts/ci/**'
       - 'plugins/**'
       - 'app.json'
+      - 'pyproject.toml'
+      - 'templates/**'
       - 'package-lock.json'
 
-# Least privilege by default. Only the publish job — which never runs for a
-# pull request — is granted write, so the job that builds PR code cannot
-# write to the repository even on a same-repo PR where the token would
-# otherwise be writable.
+# Least privilege by default. Only the two jobs that must write — cutting the
+# version, and publishing the release — are granted it, and neither runs for a
+# pull request, so the job that builds PR code cannot write to the repository
+# even on a same-repo PR where the token would otherwise be writable.
 permissions:
   contents: read
 
 concurrency:
-  group: android-apk-${{ github.ref }}
-  cancel-in-progress: true
+  group: release-${{ github.ref }}
+  # Never interrupt a run that might be halfway through tagging or publishing.
+  # A superseded *pull request* build is only a build, so that one may go.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # ---------------------------------------------------------------------------
+  version:
+    name: Cut a version, if the commits asked for one
+    if: github.event_name == 'push' && github.repository == 'jtn0123/binocular'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      released: ${{ steps.resolve.outputs.released }}
+      tag: ${{ steps.resolve.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # PSR walks every commit since the last tag to decide the bump.
+          fetch-depth: 0
+          # The version-bump commit and its tag are pushed back, so unlike
+          # everywhere else in this repository the checkout credential has to
+          # stay. This does not loop: GitHub does not trigger workflows from
+          # pushes made with the default GITHUB_TOKEN.
+          persist-credentials: true
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.11'
+
+      # PSR's build_command is `node scripts/ci/set-version.mjs`, which keeps
+      # VERSION and app.json in step with the number PSR has just decided.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install python-semantic-release
+        # --only-binary refuses source distributions, which pip would otherwise
+        # build by running their setup.py — arbitrary code from a transitive
+        # dependency, in the job holding the token that can tag and publish.
+        run: 'pip install --only-binary :all: python-semantic-release==9.21.1'
+
+      - name: Version and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          semantic-release version
+          semantic-release publish
+
+      - name: Resolve the tag, if there is one
+        id: resolve
+        run: |
+          set -euo pipefail
+          tag=$(
+            git tag --points-at HEAD \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$' \
+              | sort -V | tail -n1 || true
+          )
+          if [ -n "$tag" ]; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+            echo "Cut ${tag}." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Say so when no version was cut
+        if: steps.resolve.outputs.released != 'true'
+        run: |
+          set -euo pipefail
+          # `semantic-release version` exits 0 whether or not it bumped, so
+          # without a surface like this a run of chore/docs/ci merges piles up
+          # silently and the version stops meaning anything. InkyPi reached
+          # five unreleased PRs in a row before the same warning was added.
+          subject=$(git log -1 --pretty=%s)
+          {
+            echo "## No version cut"
+            echo
+            echo 'No commit since the last tag used a bumping type, so the'
+            echo 'version is unchanged. Most recent subject:'
+            echo
+            echo "    ${subject}"
+            echo
+            echo 'If this merge changed something a person would notice, the'
+            echo 'title probably needed `feat:`, `fix:` or `perf:` — or a'
+            echo '`BREAKING CHANGE:` footer.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Deliberately a warning and not a failure: chore/docs/ci merges
+          # legitimately do not release.
+          escaped=${subject//%/%25}
+          escaped=${escaped//$'\r'/%0D}
+          escaped=${escaped//$'\n'/%0A}
+          echo "::warning title=No version cut::${escaped}"
+
+  # ---------------------------------------------------------------------------
+  dry-run:
+    name: Would a release still work?
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # The dry run plants its own baseline tag, but it still needs real
+          # history to have something to render.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install python-semantic-release
+        # --only-binary refuses source distributions, which pip would otherwise
+        # build by running their setup.py — arbitrary code from a transitive
+        # dependency, in the job holding the token that can tag and publish.
+        run: 'pip install --only-binary :all: python-semantic-release==9.21.1'
+
+      # Cuts a release in a throwaway clone and checks what came out — the
+      # version, the tag, the two files the build_command keeps in step, and
+      # the shape of the changelog. Everything the real job does happens on
+      # main after a merge, which is the worst possible place to find out that
+      # a template has a typo in it. Deliberately given no token: the script
+      # passes --no-push --no-vcs-release, and this is the belt to that brace.
+      - run: scripts/ci/release-dry-run.sh
+
+  # ---------------------------------------------------------------------------
+  scope:
+    name: Did anything in the app change?
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.diff.outputs.app }}
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Compare against what main was before this push
+        id: diff
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          # Everything that can change the bytes of the APK. Tests and prose
+          # cannot — neither is bundled — so a merge touching only those would
+          # produce a byte-identical build.
+          builds='^(app|src|assets|plugins|scripts/ci)/|^(app\.json|package\.json|package-lock\.json|babel\.config\.js|metro\.config\.js)$|^\.github/workflows/release\.yml$'
+          not='(^|/)__tests__/|\.test\.tsx?$|\.md$'
+
+          # A first push or a force-push leaves no usable base. Building is the
+          # safe answer either way: a needless build costs twenty minutes, a
+          # missed one means the phone quietly never sees the change.
+          if [ -z "${BEFORE}" ] || [ "${BEFORE}" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+            echo 'No usable base commit for the diff — building anyway.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          changed=$(git diff --name-only "${BEFORE}" "${GITHUB_SHA}")
+          # `grep` exits 1 when nothing matches, which `set -e` would take as
+          # fatal — "nothing changed" is an answer, not a failure.
+          relevant=$(printf '%s\n' "$changed" | grep -E "$builds" | grep -vE "$not" || true)
+
+          if [ -n "$relevant" ]; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+            {
+              echo '## Building — the app changed'
+              echo
+              printf '%s\n' "$relevant" | sed 's/^/- /'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "app=false" >> "$GITHUB_OUTPUT"
+            {
+              echo '## Not building — nothing in the app changed'
+              echo
+              echo 'Only files that are never bundled into the APK:'
+              echo
+              printf '%s\n' "$changed" | sed 's/^/- /'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ---------------------------------------------------------------------------
   build:
+    name: Build the APK
+    needs: [version, scope]
+    # `needs` on a skipped job skips this one too, so the condition has to name
+    # every path in: a pull request and a manual run skip both jobs above, and
+    # a push builds when either one says to.
+    if: >-
+      ${{ !cancelled()
+          && needs.version.result != 'failure'
+          && needs.scope.result != 'failure'
+          && (github.event_name != 'push'
+              || needs.version.outputs.released == 'true'
+              || needs.scope.outputs.app == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -59,11 +279,16 @@ jobs:
       apk: ${{ steps.build.outputs.apk }}
       abis: ${{ steps.build.outputs.abis }}
       version_name: ${{ steps.build.outputs.version_name }}
+      versioned: ${{ steps.build.outputs.versioned }}
       size: ${{ steps.apk.outputs.size }}
 
     steps:
       - uses: actions/checkout@v4
         with:
+          # When a version was cut, build the tagged commit rather than
+          # whatever main has reached since — the APK has to be the code the
+          # release claims it is.
+          ref: ${{ needs.version.outputs.tag || github.sha }}
           # The build needs the code, not the ability to push it.
           persist-credentials: false
 
@@ -133,7 +358,8 @@ jobs:
       - run: npm ci
 
       # A release APK should never ship from red code; this is the same gate
-      # ci.yml applies to main, run again here because tags can point anywhere.
+      # ci.yml applies to main, run again here because a tag can point anywhere
+      # and a manual run can be started from any ref.
       - run: npm run typecheck
       - run: npm test -- --ci
 
@@ -141,20 +367,25 @@ jobs:
         id: build
         env:
           ABIS: ${{ inputs.abis || 'arm64-v8a' }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
         run: |
           set -euo pipefail
           # versionCode must increase for every build the phone might install.
           # The 1000 offset keeps CI builds unambiguously above any local
           # `expo run:android --variant release` build (which is always 1).
+          # Gaps are fine and expected: every push to main takes a run number
+          # whether or not it goes on to build anything.
           version_code=$(( 1000 + GITHUB_RUN_NUMBER ))
           base=$(node -p "require('./app.json').expo.version")
 
-          if [ "${GITHUB_REF_TYPE}" = 'tag' ]; then
-            version_name="${GITHUB_REF_NAME#v}"
-            tag="${GITHUB_REF_NAME}"
+          if [ -n "${RELEASE_TAG}" ]; then
+            version_name="${RELEASE_TAG#v}"
+            tag="${RELEASE_TAG}"
+            versioned=true
           else
             version_name="${base}+ci.${GITHUB_RUN_NUMBER}"
             tag="build-${GITHUB_RUN_NUMBER}"
+            versioned=false
           fi
 
           # '+' is legal in a versionName but awkward in a filename/URL.
@@ -166,6 +397,7 @@ jobs:
             echo "tag=${tag}"
             echo "apk=${apk}"
             echo "abis=${ABIS}"
+            echo "versioned=${versioned}"
           } >> "$GITHUB_OUTPUT"
 
           echo "Building ${apk} (versionName ${version_name}, versionCode ${version_code}, ABIs ${ABIS})"
@@ -210,11 +442,13 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # ---------------------------------------------------------------------------
   publish:
-    needs: build
+    name: Publish the release
+    needs: [version, build]
     # Never for a pull request: the PR path build-tests the pipeline and
     # publishes nothing.
-    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
+    if: ${{ !cancelled() && needs.build.result == 'success' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -229,15 +463,15 @@ jobs:
           name: ${{ needs.build.outputs.apk }}
           path: dist
 
-      - name: Write release notes
+      - name: Write the install notes
         env:
           TAG: ${{ needs.build.outputs.tag }}
           APK: ${{ needs.build.outputs.apk }}
           SIZE: ${{ needs.build.outputs.size }}
           ABIS: ${{ needs.build.outputs.abis }}
+          VERSIONED: ${{ needs.build.outputs.versioned }}
         run: |
           set -euo pipefail
-          previous=$(git tag --list 'v*' 'build-*' --sort=-creatordate | grep -v "^${TAG}$" | head -1 || true)
           {
             echo "**${APK}** · ${SIZE} · \`${ABIS}\` · commit \`${GITHUB_SHA:0:7}\`"
             echo
@@ -250,16 +484,25 @@ jobs:
             echo "Same signing key and same package as the previous build, so this installs"
             echo "in place. Full rules — and what to do if Android refuses the install — are"
             echo "in [docs/RELEASES.md](../blob/main/docs/RELEASES.md)."
-            echo
-            echo "### Changes"
-            echo
-            if [ -n "$previous" ]; then
-              git log --no-merges --pretty='- %s' "${previous}..HEAD" | head -50
-            else
-              git log --no-merges --pretty='- %s' -20
-            fi
-          } > release-notes.md
-          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+          } > install-notes.md
+
+          # A versioned release already has notes: semantic-release wrote them
+          # from the commit subjects, and they *are* the changelog entry. Only
+          # an untagged build needs a list of changes invented here.
+          if [ "${VERSIONED}" != 'true' ]; then
+            previous=$(git tag --list 'v*' 'build-*' --sort=-creatordate | grep -v "^${TAG}$" | head -1 || true)
+            {
+              echo
+              echo "### Changes"
+              echo
+              if [ -n "$previous" ]; then
+                git log --no-merges --pretty='- %s' "${previous}..HEAD" | head -50
+              else
+                git log --no-merges --pretty='- %s' -20
+              fi
+            } >> install-notes.md
+          fi
+          cat install-notes.md >> "$GITHUB_STEP_SUMMARY"
 
       # `permissions: contents: write` above can only *narrow* what the
       # repository already allows — it cannot grant a permission the repo
@@ -271,12 +514,13 @@ jobs:
       # definition, and cost an afternoon to rule out. The trap turns that 403
       # into the sentence that actually fixes it, and points at the artifact so
       # the build is still installable in the meantime.
-      - name: Publish the GitHub Release
+      - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.build.outputs.tag }}
           APK: ${{ needs.build.outputs.apk }}
           VERSION_NAME: ${{ needs.build.outputs.version_name }}
+          VERSIONED: ${{ needs.build.outputs.versioned }}
           PRERELEASE: ${{ inputs.prerelease && '--prerelease' || '' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -286,7 +530,7 @@ jobs:
             {
               echo "### ❌ Could not publish the Release"
               echo
-              echo "GitHub refused \`POST /repos/${GITHUB_REPOSITORY}/releases\` for this run's token."
+              echo "GitHub refused the release write for this run's token."
               echo
               echo "This job asks for \`contents: write\`, but a job can only *narrow* what the"
               echo "repository grants — it cannot add a permission the repository withholds. A 403"
@@ -307,10 +551,30 @@ jobs:
 
           trap explain ERR
 
-          gh release create "$TAG" "dist/$APK" \
-            --target "$GITHUB_SHA" \
-            --title "Binocular $VERSION_NAME" \
-            --notes-file release-notes.md \
-            $PRERELEASE
+          if [ "${VERSIONED}" = 'true' ]; then
+            # semantic-release already created this release, with the changelog
+            # entry as its body. Add the APK and the install steps to what it
+            # wrote rather than replacing them.
+            marker='<!-- binocular-apk -->'
+            gh release view "$TAG" --json body --jq '.body // ""' > body.md
+            # Idempotent: re-running this job must not stack a second copy.
+            awk -v m="$marker" '$0 == m { exit } { print }' body.md > body.trimmed.md
+            {
+              cat body.trimmed.md
+              echo
+              echo "$marker"
+              echo
+              cat install-notes.md
+            } > body.final.md
+            gh release edit "$TAG" --notes-file body.final.md
+            gh release upload "$TAG" "dist/$APK" --clobber
+          else
+            gh release create "$TAG" "dist/$APK" \
+              --target "$GITHUB_SHA" \
+              --title "Binocular $VERSION_NAME" \
+              --notes-file install-notes.md \
+              $PRERELEASE
+          fi
+
           trap - ERR
           echo "Released: $(gh release view "$TAG" --json url --jq .url)" >> "$GITHUB_STEP_SUMMARY"

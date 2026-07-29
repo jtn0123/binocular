@@ -3,28 +3,67 @@
 Field testing happens away from the laptop, so a new build has to reach the
 phone without a cable, without Metro, and **without wiping the inventory that
 the field test has been accumulating**. That is what
-`.github/workflows/android-apk` does: build a standalone release APK on
+`.github/workflows/release.yml` does: build a standalone release APK on
 GitHub's runners and attach it to a GitHub Release the phone can download.
 
 ## Cutting a build
 
-Two ways, both drivable from a phone browser:
+Mostly you don't — merging does it. Three ways in total:
 
-| | How | Produces |
+| | When | Produces |
 |---|---|---|
-| **Ad-hoc build** | Actions → **Android APK** → *Run workflow* (pick the branch) | Release `build-<n>`, marked pre-release, version `0.1.0+ci.<n>` |
-| **Named version** | Push a tag: `git tag v0.2.0 && git push origin v0.2.0` | Release `v0.2.0`, version `0.2.0` |
+| **Version** | A merge whose commit subject is `feat:`, `fix:` or `perf:` | Release `vX.Y.Z` with the changelog entry as its notes |
+| **Rolling build** | Any other merge that changed app code | Release `build-<n>`, pre-release, version `0.1.0+ci.<n>` |
+| **By hand** | Actions → **Release** → *Run workflow* | The same as a rolling build, with the ABI choice exposed |
 
-Both run `typecheck` + the Jest suite first — a release APK never ships from
-red code — then `expo prebuild` → `assembleRelease`, and publish the APK with
-install instructions and the commit list since the previous release.
+A merge that touches only docs, tests or the blueprint builds nothing — the
+APK would be byte-identical, and a 99 MB release for a typo is noise in the
+very list the phone reads to find its next update. The run summary says which
+files it looked at and what it decided.
 
-Ad-hoc builds are published as **pre-releases**, and both the in-app check and
+All three run `typecheck` + the Jest suite first — a release APK never ships
+from red code — then `expo prebuild` → `assembleRelease`, and publish the APK
+with install instructions.
+
+### What decides the version
+
+`python-semantic-release` reads the **conventional-commit subjects** merged
+since the last `v*` tag and works out the bump:
+
+| Subject starts with | Bump | Changelog section |
+|---|---|---|
+| `feat:` | minor — `0.2.0` → `0.3.0` | ✳️ New |
+| `fix:` / `perf:` | patch — `0.2.0` → `0.2.1` | 🔺 Fix |
+| anything with a `BREAKING CHANGE:` footer | major | Breaking Changes |
+| `refactor:` `docs:` `style:` `test:` `build:` `ci:` `chore:` `revert:` | none | 🔷 Changed |
+
+So the **PR title matters** — on a squash merge it becomes the subject
+directly, and `pr-title-lint` checks it while it is still one edit away. A
+merge that cuts no version is normal and fine; the run says so with a warning
+rather than failing, so a streak of them cannot pile up unnoticed.
+
+Add an `Impact:` line to a commit body and it renders as an italic note under
+the changelog entry — one line on what actually changes for whoever reads it.
+
+The version lives in three files that must never disagree: `pyproject.toml`
+(where PSR keeps it), `VERSION`, and `app.json`'s `expo.version` (the base of
+the APK's versionName). `scripts/ci/set-version.mjs` writes all three, and
+`scripts/ci/release-dry-run.sh` cuts a whole release in a throwaway clone on
+every pipeline PR to prove it still does — it is what stops a broken template
+being discovered on `main`, after the merge, with the release already missed.
+
+Rolling builds are published as **pre-releases**, and both the in-app check and
 the browser link therefore work from the releases *list* rather than
 `/releases/latest` — that URL resolves only to the newest *non*-pre-release
-and 404s while only ad-hoc builds exist. For the same reason the in-app check
-offers pre-releases: skipping them would mean ignoring the normal case. Push a
-`v*` tag when you want a build to be the "latest".
+and 404s while only rolling builds exist. For the same reason the in-app check
+offers pre-releases: skipping them would mean ignoring the normal case.
+
+The phone takes the **first release in the list that has an APK on it**, and
+trusts GitHub's newest-first ordering rather than re-sorting. That is why every
+build gets its own release instead of one rolling release updated in place: a
+re-published release keeps its original position in the list, so an updated-in-
+place "latest" build would sink below the next version and the phone would stop
+being offered it.
 
 Default build is **arm64-v8a only** — it matters when the download happens on
 workshop Wi-Fi. Any phone from the last decade is arm64; the *Run workflow*
