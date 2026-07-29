@@ -36,7 +36,7 @@ export function ScreenHeader({
   return (
     <View style={[styles.bar, { paddingTop: insets.top }]}>
       <View style={styles.row}>
-        <Text style={styles.title} numberOfLines={1}>
+        <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
           {title}
         </Text>
         {action ? (
@@ -88,7 +88,7 @@ export function DetailHeader({
         >
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
-        <Text style={styles.detailTitle} numberOfLines={1}>
+        <Text style={styles.detailTitle} accessibilityRole="header" numberOfLines={1}>
           {title}
         </Text>
       </View>

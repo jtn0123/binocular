@@ -420,8 +420,24 @@ export function useMapDrag({
   }, []);
 
   const setEdgeFrame = useCallback((which: RackEdge, frame: WindowFrame | null) => {
-    if (frame) edgeFrames.current[which] = frame;
-    else delete edgeFrames.current[which];
+    if (frame) {
+      edgeFrames.current[which] = frame;
+      return;
+    }
+    delete edgeFrames.current[which];
+    /**
+     * A rail can go away with a bin still resting on it.
+     *
+     * That is not a corner case — it is what reaching the end of the wall
+     * looks like: resting on `next` pages the rack under you until there is
+     * no next rack, and the rail unmounts. Forgetting its frame is not
+     * enough. The finger has not moved, so nothing re-tests the edge, and
+     * the release would still be routed to a rack that is no longer there.
+     */
+    if (edgeRef.current === which) {
+      edgeRef.current = null;
+      setEdge(null);
+    }
   }, []);
 
   const refreeze = useCallback(() => {

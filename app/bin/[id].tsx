@@ -315,7 +315,11 @@ export default function BinDetailScreen() {
             <Pressable
               style={styles.placeRow}
               accessibilityRole="button"
-              accessibilityLabel={`Filed in ${place}. Show it on the map`}
+              accessibilityLabel={
+                filedAt.locationName || filedAt.shelfName
+                  ? `Filed in ${place}. Show it on the map`
+                  : `${place}. Show it on the map`
+              }
               testID="bin-place"
               onPress={() => router.push({ pathname: '/map', params: { highlight: bin.id } })}
             >

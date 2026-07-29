@@ -10,7 +10,7 @@ import {
   type DropTarget,
   type MapArea,
 } from '@/db/mapView';
-import { placeBin, placeBins } from '@/db/queries';
+import { placeBin, placeBins, restoreBins } from '@/db/queries';
 import { logEvent } from '@/diagnostics/events';
 import { hapticShutter, hapticSuccess } from '@/lib/haptics';
 
@@ -202,16 +202,27 @@ export function useShelfMoves({
         return;
       }
       // Where each one sat before, captured now: after the write the map is
-      // redrawn from the database and the old arrangement is gone. Grouped by
-      // shelf so undo rewrites each source row's order exactly once.
-      const previous = plan.binIds.map((id) => {
+      // redrawn from the database and the old arrangement is gone.
+      //
+      // Grouped by source shelf, and it has to be: a stack can be picked up
+      // off several shelves at once, and restoring a shelf means rewriting
+      // that whole row's order — once, not once per bin that came off it.
+      const bySource = new Map<
+        string | null,
+        { binIds: string[]; shelfId: string | null; orderedIds: string[] }
+      >();
+      for (const id of plan.binIds) {
         const came = locateMany(areas, [id])[0] ?? null;
-        return {
-          binId: id,
-          shelfId: came?.row.shelfId ?? null,
+        const shelfId = came?.row.shelfId ?? null;
+        const group = bySource.get(shelfId) ?? {
+          binIds: [],
+          shelfId,
           orderedIds: came ? came.row.bins.map((c) => c.binId) : [],
         };
-      });
+        group.binIds.push(id);
+        bySource.set(shelfId, group);
+      }
+      const previous = [...bySource.values()];
 
       placeBins(db, { binIds: plan.binIds, shelfId: plan.shelfId, orderedIds: plan.orderedIds });
       logEvent(db, {
@@ -226,9 +237,8 @@ export function useShelfMoves({
       settleTimer.current = setTimeout(() => setSettling(null), 600);
       onChange();
       offerUndo(`${plan.binIds.length} bins → ${plan.place}`, () => {
-        for (const step of previous) {
-          placeBin(db, { binId: step.binId, shelfId: step.shelfId, orderedIds: step.orderedIds });
-        }
+        // One transaction for the whole undo, however many shelves it spans.
+        restoreBins(db, previous);
         logEvent(db, { kind: 'organize', name: 'move_undone', detail: { bins: plan.binIds.length } });
         onChange();
       });

@@ -101,7 +101,7 @@ function IconButton({
   danger?: boolean;
 }>) {
   return (
-    <Pressable style={styles.iconButton} onPress={onPress} accessibilityLabel={label} hitSlop={6}>
+    <Pressable style={styles.iconButton} onPress={onPress} accessibilityLabel={label} hitSlop={12}>
       <Ionicons name={icon} size={16} color={danger ? colors.danger : colors.steel} />
     </Pressable>
   );

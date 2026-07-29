@@ -354,6 +354,36 @@ export function placeBins(
   });
 }
 
+/**
+ * Put several bins back where they came from, in one transaction.
+ *
+ * Undoing a group move can span more than one source shelf, and each of those
+ * shelves needs its whole row rewritten. One `placeBins` per shelf would be
+ * one transaction per shelf, leaving a window in which some rows are restored
+ * and others are not — the half-moved wall `placeBins` exists to prevent for
+ * the move itself. Undo deserves the same promise: it is the thing someone
+ * reaches for when they already believe something went wrong.
+ */
+export function restoreBins(
+  db: DbAdapter,
+  groups: readonly {
+    binIds: readonly string[];
+    shelfId: string | null;
+    orderedIds: readonly string[];
+  }[],
+): void {
+  db.withTransactionSync(() => {
+    for (const group of groups) {
+      for (const binId of group.binIds) {
+        db.runSync('UPDATE bins SET shelf_id = ? WHERE id = ?', [group.shelfId, binId]);
+      }
+      group.orderedIds.forEach((id, index) => {
+        db.runSync('UPDATE bins SET sort_order = ? WHERE id = ?', [index, id]);
+      });
+    }
+  });
+}
+
 export function countItemsForBin(db: DbAdapter, binId: string): number {
   const row = db.getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM items WHERE bin_id = ?', [
     binId,

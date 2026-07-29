@@ -411,6 +411,21 @@ describe('a drag, from finger down to finger up', () => {
       expect(onDrop).not.toHaveBeenCalled();
     });
 
+    it('stops catching the release when the rail goes away under the finger', async () => {
+      // This is what the end of the wall looks like: resting on `next` pages
+      // the rack under you until there is no next rack, and the rail
+      // unmounts. The finger has not moved, so nothing re-tests the edge —
+      // and the bin was still being sent to a rack that is no longer there.
+      const gesture = await start();
+      gesture.drag.setEdgeFrame('next', railFrame);
+      gesture.down(50, 50);
+      gesture.move(340, 300);
+      gesture.drag.setEdgeFrame('next', null);
+      gesture.up();
+
+      expect(onEdgeDrop).not.toHaveBeenCalled();
+    });
+
     it('forgets a rail once it is gone, so it cannot keep catching drops', async () => {
       // A rail unmounts when you reach the end of the wall. Its last known
       // frame used to stay registered and go on swallowing drops over empty

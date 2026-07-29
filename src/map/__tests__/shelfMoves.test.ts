@@ -185,6 +185,30 @@ describe('performing a move', () => {
       expect(on(lower)).toEqual([]);
     });
 
+    it('restores a stack that came off two different shelves', async () => {
+      // A stack can be picked up off more than one shelf, and each source row
+      // has to be rewritten as a whole. Undone one bin at a time, in one
+      // transaction each, an interruption leaves half the wall restored —
+      // the state `placeBins` exists to prevent for the move itself.
+      createBin(db, { name: 'Wire', shortCode: 'B-003', shelfId: lower });
+      const h = await harness();
+      // One from each shelf, landing together on Lower.
+      h.moves.executeMultiDrop([binId('B-001'), binId('B-003')], { shelfId: lower, index: 0 });
+      expect(on(top)).toEqual(['B-002']);
+
+      // Counted, not just checked: restoring the right rows one transaction
+      // at a time reaches the same end state, and differs only when something
+      // interrupts it — which is the whole point. The count is the property.
+      const undo = (await h.settle()).undo;
+      const transactions = jest.spyOn(db, 'withTransactionSync');
+      undo?.revert?.();
+      expect(transactions).toHaveBeenCalledTimes(1);
+      transactions.mockRestore();
+
+      expect(on(top)).toEqual(['B-001', 'B-002']);
+      expect(on(lower)).toEqual(['B-003']);
+    });
+
     it('names what it would take back, so the offer is not a blind one', async () => {
       const h = await harness();
       h.moves.executeDrop(binId('B-002'), { shelfId: lower, index: 0 }, { settled: true });
