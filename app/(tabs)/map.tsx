@@ -928,7 +928,9 @@ export default function MapScreen() {
           onMove={(index, direction) => edit.moveRack(racks, index, direction)}
           onRename={(index, label) => edit.renameRack(racks[index], index, label)}
           onRemove={(index) => edit.removeRack(racks, index)}
-          onAddRack={() => edit.addRack(columns)}
+          // Pages to it, as the scrubber's button does: the same errand from
+          // two places should not have two outcomes.
+          onAddRack={() => goToRack(edit.addRack(columns))}
           trayLabel={`Not on a shelf · ${trayRow.bins.length} bin${
             trayRow.bins.length === 1 ? '' : 's'
           }`}

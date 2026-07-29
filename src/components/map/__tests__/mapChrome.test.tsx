@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 // Namespaced: a bare `react-native` import shares a babel binding with
 // `@testing-library/react-native` and the two quietly overwrite each other.
 import * as RN from 'react-native';
@@ -11,6 +11,7 @@ import { MapFindBar, type MapFindBarProps } from '../MapBanner';
 import { RackPickSheet } from '../RackPickSheet';
 import { RackRail } from '../RackRail';
 import { RackScrubber, scrollTargetFor, type RackSegment } from '../RackScrubber';
+import { ShelfBoard } from '../ShelfBoard';
 import { WallSheet } from '../WallSheet';
 
 jest.mock('react-native-reanimated', () => {
@@ -355,3 +356,100 @@ function wallProps(racks: MapArea[]) {
     trayLabel: 'Not on a shelf · 0 bins',
   };
 }
+
+/**
+ * The per-shelf width stepper.
+ *
+ * Both directions used to clamp against the *bin count* rather than the
+ * current width, which made each button do the opposite of what it said in
+ * exactly the situations someone would be pressing it: on an over-full shelf
+ * and on an unsized one.
+ */
+describe('sizing one shelf', () => {
+  const shelfRow = (capacity: number | null, bins: number) =>
+    buildMap(
+      input({
+        locations: [loc('l1', 'R1 · Garage')],
+        shelves: [shelf('s1', 'l1', 'Top', capacity)],
+        bins: Array.from({ length: bins }, (_, i) => bin(`b${i}`, 's1', `B-00${i}`)),
+      }),
+    )[0].rows[0];
+
+  /** Rendered, not serialised: these are presses, and presses need the tree. */
+  const board = async (
+    capacity: number | null,
+    bins: number,
+    onWidth: (w: number) => void = () => {},
+  ) =>
+    render(
+      <ShelfBoard
+        row={shelfRow(capacity, bins)}
+        lit={false}
+        landingIndex={null}
+        draggingBinId={null}
+        heldBinId={null}
+        selectedBinIds={[]}
+        matchedBinIds={[]}
+        focusedBinId={null}
+        settlingBinId={null}
+        showTicks={false}
+        editing
+        heatFor={() => null}
+        onCellPress={() => {}}
+        onCellLongPress={() => {}}
+        onDropAtEnd={() => {}}
+        onEditShelf={() => {}}
+        onAddBin={() => {}}
+        onRename={() => {}}
+        onWidth={onWidth}
+        onRemove={null}
+        overflow={null}
+      />,
+    );
+
+  /** Presses a stepper and reports every width it asked for. */
+  const nudge = async (
+    which: 'shrink' | 'grow',
+    capacity: number | null,
+    bins: number,
+  ): Promise<number[]> => {
+    const asked: number[] = [];
+    const screen = await board(capacity, bins, (w) => asked.push(w));
+    await fireEvent.press(screen.getByTestId(`map-shelf-${which}-s1`));
+    return asked;
+  };
+
+  it('takes one slot off a roomy shelf', async () => {
+    expect(await nudge('shrink', 4, 1)).toEqual([3]);
+  });
+
+  it('adds one to a shelf with room to grow', async () => {
+    expect(await nudge('grow', 4, 1)).toEqual([5]);
+  });
+
+  it('will not widen a shelf when asked to narrow it', async () => {
+    // Five bins in two declared slots. "One slot fewer" once read
+    // `max(1, 5, 1)` and set the width to five — widening the shelf, and
+    // taking the over-full warning with it.
+    expect(await nudge('shrink', 2, 5)).toEqual([]);
+  });
+
+  it('will not size an unsized shelf below what it is already holding', async () => {
+    // Nine bins, no declared width. "One slot more" read `min(8, 10)` and
+    // declared eight — manufacturing the over-full state outright.
+    expect(await nudge('grow', null, 9)).toEqual([]);
+  });
+
+  it('stops at the widest a rack goes rather than pretending', async () => {
+    expect(await nudge('grow', 8, 1)).toEqual([]);
+  });
+
+  it('never declares fewer slots than the shelf is holding', async () => {
+    // Three bins in three slots: there is nowhere down to go.
+    expect(await nudge('shrink', 3, 3)).toEqual([]);
+  });
+
+  it('sizes an unsized shelf from what it holds, upwards', async () => {
+    expect(await nudge('grow', null, 2)).toEqual([3]);
+  });
+});

@@ -15,6 +15,7 @@ import { rowGaps } from '@/db/mapView';
 import { colors, mono, radius, sp } from '@/theme';
 
 import { BinCard, slotBox, type BinCardState } from './BinCard';
+import { MAX_COLUMNS } from './MapToolbar';
 import { CARD_GAP, CARD_H } from './metrics';
 
 /**
@@ -353,6 +354,15 @@ function ShelfName({
  * How wide this one shelf is, when the rack's uniform width does not fit it.
  * Never below the bins already on it: the number describes the shelf, and
  * shrinking it past its contents would only manufacture an "over" warning.
+ *
+ * Both steppers clamp against the *current* width and refuse to move when
+ * they cannot, rather than clamping against the bin count and landing
+ * wherever that lands. Clamping against the count did the opposite of what
+ * the button said twice over: on a shelf holding five bins in two declared
+ * slots, "one slot fewer" read `max(1, 5, 1)` and widened it to five, taking
+ * the over-full warning with it; and an unsized shelf holding nine had "one
+ * slot more" size it to eight — manufacturing the exact state this comment
+ * promises never to manufacture.
  */
 function WidthStepper({
   row,
@@ -364,13 +374,19 @@ function WidthStepper({
   keyId: string;
 }) {
   const current = row.capacity ?? row.bins.length;
+  /** A shelf never declares fewer slots than it is already holding. */
+  const floor = Math.max(1, row.bins.length);
+  const canShrink = current - 1 >= floor;
+  const canGrow = current + 1 <= MAX_COLUMNS;
   return (
     <View style={styles.width}>
       <Pressable
-        style={styles.widthButton}
-        onPress={() => onWidth(Math.max(1, row.bins.length, current - 1))}
+        style={[styles.widthButton, !canShrink && styles.widthButtonOff]}
+        onPress={() => (canShrink ? onWidth(current - 1) : undefined)}
+        disabled={!canShrink}
         hitSlop={8}
         accessibilityRole="button"
+        accessibilityState={{ disabled: !canShrink }}
         accessibilityLabel={`One slot fewer on ${row.name}`}
         testID={`map-shelf-shrink-${keyId}`}
       >
@@ -378,10 +394,12 @@ function WidthStepper({
       </Pressable>
       <Text style={styles.widthValue}>{row.capacity === null ? '∞' : String(row.capacity)}</Text>
       <Pressable
-        style={styles.widthButton}
-        onPress={() => onWidth(Math.min(8, current + 1))}
+        style={[styles.widthButton, !canGrow && styles.widthButtonOff]}
+        onPress={() => (canGrow ? onWidth(current + 1) : undefined)}
+        disabled={!canGrow}
         hitSlop={8}
         accessibilityRole="button"
+        accessibilityState={{ disabled: !canGrow }}
         accessibilityLabel={`One slot more on ${row.name}`}
         testID={`map-shelf-grow-${keyId}`}
       >
@@ -494,6 +512,9 @@ const styles = StyleSheet.create({
   actions: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: sp(2.5) },
   remove: { color: colors.danger, fontFamily: mono, fontSize: 9 },
   width: { flexDirection: 'row', alignItems: 'center', gap: sp(1.5) },
+  // Dimmed rather than hidden: a control that vanishes reads as a bug, and
+  // the direction it will not go is information about the shelf.
+  widthButtonOff: { opacity: 0.35 },
   widthButton: {
     width: 17,
     height: 17,

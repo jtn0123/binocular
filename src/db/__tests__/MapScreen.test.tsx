@@ -513,6 +513,20 @@ describe('the map screen, driven by presses', () => {
       expect(screen.queryByTestId('map-cell-B-001')).toBeNull();
     });
 
+    it('the wall sheet adds one and pages to it too, like the scrubber', async () => {
+      // The same errand from two places should not have two outcomes: the
+      // sheet used to make the rack and leave you looking at the old one, so
+      // "add a rack" appeared to do nothing at all.
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId('map-wall-toggle'));
+      await fireEvent.press(screen.getByTestId('wall-edit-toggle'));
+      await fireEvent.press(screen.getByTestId('wall-add-rack'));
+
+      expect(listLocations(db).find((l) => l.name.startsWith('R2'))).toBeTruthy();
+      // Standing on the new rack, so the bins of the old one are not drawn.
+      expect(screen.queryByTestId('map-cell-B-001')).toBeNull();
+    });
+
     it('a side rail walks you along the wall when your hands are empty', async () => {
       addShed();
       const screen = await renderMap();

@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 import type { MapCell, MapRow } from '@/db/mapView';
@@ -64,6 +64,24 @@ export function UnshelvedTray({
 }) {
   const count = row.bins.length;
   const head = useRef<View | null>(null);
+
+  /**
+   * Re-measure whenever the drawer changes shape, not only when React tells
+   * the head its own box moved.
+   *
+   * `onLayout` reports a position relative to the parent, so anything that
+   * moves the drawer *as a whole* leaves the registered window frame stale
+   * and a bin released over the tray gets hit-tested against where the tray
+   * used to be. Opening it happens to fire `onLayout` today, because the
+   * drawer pushes the head down inside its own wrapper — which is a fact
+   * about the current arrangement rather than a guarantee, and cheap to stop
+   * depending on.
+   */
+  useEffect(() => {
+    head.current?.measureInWindow((x, y, width, height) =>
+      onFrame({ x, y, width, height }),
+    );
+  }, [open, count, onFrame]);
 
   return (
     <View style={styles.wrap}>
