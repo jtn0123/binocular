@@ -243,7 +243,7 @@ export function composeRackName(code: string, label: string): string {
 export function nextRackCode(names: readonly string[]): string {
   const highest = names.reduce((top, name, index) => {
     const digits = rackCodeOf(name, index).replace(/\D/g, '');
-    return Math.max(top, parseInt(digits, 10) || 0);
+    return Math.max(top, Number.parseInt(digits, 10) || 0);
   }, 0);
   return `R${highest + 1}`;
 }
