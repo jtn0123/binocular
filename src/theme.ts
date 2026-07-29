@@ -90,7 +90,7 @@ export const type = {
 export const navTheme = {
   headerStyle: { backgroundColor: colors.bg },
   headerTintColor: colors.text,
-  headerTitleStyle: { fontWeight: '800' as const },
+  headerTitleStyle: { fontWeight: '800' as const, fontSize: 17 },
   headerShadowVisible: false,
   contentStyle: { backgroundColor: colors.bg },
 } as const;

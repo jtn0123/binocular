@@ -23,9 +23,10 @@ module.exports = defineConfig([
     // Writing them off the render path is the entire point — the drag ghost
     // tracks a finger on the UI thread and never waits for React.
     //
-    // Scoped to the two files that own the map's drag. Anything that is not
-    // driving a gesture should still obey these rules.
-    files: ['src/map/useMapDrag.ts', 'src/components/map/BinCard.tsx'],
+    // Scoped to the files that own the map's two gestures — the drag and the
+    // swipe that pages the wall. Anything that is not driving a gesture
+    // should still obey these rules.
+    files: ['src/map/useMapDrag.ts', 'src/map/useRackSwipe.ts', 'src/components/map/BinCard.tsx'],
     rules: {
       'react-hooks/immutability': 'off',
       'react-hooks/refs': 'off',

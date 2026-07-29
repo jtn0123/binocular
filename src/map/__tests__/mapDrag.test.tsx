@@ -90,20 +90,35 @@ interface GestureEvent {
 const mockGesture: Captured = { enabled: false };
 
 jest.mock('react-native-gesture-handler', () => {
-  const chain: Record<string, unknown> = new Proxy(
-    {},
-    {
-      get: (_target, prop) => (arg: unknown) => {
-        if (prop === 'enabled') mockGesture.enabled = arg === true;
-        else if (typeof arg === 'function' && typeof prop === 'string') {
-          (mockGesture as unknown as Record<string, unknown>)[prop] = arg;
-        }
-        return chain;
+  /**
+   * v3 races two pans on this surface: the drag, and the swipe that pages the
+   * wall. They are told apart the same way gesture-handler tells them apart —
+   * the drag is the one that waits for a hold — and only the drag's handlers
+   * are kept, because the drag is what this file drives.
+   */
+  const makePan = () => {
+    const own = { enabled: false, isDrag: false };
+    const chain: Record<string, unknown> = new Proxy(
+      {},
+      {
+        get: (_target, prop) => (arg: unknown) => {
+          if (prop === 'enabled') {
+            own.enabled = arg === true;
+            if (own.isDrag) mockGesture.enabled = own.enabled;
+          } else if (prop === 'activateAfterLongPress') {
+            own.isDrag = true;
+            mockGesture.enabled = own.enabled;
+          } else if (typeof arg === 'function' && typeof prop === 'string' && own.isDrag) {
+            (mockGesture as unknown as Record<string, unknown>)[prop] = arg;
+          }
+          return chain;
+        },
       },
-    },
-  );
+    );
+    return chain;
+  };
   return {
-    Gesture: { Pan: () => chain },
+    Gesture: { Pan: makePan, Race: (...gestures: unknown[]) => gestures[0] },
     GestureDetector: ({ children }: { children: React.ReactNode }) => children,
     // The shelf strips are gesture-handler's ScrollView; the plain one
     // reports layout and scroll the same way, which is all this needs.
@@ -111,6 +126,12 @@ jest.mock('react-native-gesture-handler', () => {
     ScrollView: require('react-native').ScrollView,
   };
 });
+
+// v3 screens pad the status-bar inset themselves; rendered on its own the
+// screen has no provider above it, so it gets zero insets here.
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
@@ -366,14 +387,20 @@ describe('dragging a bin across the map', () => {
   });
 
   /**
-   * The same reorder, on a shelf in the *second* area down the wall. Every
-   * offset above a card is non-zero here, so this is what a link dropped from
-   * the top of the chain shows up in — the first area starts at zero and
-   * hides it.
+   * The same reorder, on a rack that is not the first one on the wall.
+   *
+   * v3 shows one rack at a time, so "further down the wall" means paged to
+   * rather than scrolled to — but the point is unchanged: every offset above
+   * a card is real here, and a link dropped from the top of the chain is
+   * hidden by a first rack whose own offsets are small.
    */
-  it('reorders on a shelf further down the wall, where every offset is real', async () => {
-    const [, wall] = await openWall();
+  it('reorders on a rack further along the wall, where every offset is real', async () => {
+    const [screen] = await openWall();
     expect(codesOn(shelfC)).toEqual(['B-005', 'B-006']);
+
+    // Page to the Shed, then measure the wall it actually drew.
+    await fireEvent.press(screen.getByTestId('map-rack-R2'));
+    const wall = await layoutWall(screen);
 
     await dragFrom(wall.onCard('B-006'), wall.frontOf('B-005'));
 
@@ -400,19 +427,17 @@ describe('dragging a bin across the map', () => {
     expect(codesOn(shelfA)).toEqual([...expected]);
   });
 
-  /**
-   * Each shelf scrolls sideways on its own, independently of the map. That
-   * offset is the last link in the chain and the easiest to forget, because
-   * nothing about the vertical arrangement changes when it is wrong — the bin
-   * simply lands a slot or two off, on the right shelf.
+  /*
+   * Removed with the thing it tested: shelves no longer scroll sideways.
+   *
+   * v3 gives a plank a fixed set of slots that share its width, precisely so
+   * that a shelf's contents can be counted at a glance instead of scrolled
+   * past — so there is no sideways offset left to forget. What that test was
+   * really guarding, a constant horizontal error in the chain, is guarded by
+   * its neighbour above: releasing three points either side of a card's
+   * mid-line is the smallest sideways question the drag can be asked, and any
+   * constant offset changes the answer.
    */
-  it('accounts for a shelf that has been scrolled sideways', async () => {
-    const [, wall] = await openWall({ stripScrollX: { 0: 2 * 126 } });
-
-    await dragFrom(wall.onCard('B-003'), wall.frontOf('B-001'));
-
-    expect(codesOn(shelfA)).toEqual(['B-003', 'B-001', 'B-002']);
-  });
 
   /**
    * A shelf's own band, and the cards on it, have to come out of the same

@@ -1,12 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import { CodeTag } from '@/components/CodeTag';
+import { DetailHeader } from '@/components/ScreenHeader';
 import {
   CONTROLS_THRESHOLD,
   DEFAULT_FILTER,
@@ -24,6 +25,7 @@ import {
   checkOutItem,
   deleteBinIfEmpty,
   getBin,
+  getBinPlace,
   getScan,
   getShelf,
   insertItem,
@@ -44,46 +46,11 @@ import {
 } from '@/db/queries';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { newId } from '@/lib/id';
+import { scannedAgo } from '@/lib/time';
 import { persistPhoto } from '@/scan/photos';
 import { printLabelSheet } from '@/qr/print';
 import { ChipEditor } from '@/review/ReviewScreen';
 import { colors, mono, radius, sp, type } from '@/theme';
-
-function ActionChip({
-  icon,
-  label,
-  onPress,
-  danger,
-  active,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-  danger?: boolean;
-  active?: boolean;
-}) {
-  return (
-    <Pressable
-      style={[styles.action, danger && styles.actionDanger, active && styles.actionActive]}
-      onPress={onPress}
-    >
-      <Ionicons
-        name={icon}
-        size={15}
-        color={danger ? colors.danger : active ? colors.amberInkOn : colors.steel}
-      />
-      <Text
-        style={[
-          styles.actionLabel,
-          danger && styles.actionLabelDanger,
-          active && styles.actionLabelActive,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 
 export default function BinDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -93,6 +60,8 @@ export default function BinDetailScreen() {
   const [tick, setTick] = useState(0);
   const [prompt, setPrompt] = useState<PromptRequest | null>(null);
   const [adding, setAdding] = useState(false);
+  // The occasional errands, one tap deeper than the two that are not.
+  const [binMore, setBinMore] = useState(false);
   const [sheetItem, setSheetItem] = useState<ItemRow | null>(null);
   const [editing, setEditing] = useState<ItemRow | null>(null);
   // Move picker serves single-item and bulk moves.
@@ -135,6 +104,10 @@ export default function BinDetailScreen() {
   // D19: what the bin actually holds, which is not always what its name says.
   const tally = binTagTally(db, bin.id);
   const shelf = bin.shelf_id ? getShelf(db, bin.shelf_id) : null;
+  const filedAt = getBinPlace(db, bin.id);
+  const place =
+    [filedAt.locationName, filedAt.shelfName].filter(Boolean).join(' › ') ||
+    'Not filed anywhere yet';
   const history = listAuditHistory(db, bin.id);
   const itemPhotos = bin.cover_photo_uri ? [] : listItemPhotoUris(db, bin.id);
   const selectedItems = items.filter((i) => selected[i.id]);
@@ -279,8 +252,13 @@ export default function BinDetailScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ title: `${bin.short_code} · ${bin.name}` }} />
+    <View style={styles.screen}>
+      <DetailHeader
+        title={`${bin.short_code} · ${bin.name}`}
+        onBack={() => router.back()}
+        testID="bin-back"
+      />
+      <View style={styles.container}>
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
@@ -328,10 +306,33 @@ export default function BinDetailScreen() {
                 </View>
               )
             )}
+            {/*
+              Where the bin is filed, and the way to see it there. A
+              breadcrumb tells you the address; the map shows you the wall
+              with the bin lit up, which is the answer to "where is it"
+              that survives being read in a garage (D21).
+            */}
+            <Pressable
+              style={styles.placeRow}
+              accessibilityRole="button"
+              accessibilityLabel={
+                filedAt.locationName || filedAt.shelfName
+                  ? `Filed in ${place}. Show it on the map`
+                  : `${place}. Show it on the map`
+              }
+              testID="bin-place"
+              onPress={() => router.push({ pathname: '/map', params: { highlight: bin.id } })}
+            >
+              <Ionicons name="map" size={15} color={colors.steel} />
+              <Text style={styles.placeText} numberOfLines={1}>
+                {place}
+              </Text>
+              <Text style={styles.placeAction}>Show on map</Text>
+              <Ionicons name="chevron-forward" size={13} color={colors.textFaint} />
+            </Pressable>
             <Text style={styles.meta}>
-              {allItems.length} item{allItems.length === 1 ? '' : 's'}
-              {shelf ? ` · ${shelf.name}` : ' · unassigned'}
-              {bin.last_scanned_at ? ` · scanned ${bin.last_scanned_at.slice(0, 10)}` : ''}
+              {allItems.length} item{allItems.length === 1 ? '' : 's'} ·{' '}
+              {scannedAgo(bin.last_scanned_at)}
             </Text>
             {tally.length > 0 && (
               <View style={styles.tallyRow} testID="bin-tag-tally">
@@ -344,55 +345,65 @@ export default function BinDetailScreen() {
                 ))}
               </View>
             )}
+            {/*
+              Two jobs stay on the screen — adding an item and auditing the
+              bin are why you opened it. Everything else is an errand you do
+              occasionally, so it lives one tap deeper rather than competing
+              with them: nine equal-weight chips made the two that matter as
+              hard to find as printing a label.
+            */}
             <View style={styles.actionsRow}>
-              <ActionChip
-                icon="camera"
-                label="Audit"
+              <Pressable
+                style={styles.primaryAction}
+                accessibilityRole="button"
+                accessibilityLabel="Add an item to this bin"
+                testID="bin-add-item"
+                onPress={() => setAdding(true)}
+              >
+                <Ionicons name="add" size={17} color={colors.amberInkOn} />
+                <Text style={styles.primaryActionLabel}>Add item</Text>
+              </Pressable>
+              <Pressable
+                style={styles.secondaryAction}
+                accessibilityRole="button"
+                accessibilityLabel="Audit this bin with the camera"
+                testID="bin-audit"
                 onPress={() => router.push({ pathname: '/capture', params: { binId: bin.id } })}
-              />
-              <ActionChip icon="add" label="Add item" onPress={() => setAdding(true)} />
-              <ActionChip
-                icon="image"
-                label="Photo"
-                onPress={() => router.push({ pathname: '/bin-photo/[id]', params: { id: bin.id } })}
-              />
-              <ActionChip
-                icon="checkmark-circle-outline"
-                label={selectMode ? 'Done' : 'Select'}
-                active={selectMode}
-                onPress={() => {
-                  setSelectMode((m) => !m);
-                  setSelected({});
-                }}
-              />
-              <ActionChip
-                icon="pencil"
-                label="Rename"
-                onPress={() =>
-                  setPrompt({
-                    title: 'Rename bin',
-                    initialValue: bin.name,
-                    onSubmit: (name) => {
-                      renameBin(db, bin.id, name);
-                      refresh();
-                    },
-                  })
-                }
-              />
-              <ActionChip
-                icon="map"
-                label="Map"
-                onPress={() =>
-                  router.push({ pathname: '/map', params: { highlight: bin.id } })
-                }
-              />
-              <ActionChip
-                icon="arrow-redo"
-                label="Move"
-                onPress={() => router.push({ pathname: '/move/[binId]', params: { binId: bin.id } })}
-              />
-              <ActionChip icon="print" label="Label" onPress={printLabel} />
-              <ActionChip icon="trash" label="Delete" danger onPress={confirmDelete} />
+              >
+                <Ionicons name="camera" size={17} color={colors.steel} />
+                <Text style={styles.secondaryActionLabel}>Audit</Text>
+              </Pressable>
+              <Pressable
+                style={styles.moreAction}
+                accessibilityRole="button"
+                accessibilityLabel={`More things to do with ${bin.short_code}`}
+                testID="bin-more"
+                onPress={() => setBinMore(true)}
+              >
+                <Ionicons name="ellipsis-horizontal" size={19} color={colors.textDim} />
+              </Pressable>
+            </View>
+
+            <View style={styles.itemsHead}>
+              <Text style={styles.itemsHeadLabel}>
+                {allItems.length} item{allItems.length === 1 ? '' : 's'}
+              </Text>
+              {allItems.length > 0 ? (
+                <Pressable
+                  onPress={() => {
+                    setSelectMode((m) => !m);
+                    setSelected({});
+                  }}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={selectMode ? 'Finish selecting' : 'Select several items'}
+                  testID="bin-select-toggle"
+                >
+                  <Text style={selectMode ? styles.selectDone : styles.selectStart}>
+                    {selectMode ? 'Done' : 'Select'}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
             {history.length > 1 && (
               <View>
@@ -628,6 +639,70 @@ export default function BinDetailScreen() {
           </Pressable>
         </View>
       )}
+      <Modal
+        visible={binMore}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBinMore(false)}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={() => setBinMore(false)}>
+          <Pressable style={styles.moreSheet} onPress={() => {}} testID="bin-more-sheet">
+            <View style={styles.moreGrabber} />
+            <Text style={styles.moreTitle}>
+              {bin.short_code} · {bin.name}
+            </Text>
+            <SheetRow
+              icon="image"
+              label="Take a cover photo"
+              onPress={() => {
+                setBinMore(false);
+                router.push({ pathname: '/bin-photo/[id]', params: { id: bin.id } });
+              }}
+            />
+            <SheetRow
+              icon="pencil"
+              label="Rename bin"
+              onPress={() => {
+                setBinMore(false);
+                setPrompt({
+                  title: 'Rename bin',
+                  initialValue: bin.name,
+                  onSubmit: (name) => {
+                    renameBin(db, bin.id, name);
+                    refresh();
+                  },
+                });
+              }}
+            />
+            <SheetRow
+              icon="print"
+              label="Print label sheet"
+              onPress={() => {
+                setBinMore(false);
+                void printLabel();
+              }}
+            />
+            <SheetRow
+              icon="arrow-redo"
+              label="Move to another shelf"
+              onPress={() => {
+                setBinMore(false);
+                router.push({ pathname: '/move/[binId]', params: { binId: bin.id } });
+              }}
+            />
+            <View style={styles.moreDivider} />
+            <SheetRow
+              icon="trash"
+              label={`Delete ${bin.short_code}`}
+              danger
+              onPress={() => {
+                setBinMore(false);
+                confirmDelete();
+              }}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
       <PromptModal request={prompt} onClose={() => setPrompt(null)} />
       <ChipEditor
         visible={adding}
@@ -746,6 +821,7 @@ export default function BinDetailScreen() {
         onClose={() => setMoving(null)}
         onPick={(target) => moving && moveItems(moving, target.id)}
       />
+      </View>
     </View>
   );
 }
@@ -766,7 +842,7 @@ function ItemSheet({
   onCheckoutOrReturn,
   onDelete,
   onPhotoTaken,
-}: {
+}: Readonly<{
   db: ReturnType<typeof useDb>;
   item: ItemRow | null;
   onClose: () => void;
@@ -777,7 +853,7 @@ function ItemSheet({
   onCheckoutOrReturn: (item: ItemRow) => void;
   onDelete: (item: ItemRow) => void;
   onPhotoTaken: (item: ItemRow, uri: string) => void;
-}) {
+}>) {
   const sourceScan = item?.source_scan_id ? getScan(db, item.source_scan_id) : null;
   const [photoMenu, setPhotoMenu] = useState(false);
   const displayUri = item?.photo_uri ?? sourceScan?.photo_uri ?? null;
@@ -897,12 +973,12 @@ function SheetRow({
   label,
   onPress,
   danger,
-}: {
+}: Readonly<{
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   danger?: boolean;
-}) {
+}>) {
   return (
     <Pressable style={styles.sheetRow} onPress={onPress} accessibilityRole="button">
       <Ionicons name={icon} size={18} color={danger ? colors.danger : colors.steel} />
@@ -918,14 +994,14 @@ function BinPicker({
   title,
   onClose,
   onPick,
-}: {
+}: Readonly<{
   visible: boolean;
   bins: BinRow[];
   excludeBinId: string;
   title: string;
   onClose: () => void;
   onPick: (bin: BinRow) => void;
-}) {
+}>) {
   const candidates = bins.filter((b) => b.id !== excludeBinId);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -960,7 +1036,8 @@ function BinPicker({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, padding: sp(4) },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, paddingHorizontal: sp(4), paddingBottom: sp(4) },
   itemThumb: { width: 30, height: 30, borderRadius: radius.sm, backgroundColor: colors.surfaceSunken },
   itemIcon: {
     width: 30,
@@ -1027,7 +1104,84 @@ const styles = StyleSheet.create({
   collageCell: { width: '49%', height: 92 },
   collageCellFull: { width: '100%', height: 186 },
   collageCellHalf: { height: 186 },
-  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: sp(2) },
+  placeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(2.25),
+    backgroundColor: '#1A1D20',
+    borderWidth: 1,
+    borderColor: '#262A2F',
+    borderRadius: radius.md,
+    paddingHorizontal: sp(2.75),
+    paddingVertical: sp(2.5),
+  },
+  placeText: { flex: 1, ...type.body, fontSize: 13 },
+  placeAction: { color: colors.textFaint, fontSize: 11 },
+  actionsRow: { flexDirection: 'row', gap: sp(2) },
+  primaryAction: {
+    flex: 1.45,
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: sp(1.75),
+    backgroundColor: colors.amber,
+    borderRadius: 11,
+  },
+  primaryActionLabel: { color: colors.amberInkOn, fontWeight: '700', fontSize: 14 },
+  secondaryAction: {
+    flex: 1,
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: sp(1.75),
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 11,
+  },
+  secondaryActionLabel: { color: colors.steel, fontWeight: '600', fontSize: 14 },
+  moreAction: {
+    width: 48,
+    minHeight: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 11,
+  },
+  itemsHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(2.5),
+    marginTop: sp(2),
+  },
+  itemsHeadLabel: { ...type.stamp, flex: 1 },
+  selectStart: { color: colors.steel, fontWeight: '600', fontSize: 12.5 },
+  selectDone: { color: colors.amber, fontWeight: '700', fontSize: 12.5 },
+  moreSheet: {
+    marginTop: 'auto',
+    backgroundColor: colors.surfaceRaised,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderStrong,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingHorizontal: sp(3),
+    paddingTop: sp(3.5),
+    paddingBottom: sp(5.5),
+  },
+  moreGrabber: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.borderStrong,
+    alignSelf: 'center',
+    marginBottom: sp(3.5),
+  },
+  moreTitle: { ...type.stamp, paddingHorizontal: sp(2.5), paddingBottom: sp(1.5) },
+  moreDivider: { height: 1, backgroundColor: colors.border, marginVertical: sp(2) },
   action: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -116,6 +116,28 @@ export function buildMap({ locations, shelves, bins, itemCounts }: MapInput): Ma
   return areas.filter((area) => area.bins > 0 || area.rows.length > 0);
 }
 
+/**
+ * The map with an unshelved tray guaranteed to exist (v3).
+ *
+ * `buildMap` omits the tray when nothing is in it, which is right for a
+ * picture of where things are. The v3 wall draws the tray as fixed chrome
+ * below the rack, and an empty one is a legitimate place to put a bin down —
+ * so the screen asks for this instead, and every drop target it can draw is
+ * a row `planDrop` can actually find.
+ */
+export function withTray(areas: readonly MapArea[]): MapArea[] {
+  if (areas.some((area) => area.locationId === null)) return [...areas];
+  return [
+    ...areas,
+    {
+      locationId: null,
+      name: UNPLACED,
+      rows: [{ shelfId: null, name: UNSHELVED, bins: [], capacity: null }],
+      bins: 0,
+    },
+  ];
+}
+
 /** Which area and row a bin sits in, for opening the map already scrolled. */
 export function locate(
   areas: readonly MapArea[],
@@ -172,6 +194,154 @@ export function locateMany(areas: readonly MapArea[], binIds: readonly string[])
 /** Empty slots to draw after a row's bins: how much declared space is free. */
 export function rowGaps(row: MapRow): number {
   return row.capacity === null ? 0 : Math.max(0, row.capacity - row.bins.length);
+}
+
+// ------------------------------------------------------------------- racks
+
+/**
+ * The wall is a row of racks, and the map shows one at a time (v3). A rack is
+ * a location — no new entity, no second truth — but it carries two things a
+ * bare name does not: a short code that goes on the scrubber chip and on a
+ * printed label, and a free-text label that says where in the room it is.
+ *
+ * Both live in `locations.name` as `"R1 · Door"`, which is why renaming a
+ * rack only rewrites the part after the separator: the chip on the wall and
+ * the chip on the screen have to keep saying the same thing when someone
+ * decides "Door" is really "By the door".
+ */
+export const RACK_SEP = ' · ';
+
+/**
+ * `"R1 · Door"` → `"R1"`. A name with no code of its own gets a positional
+ * one, so a workshop that has never named a rack still has something short
+ * to put on the scrubber. Only a leading letter-or-two-plus-digits counts:
+ * "Garage" must not become a code, or every rack would be called "GA".
+ */
+export function rackCodeOf(name: string, index: number): string {
+  const match = /^\s*([A-Za-z]{0,2}\d+)\s*·/.exec(name);
+  return match ? match[1].toUpperCase() : `R${index + 1}`;
+}
+
+/** `"R1 · Door"` → `"Door"`; a name with no code is all label. */
+export function rackLabelOf(name: string): string {
+  const at = name.indexOf('·');
+  return at === -1 ? name.trim() : name.slice(at + 1).trim();
+}
+
+/** Puts the two halves back together for storage. */
+export function composeRackName(code: string, label: string): string {
+  const trimmed = label.trim();
+  return trimmed ? `${code}${RACK_SEP}${trimmed}` : code;
+}
+
+/**
+ * The next unused rack code on the wall — `R3` when R1 and R2 are up. Reads
+ * the numeric part of every existing code rather than counting racks, so
+ * taking R2 off the wall and adding another does not mint a second R2 for a
+ * label that may still be stuck to a shelf somewhere.
+ */
+export function nextRackCode(names: readonly string[]): string {
+  const highest = names.reduce((top, name, index) => {
+    const digits = rackCodeOf(name, index).replace(/\D/g, '');
+    return Math.max(top, Number.parseInt(digits, 10) || 0);
+  }, 0);
+  return `R${highest + 1}`;
+}
+
+/** How full a rack is: bins filed against slots declared. */
+export function areaFill(area: MapArea): { filled: number; slots: number } {
+  let filled = 0;
+  let slots = 0;
+  for (const row of area.rows) {
+    filled += row.bins.length;
+    slots += row.capacity ?? row.bins.length;
+  }
+  return { filled, slots };
+}
+
+/**
+ * Free slots left in a rack. An unsized shelf can always take one more, so a
+ * rack containing one reports room without bound — which is what stops the
+ * side rails and the rack picker from ever handing you a dead end.
+ */
+export function rackRoom(area: MapArea): number {
+  let room = 0;
+  for (const row of area.rows) {
+    if (row.capacity === null) return Number.POSITIVE_INFINITY;
+    room += Math.max(0, row.capacity - row.bins.length);
+  }
+  return room;
+}
+
+/** The shelf a bin sent to this rack would land on: the first with room. */
+export function openRowOf(area: MapArea): MapRow | null {
+  return area.rows.find((row) => row.capacity === null || row.bins.length < row.capacity) ?? null;
+}
+
+/**
+ * Where the last bin on an over-full shelf should go, for the one-tap fix the
+ * shelf offers instead of only complaining: the nearest shelf in the same
+ * rack with room, and the unshelved tray only when the whole rack is packed.
+ * Null when there is nowhere better, in which case the shelf just reads over.
+ */
+export function overflowTarget(
+  areas: readonly MapArea[],
+  area: MapArea,
+  row: MapRow,
+): MapRow | null {
+  const sibling = area.rows.find(
+    (other) =>
+      other.shelfId !== row.shelfId &&
+      (other.capacity === null || other.bins.length < other.capacity),
+  );
+  if (sibling) return sibling;
+  const tray = areas.find((a) => a.locationId === null)?.rows[0] ?? null;
+  return tray && tray.shelfId !== row.shelfId ? tray : null;
+}
+
+/**
+ * Planning a drop for a stack of bins rather than one (v3 multi-select).
+ *
+ * The same insert-before arithmetic as `planDrop`, with every carried bin
+ * pulled out of the destination first so a stack moving *within* its own
+ * shelf cannot count itself. They land contiguously, in the order they were
+ * picked: a stack that arrives shuffled is worse than no stack at all.
+ */
+export function planMultiDrop(
+  areas: readonly MapArea[],
+  binIds: readonly string[],
+  target: DropTarget,
+): { binIds: string[]; shelfId: string | null; orderedIds: string[]; place: string } | null {
+  if (binIds.length === 0) return null;
+
+  let destination: { area: MapArea; row: MapRow } | null = null;
+  for (const area of areas) {
+    const row = area.rows.find((r) => r.shelfId === target.shelfId);
+    if (row) {
+      destination = { area, row };
+      break;
+    }
+  }
+  if (!destination) return null;
+
+  const carried = new Set(binIds);
+  const without = destination.row.bins.map((c) => c.binId).filter((id) => !carried.has(id));
+  const at = landingIndex(target, without, carried);
+
+  const orderedIds = [...without];
+  orderedIds.splice(at, 0, ...binIds);
+
+  const current = destination.row.bins.map((c) => c.binId);
+  if (orderedIds.length === current.length && orderedIds.every((id, i) => id === current[i])) {
+    return null;
+  }
+
+  return {
+    binIds: [...binIds],
+    shelfId: target.shelfId,
+    orderedIds,
+    place: describePlace(destination),
+  };
 }
 
 // ------------------------------------------------------------------ moving
@@ -232,13 +402,9 @@ export function planDrop(
   if (!destination) return null;
 
   const without = destination.row.bins.map((c) => c.binId).filter((id) => id !== binId);
-  const at =
-    target.index !== undefined
-      ? Math.max(0, Math.min(Math.trunc(target.index), without.length))
-      : target.beforeBinId
-        ? // A bin that is no longer there (a stale tap) means the end, not slot 0.
-          indexOrEnd(without, target.beforeBinId)
-        : without.length;
+  // The same rule as a group move, asked with a stack of one. This had drifted
+  // already: only the multi-drop copy handled a target that is itself carried.
+  const at = landingIndex(target, without, new Set([binId]));
   const orderedIds = [...without];
   orderedIds.splice(at, 0, binId);
 
@@ -249,6 +415,27 @@ export function planDrop(
   }
 
   return { binId, shelfId: target.shelfId, orderedIds, crossShelf, place: describePlace(destination) };
+}
+
+/**
+ * Where a carried stack lands in the destination row.
+ *
+ * An explicit index wins and is clamped to the row. Otherwise the bin that was
+ * aimed at names the slot — unless it is one of the ones being carried, which
+ * names no slot that will still exist, so the stack goes to the end.
+ */
+function landingIndex(
+  target: DropTarget,
+  without: readonly string[],
+  carried: ReadonlySet<string>,
+): number {
+  if (target.index !== undefined) {
+    return Math.max(0, Math.min(Math.trunc(target.index), without.length));
+  }
+  if (target.beforeBinId && !carried.has(target.beforeBinId)) {
+    return indexOrEnd(without, target.beforeBinId);
+  }
+  return without.length;
 }
 
 function indexOrEnd(ids: readonly string[], id: string): number {

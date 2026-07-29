@@ -264,6 +264,38 @@ ALTER TABLE bins ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE shelves ADD COLUMN capacity INTEGER;
 `;
 
+/**
+ * D21 (v3 wall): the map draws one rack at a time, so both levels above a bin
+ * need a stored order — a rack's position along the wall, and a shelf's
+ * position from the top of the rack down. Alphabetical was fine for a list
+ * and is wrong for a picture: "Top, Upper, Lower, Bottom" sorts to "Bottom,
+ * Lower, Top, Upper", which is a rack drawn upside down and shuffled.
+ *
+ * Both columns are backfilled *in the order those rows sort today*, so an
+ * existing workshop opens looking exactly as it did; the new fact is only
+ * that the order is now editable rather than derived from spelling. Same
+ * class of stored fact as `bins.sort_order` in migration 010 — an
+ * arrangement, not a coordinate, so nothing here can drift from where a bin
+ * is really filed.
+ */
+const MIGRATION_011_WALL_ORDER = `
+ALTER TABLE locations ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE shelves ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+
+UPDATE locations SET sort_order = (
+  SELECT COUNT(*) FROM locations other
+  WHERE other.name < locations.name
+     OR (other.name = locations.name AND other.rowid < locations.rowid)
+);
+
+UPDATE shelves SET sort_order = (
+  SELECT COUNT(*) FROM shelves other
+  WHERE other.location_id = shelves.location_id
+    AND (other.name < shelves.name
+         OR (other.name = shelves.name AND other.rowid < shelves.rowid))
+);
+`;
+
 export const MIGRATIONS: readonly string[] = [
   MIGRATION_001_INITIAL_SCHEMA,
   MIGRATION_002_FTS_TRIGGERS,
@@ -275,6 +307,7 @@ export const MIGRATIONS: readonly string[] = [
   MIGRATION_008_TAGS,
   MIGRATION_009_ITEM_EMBEDDINGS,
   MIGRATION_010_MAP_ARRANGEMENT,
+  MIGRATION_011_WALL_ORDER,
 ];
 
 export function getSchemaVersion(db: DbAdapter): number {

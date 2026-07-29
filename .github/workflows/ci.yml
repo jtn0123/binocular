@@ -8,8 +8,24 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    env:
+      # Only whether the token exists, never the token. A step cannot branch on
+      # `secrets` directly, so something has to be readable at job scope — but
+      # the secret itself at job scope is handed to `npm ci`, to every lint and
+      # test process, and to any install script any dependency ships. The scan
+      # is the only step that needs it, so it is the only step that gets it.
+      HAS_SONAR_TOKEN: ${{ secrets.SONAR_TOKEN != '' }}
     steps:
-      - uses: actions/checkout@v4
+      # Pinned like the scan action below, and for the same reason. v4:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          # The token is only needed to clone. Left persisted it stays in the
+          # local git config for every later step in the job, which is a
+          # standing credential none of them asked for.
+          persist-credentials: false
+          # Sonar dates "new code" from the git history; a shallow clone makes
+          # every line look new and the new-code gate meaningless.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -37,4 +53,16 @@ jobs:
       - run: npm run audit:worklets
       # A GitHub runner has 2 cores; jest's default (cores - 1) still leaves
       # workers fighting, and each worker pays its own module-registry cost.
-      - run: npm test -- --ci --cacheDirectory ~/.cache/jest --maxWorkers=2
+      - run: npm test -- --ci --coverage --cacheDirectory ~/.cache/jest --maxWorkers=2
+
+      # Coverage is the whole reason this moved off Automatic Analysis, which
+      # only ever sees the repository and so reported 0.0% forever.
+      - name: SonarQube Cloud scan
+        if: env.HAS_SONAR_TOKEN == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        # Pinned to a commit, not a tag. A tag is a moving pointer its owner
+        # can repoint, and this is the one step the token is handed to — so
+        # "whatever v8 means today" would be a standing decision, made by
+        # someone else, about code that can read it. v8.2.1:
+        uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f

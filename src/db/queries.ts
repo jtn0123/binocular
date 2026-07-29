@@ -1,7 +1,7 @@
 import { newId } from '../lib/id';
 import { nowIso } from '../lib/time';
 
-import type { DbAdapter } from './adapter';
+import type { DbAdapter, SqlParam } from './adapter';
 import type { ItemCategory } from '../vision/types';
 
 /** Row shapes mirror the schema in schema.ts (blueprint §4) verbatim. */
@@ -9,6 +9,8 @@ export interface LocationRow {
   id: string;
   name: string;
   created_at: string;
+  /** D21 (v3 wall): position along the wall; ties broken by name. */
+  sort_order: number;
 }
 
 export interface ShelfRow {
@@ -18,6 +20,8 @@ export interface ShelfRow {
   created_at: string;
   /** D21: how many slots the shelf physically has; null = unsized. */
   capacity: number | null;
+  /** D21 (v3 wall): position from the top of its rack down. */
+  sort_order: number;
 }
 
 export interface BinRow {
@@ -80,17 +84,46 @@ export interface ScanRow {
 // ---------------------------------------------------------------- locations
 
 export function createLocation(db: DbAdapter, input: { name: string; id?: string }): LocationRow {
-  const row: LocationRow = { id: input.id ?? newId(), name: input.name, created_at: nowIso() };
-  db.runSync('INSERT INTO locations (id, name, created_at) VALUES (?, ?, ?)', [
+  const row: LocationRow = {
+    id: input.id ?? newId(),
+    name: input.name,
+    created_at: nowIso(),
+    // A new rack lands at the end of the wall, which is where you would have
+    // stood it — not wherever its name happens to sort.
+    sort_order: nextRank(db, 'SELECT MAX(sort_order) AS top FROM locations'),
+  };
+  db.runSync('INSERT INTO locations (id, name, created_at, sort_order) VALUES (?, ?, ?, ?)', [
     row.id,
     row.name,
     row.created_at,
+    row.sort_order,
   ]);
   return row;
 }
 
 export function listLocations(db: DbAdapter): LocationRow[] {
-  return db.getAllSync<LocationRow>('SELECT * FROM locations ORDER BY name');
+  return db.getAllSync<LocationRow>('SELECT * FROM locations ORDER BY sort_order, name');
+}
+
+/**
+ * Rewrites the wall's left-to-right order (D21 v3). Takes the whole list
+ * rather than a from/to pair: the map hands over the arrangement it is
+ * showing, so a reorder can never leave two racks claiming one position.
+ * Ids that are not locations are ignored; locations that are missing from
+ * the list keep their place after the ones that were named.
+ */
+export function reorderLocations(db: DbAdapter, orderedIds: readonly string[]): void {
+  db.withTransactionSync(() => {
+    orderedIds.forEach((id, index) => {
+      db.runSync('UPDATE locations SET sort_order = ? WHERE id = ?', [index, id]);
+    });
+  });
+}
+
+/** Highest existing rank + 1, or 0 when there is nothing to sit after. */
+function nextRank(db: DbAdapter, sql: string, params: SqlParam[] = []): number {
+  const row = db.getFirstSync<{ top: number | null }>(sql, params);
+  return row?.top === null || row?.top === undefined ? 0 : row.top + 1;
 }
 
 export function getLocation(db: DbAdapter, id: string): LocationRow | null {
@@ -120,32 +153,58 @@ export function deleteLocation(db: DbAdapter, id: string): void {
 
 export function createShelf(
   db: DbAdapter,
-  input: { locationId: string; name: string; id?: string },
+  input: { locationId: string; name: string; id?: string; capacity?: number | null },
 ): ShelfRow {
   const row: ShelfRow = {
     id: input.id ?? newId(),
     location_id: input.locationId,
     name: input.name,
     created_at: nowIso(),
-    capacity: null,
+    capacity: input.capacity ?? null,
+    // A new shelf goes on the bottom of the rack, which is where a shelf
+    // actually gets added to one.
+    sort_order: nextRank(db, 'SELECT MAX(sort_order) AS top FROM shelves WHERE location_id = ?', [
+      input.locationId,
+    ]),
   };
-  db.runSync('INSERT INTO shelves (id, location_id, name, created_at) VALUES (?, ?, ?, ?)', [
-    row.id,
-    row.location_id,
-    row.name,
-    row.created_at,
-  ]);
+  db.runSync(
+    'INSERT INTO shelves (id, location_id, name, created_at, capacity, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+    [row.id, row.location_id, row.name, row.created_at, row.capacity, row.sort_order],
+  );
   return row;
 }
 
 export function listShelves(db: DbAdapter, locationId: string): ShelfRow[] {
-  return db.getAllSync<ShelfRow>('SELECT * FROM shelves WHERE location_id = ? ORDER BY name', [
-    locationId,
-  ]);
+  return db.getAllSync<ShelfRow>(
+    'SELECT * FROM shelves WHERE location_id = ? ORDER BY sort_order, name',
+    [locationId],
+  );
 }
 
 export function listAllShelves(db: DbAdapter): ShelfRow[] {
-  return db.getAllSync<ShelfRow>('SELECT * FROM shelves ORDER BY name');
+  return db.getAllSync<ShelfRow>('SELECT * FROM shelves ORDER BY sort_order, name');
+}
+
+/**
+ * The COLUMNS stepper (v3 wall): a rack is uniform, so its shelves declare
+ * one slot count between them. Never below what a shelf already holds —
+ * shrinking a rack must not silently make a shelf read over-full, and the
+ * bins are the fact the number describes.
+ */
+export function setRackCapacity(db: DbAdapter, locationId: string, capacity: number): void {
+  db.withTransactionSync(() => {
+    const shelves = db.getAllSync<{ id: string; filled: number }>(
+      `SELECT s.id AS id, (SELECT COUNT(*) FROM bins b WHERE b.shelf_id = s.id) AS filled
+         FROM shelves s WHERE s.location_id = ?`,
+      [locationId],
+    );
+    for (const shelf of shelves) {
+      db.runSync('UPDATE shelves SET capacity = ? WHERE id = ?', [
+        Math.max(capacity, shelf.filled),
+        shelf.id,
+      ]);
+    }
+  });
 }
 
 export function getShelf(db: DbAdapter, id: string): ShelfRow | null {
@@ -271,6 +330,57 @@ export function placeBin(
     input.orderedIds.forEach((id, index) => {
       db.runSync('UPDATE bins SET sort_order = ? WHERE id = ?', [index, id]);
     });
+  });
+}
+
+/**
+ * The same drop for a stack of bins (v3 wall): they land together, in the
+ * order they were picked, as one transaction and therefore one undo.
+ * Carrying them one at a time is the thing that makes re-shelving take all
+ * afternoon, and a per-bin loop would leave a half-moved wall behind if it
+ * failed in the middle.
+ */
+export function placeBins(
+  db: DbAdapter,
+  input: { binIds: readonly string[]; shelfId: string | null; orderedIds: readonly string[] },
+): void {
+  db.withTransactionSync(() => {
+    for (const binId of input.binIds) {
+      db.runSync('UPDATE bins SET shelf_id = ? WHERE id = ?', [input.shelfId, binId]);
+    }
+    input.orderedIds.forEach((id, index) => {
+      db.runSync('UPDATE bins SET sort_order = ? WHERE id = ?', [index, id]);
+    });
+  });
+}
+
+/**
+ * Put several bins back where they came from, in one transaction.
+ *
+ * Undoing a group move can span more than one source shelf, and each of those
+ * shelves needs its whole row rewritten. One `placeBins` per shelf would be
+ * one transaction per shelf, leaving a window in which some rows are restored
+ * and others are not — the half-moved wall `placeBins` exists to prevent for
+ * the move itself. Undo deserves the same promise: it is the thing someone
+ * reaches for when they already believe something went wrong.
+ */
+export function restoreBins(
+  db: DbAdapter,
+  groups: readonly {
+    binIds: readonly string[];
+    shelfId: string | null;
+    orderedIds: readonly string[];
+  }[],
+): void {
+  db.withTransactionSync(() => {
+    for (const group of groups) {
+      for (const binId of group.binIds) {
+        db.runSync('UPDATE bins SET shelf_id = ? WHERE id = ?', [group.shelfId, binId]);
+      }
+      group.orderedIds.forEach((id, index) => {
+        db.runSync('UPDATE bins SET sort_order = ? WHERE id = ?', [index, id]);
+      });
+    }
   });
 }
 

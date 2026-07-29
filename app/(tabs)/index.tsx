@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { BinThumb } from '@/components/BinThumb';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { CodeTag } from '@/components/CodeTag';
 import { QrModal } from '@/components/QrModal';
 import { useDb } from '@/db/DbProvider';
@@ -32,13 +33,13 @@ function BinCard({
   itemPhotoUris,
   place,
   onShowQr,
-}: {
+}: Readonly<{
   bin: BinRow;
   itemCount: number;
   itemPhotoUris: string[];
   place: string | null;
   onShowQr: () => void;
-}) {
+}>) {
   return (
     <Link href={{ pathname: '/bin/[id]', params: { id: bin.id } }} asChild>
       <Pressable
@@ -80,12 +81,12 @@ function ResultRow({
   onPress,
   onShowQr,
   onShowMap,
-}: {
+}: Readonly<{
   result: SearchResult;
   onPress: () => void;
   onShowQr: () => void;
   onShowMap: () => void;
-}) {
+}>) {
   const where =
     [result.binName, result.shelfName, result.locationName].filter(Boolean).join(', ') ||
     'unassigned';
@@ -147,13 +148,13 @@ function StatusRow({
   actionLabel,
   onAction,
   onOpen,
-}: {
+}: Readonly<{
   item: ItemWithBin;
   detail: string;
   actionLabel?: string;
   onAction?: () => void;
   onOpen: () => void;
-}) {
+}>) {
   return (
     <Pressable
       style={styles.statusRow}
@@ -230,7 +231,17 @@ export default function HomeScreen() {
   const scansWaiting = scans.review + scans.working + scans.failed;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.screen}>
+      <ScreenHeader
+        title="Binocular"
+        action={{
+          icon: 'settings-outline',
+          label: 'Settings',
+          onPress: () => router.push('/settings'),
+          testID: 'home-settings',
+        }}
+      />
+      <View style={styles.container}>
       <View style={styles.searchWrap}>
         <Ionicons name="search" size={17} color={colors.textFaint} />
         <TextInput
@@ -479,12 +490,16 @@ export default function HomeScreen() {
         </>
       )}
       <QrModal bin={qrBin} onClose={() => setQrBin(null)} />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, padding: sp(4), gap: sp(3) },
+  // The screen carries the ground; the container is what sits *under* the
+  // header, so it takes no top padding of its own.
+  screen: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, paddingHorizontal: sp(4), paddingBottom: sp(4), gap: sp(3) },
   headerBlock: { gap: sp(3), marginBottom: sp(3) },
   searchWrap: {
     flexDirection: 'row',

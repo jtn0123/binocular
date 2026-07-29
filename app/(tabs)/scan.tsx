@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CodeTag } from '@/components/CodeTag';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { useDb } from '@/db/DbProvider';
 import { countAttentionScans, listRecentBins } from '@/db/queries';
 import { quickCreateBin } from '@/db/scaffold';
@@ -27,7 +28,9 @@ export default function ScanScreen() {
 
   if (picking) {
     return (
-      <View style={styles.container}>
+      <View style={styles.screen}>
+        <ScreenHeader title="Scan" />
+        <View style={styles.container}>
         <Text style={styles.title}>Which bin are you auditing?</Text>
         <FlatList
           data={bins}
@@ -69,6 +72,7 @@ export default function ScanScreen() {
         <Pressable style={styles.secondaryButton} onPress={() => setPicking(false)}>
           <Text style={styles.secondaryLabel}>Back</Text>
         </Pressable>
+        </View>
       </View>
     );
   }
@@ -76,7 +80,9 @@ export default function ScanScreen() {
   const pending = countAttentionScans(db);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.screen}>
+      <ScreenHeader title="Scan" />
+      <View style={styles.container}>
       {pending > 0 && (
         <Pressable style={styles.queueBanner} onPress={() => router.push('/queue')}>
           <Ionicons name="albums" size={16} color={colors.amber} />
@@ -135,12 +141,14 @@ export default function ScanScreen() {
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
       </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, padding: sp(4), gap: sp(3) },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, paddingHorizontal: sp(4), paddingBottom: sp(4), gap: sp(3) },
   queueBanner: {
     flexDirection: 'row',
     alignItems: 'center',

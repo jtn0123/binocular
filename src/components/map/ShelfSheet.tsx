@@ -37,21 +37,30 @@ export function shelfDraft(row: MapRow, locationName: string): ShelfDraft {
   };
 }
 
-export function ShelfSheet({
-  shelf,
-  onRename,
-  onCapacity,
-  onAddBin,
-  onDelete,
-  onClose,
-}: {
+/**
+ * An errand that belongs to a shelf but not to every screen showing one —
+ * bulk-creating bins and printing a shelf poster are Browse's, not the map's.
+ * Passed in rather than built in so the sheet stays one thing.
+ */
+export interface ShelfExtra {
+  key: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}
+
+export interface ShelfSheetProps {
   shelf: ShelfDraft | null;
   onRename: (name: string) => void;
   onCapacity: (capacity: number | null) => void;
   onAddBin: () => void;
   onDelete: () => void;
   onClose: () => void;
-}) {
+  extras?: readonly ShelfExtra[];
+}
+
+export function ShelfSheet(props: Readonly<ShelfSheetProps>) {
+  const { shelf, onClose } = props;
   return (
     <Modal
       visible={shelf !== null}
@@ -61,16 +70,7 @@ export function ShelfSheet({
       statusBarTranslucent
     >
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-      {shelf ? (
-        <ShelfSheetBody
-          shelf={shelf}
-          onRename={onRename}
-          onCapacity={onCapacity}
-          onAddBin={onAddBin}
-          onDelete={onDelete}
-          onClose={onClose}
-        />
-      ) : null}
+      {shelf ? <ShelfSheetBody {...props} shelf={shelf} /> : null}
     </Modal>
   );
 }
@@ -82,14 +82,8 @@ function ShelfSheetBody({
   onAddBin,
   onDelete,
   onClose,
-}: {
-  shelf: ShelfDraft;
-  onRename: (name: string) => void;
-  onCapacity: (capacity: number | null) => void;
-  onAddBin: () => void;
-  onDelete: () => void;
-  onClose: () => void;
-}) {
+  extras,
+}: ShelfSheetProps & { shelf: ShelfDraft }) {
   const [name, setName] = useState(shelf.name);
 
   const commitName = () => {
@@ -176,6 +170,24 @@ function ShelfSheetBody({
           <Text style={styles.deleteLabel}>Delete</Text>
         </Pressable>
       </View>
+
+      {extras && extras.length > 0 ? (
+        <View style={styles.extras}>
+          {extras.map((extra) => (
+            <Pressable
+              key={extra.key}
+              style={styles.extra}
+              onPress={extra.onPress}
+              accessibilityRole="button"
+              accessibilityLabel={extra.label}
+              testID={`map-sheet-${extra.key}`}
+            >
+              <Ionicons name={extra.icon} size={15} color={colors.steel} />
+              <Text style={styles.extraLabel}>{extra.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       <Text style={styles.note}>
         {shelf.binCount > 0
@@ -288,6 +300,18 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   deleteLabel: { color: colors.danger, fontSize: 13, fontWeight: '600' },
+  extras: { flexDirection: 'row', flexWrap: 'wrap', gap: sp(2.25), marginTop: sp(2.25) },
+  extra: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sp(1.75),
+    paddingVertical: sp(2.5),
+    paddingHorizontal: sp(3),
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+  },
+  extraLabel: { color: colors.steel, fontSize: 12.5, fontWeight: '600' },
   note: { color: colors.textFaint, fontSize: 11, lineHeight: 16, marginTop: sp(3) },
   done: {
     marginTop: sp(3.5),
