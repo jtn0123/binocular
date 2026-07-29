@@ -222,6 +222,26 @@ export default function BrowseScreen() {
 
   const empty = locations.length === 0 && unassigned.length === 0;
 
+  /**
+   * The wall, filtered once, before anything is drawn.
+   *
+   * This used to be computed inside the JSX, which left the "nothing matched"
+   * line with no way to ask whether anything had — so it ran a full read of
+   * every bin in the workshop to find out, on each keystroke. Now the answer
+   * falls out of what was already counted.
+   */
+  const wall = locations.map((location) => ({
+    location,
+    rows: listShelves(db, location.id).map((shelf) => {
+      // One query per shelf, not two: this runs on every keystroke in the
+      // filter, multiplied by the number of shelves on the wall.
+      const all = listBinsForShelf(db, shelf.id);
+      return { shelf, bins: all.filter(matches), total: all.length };
+    }),
+  }));
+  const anyMatch =
+    looseMatches.length > 0 || wall.some(({ rows }) => rows.some((r) => r.bins.length > 0));
+
   return (
     <View style={styles.root}>
       <ScreenHeader
@@ -312,15 +332,8 @@ export default function BrowseScreen() {
           </Text>
         )}
 
-        {locations.map((location) => {
-          const shelves = listShelves(db, location.id);
-          const rows = shelves.map((shelf) => {
-            // One query per shelf, not two. The whole render body re-runs on
-            // every keystroke in the filter, so a duplicate here is a
-            // duplicate multiplied by the number of shelves on the wall.
-            const all = listBinsForShelf(db, shelf.id);
-            return { shelf, bins: all.filter(matches), total: all.length };
-          });
+        {wall.map(({ location, rows }) => {
+          const shelves = rows.map((r) => r.shelf);
           // A filtered view that keeps every empty heading answers the
           // question with a wall of nothing.
           const visible = filter ? rows.filter((r) => r.bins.length > 0) : rows;
@@ -450,7 +463,7 @@ export default function BrowseScreen() {
         {!empty && filter && (
           <BrowseFilterEmpty
             query={query.trim()}
-            anyMatch={listBins(db).some(matches)}
+            anyMatch={anyMatch}
           />
         )}
       </ScrollView>
