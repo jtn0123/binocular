@@ -31,6 +31,8 @@ const LocationRowSchema = z.object({
   id: z.string().min(1),
   name: z.string(),
   created_at: z.string(),
+  // Pre-v3 backups lack the wall order — default them.
+  sort_order: z.number().int().default(0),
 });
 
 const ShelfRowSchema = z.object({
@@ -40,6 +42,7 @@ const ShelfRowSchema = z.object({
   created_at: z.string(),
   // Pre-D21 backups lack the arrangement fields — default them.
   capacity: z.number().int().nullable().default(null),
+  sort_order: z.number().int().default(0),
 });
 
 const BinRowSchema = z.object({
@@ -166,16 +169,17 @@ export function restoreAll(
   }
   db.withTransactionSync(() => {
     for (const l of dump.locations) {
-      db.runSync('INSERT INTO locations (id, name, created_at) VALUES (?, ?, ?)', [
+      db.runSync('INSERT INTO locations (id, name, created_at, sort_order) VALUES (?, ?, ?, ?)', [
         l.id,
         l.name,
         l.created_at,
+        l.sort_order ?? 0,
       ]);
     }
     for (const s of dump.shelves) {
       db.runSync(
-        'INSERT INTO shelves (id, location_id, name, created_at, capacity) VALUES (?, ?, ?, ?, ?)',
-        [s.id, s.location_id, s.name, s.created_at, s.capacity ?? null],
+        'INSERT INTO shelves (id, location_id, name, created_at, capacity, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+        [s.id, s.location_id, s.name, s.created_at, s.capacity ?? null, s.sort_order ?? 0],
       );
     }
     for (const b of dump.bins) {

@@ -15,7 +15,8 @@ export default function RootLayout() {
       <DiagnosticsRunner />
       <Stack screenOptions={navTheme}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="bin/[id]" options={{ title: 'Bin' }} />
+        {/* Draws its own slim header, per the design. */}
+        <Stack.Screen name="bin/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="review/[scanId]" options={{ title: 'Review scan' }} />
         <Stack.Screen name="capture" options={{ headerShown: false }} />
         <Stack.Screen name="scan-code" options={{ headerShown: false }} />
@@ -25,7 +26,6 @@ export default function RootLayout() {
         <Stack.Screen name="diagnostics" options={{ title: 'Diagnostics' }} />
         <Stack.Screen name="visual-memory" options={{ title: 'Match strength' }} />
         <Stack.Screen name="photo" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
-        <Stack.Screen name="map" options={{ title: 'Map' }} />
         <Stack.Screen name="trash" options={{ title: 'Recently deleted' }} />
         <Stack.Screen name="bin-photo/[id]" options={{ headerShown: false }} />
       </Stack>

@@ -1,11 +1,10 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 
 import type { MapCell } from '@/db/mapView';
 import { colors, mono, sp } from '@/theme';
 
-import { CARD_H, CARD_W } from './metrics';
+import { CARD_H, SLOT_MAX_W } from './metrics';
 
 /**
  * The bin under the finger.
@@ -37,15 +36,6 @@ export function DragGhost({
   return (
     <Animated.View pointerEvents="none" style={[styles.wrap, style]} testID="map-drag-ghost">
       <View style={styles.card}>
-        <View style={styles.head}>
-          <Ionicons name="move" size={14} color={colors.amber} />
-          <Text style={styles.count} numberOfLines={1}>
-            {cell.items === 0 ? 'empty' : `${cell.items} item${cell.items === 1 ? '' : 's'}`}
-          </Text>
-        </View>
-        <Text style={styles.name} numberOfLines={2}>
-          {cell.name}
-        </Text>
         <View style={styles.holder}>
           <View style={styles.tag}>
             <Text style={styles.tagText} numberOfLines={1}>
@@ -53,6 +43,12 @@ export function DragGhost({
             </Text>
           </View>
         </View>
+        <Text style={styles.name} numberOfLines={3}>
+          {cell.name}
+        </Text>
+        <Text style={styles.count} numberOfLines={1}>
+          {cell.items === 0 ? 'empty' : `${cell.items} item${cell.items === 1 ? '' : 's'}`}
+        </Text>
       </View>
     </Animated.View>
   );
@@ -61,7 +57,7 @@ export function DragGhost({
 const styles = StyleSheet.create({
   wrap: { position: 'absolute', left: 0, top: 0, zIndex: 25 },
   card: {
-    width: CARD_W,
+    width: SLOT_MAX_W,
     height: CARD_H,
     backgroundColor: '#2B2F35',
     borderWidth: 1,

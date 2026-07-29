@@ -14,13 +14,14 @@ import {
 } from '../mapView';
 import type { BinRow, LocationRow, ShelfRow } from '../queries';
 
-const loc = (id: string, name: string): LocationRow => ({ id, name, created_at: '' });
+const loc = (id: string, name: string): LocationRow => ({ id, name, created_at: '', sort_order: 0 });
 const shelf = (id: string, locationId: string, name: string, capacity: number | null = null): ShelfRow => ({
   id,
   location_id: locationId,
   name,
   created_at: '',
   capacity,
+  sort_order: 0,
 });
 const bin = (id: string, shelfId: string | null, code: string): BinRow =>
   ({ id, shelf_id: shelfId, short_code: code, name: code, cover_photo_uri: null,

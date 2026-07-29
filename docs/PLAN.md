@@ -368,6 +368,233 @@ of D21 — arranging the wall on the picture of it — was built.
 - [ ] Confirmed on the field-test phone that a 400 ms hold and the drag that
       follows it are usable with gloves on.
 
+## The v3 wall (design import: `Binocular v3.dc.html`)
+
+The map stopped being a scrolling list of locations and became the wall you
+walk along: a location is a **rack**, one rack fills the screen, and the
+strip along the bottom is the whole run of shelving.
+
+### Tasks
+- [x] Migration 011: `locations.sort_order`, `shelves.sort_order`, both
+      backfilled in the order those rows sort today, so an existing workshop
+      opens looking exactly as it did. Alphabetical was fine for a list and
+      wrong for a picture — "Top, Upper, Lower, Bottom" sorts to a rack drawn
+      upside down. Backups round-trip both; pre-v3 backups import at 0.
+- [x] `mapView.ts` rack helpers, all pure: the `"R1 · Door"` name convention
+      (`rackCodeOf` / `rackLabelOf` / `composeRackName` / `nextRackCode`),
+      `areaFill`, `rackRoom`, `openRowOf`, `overflowTarget`, `planMultiDrop`,
+      and `withTray` — the tray is fixed chrome now, so it has to exist as a
+      real row even when empty or it is drawn but cannot be dropped into.
+- [x] `app/(tabs)/map.tsx` rebuilt: rack header with in-place rename (the
+      *label* only — the code is on a printed sticker), lens chips, find,
+      edit mode with COLUMNS/ROWS steppers, hits bar naming the racks the
+      other matches are on, side rails that page at rest and SEND with a bin
+      in hand, unshelved tray drawer, rack scrubber, whole-wall sheet with
+      rack reorder/rename/remove/add.
+- [x] Multi-select: hold a bin › *Select more* › pick › *Move them* — one
+      transaction, one undo. Carrying them one at a time is the thing that
+      makes re-shelving take all afternoon.
+- [x] Rack picker for an ambiguous SEND: one rack that way just goes (the
+      re-home confirm still asks), two or more and it asks rather than
+      guessing, naming the shelf and slot each would land on. Choosing there
+      *is* the confirm, so it does not ask twice.
+- [x] Over-capacity shelves offer `move 1 → <shelf>` instead of only
+      complaining; the tray is the fallback only when the rack is packed.
+- [x] `mapViewState.ts`: rack, lens and tray state survive leaving the
+      screen. Stored by rack *index*, not id — an id strands the view on a
+      rack that has since come off the wall.
+- [x] Map settings (drag, slot ticks) reachable from the map itself, not
+      only from Settings: the moment you need the drag switch is the moment
+      the map is misbehaving under your thumb.
+- [x] The drag is scoped to the rack on screen plus the tray. Board frames
+      live in refs keyed by shelf id and outlive the rack that reported them,
+      so measuring every area let a drop on rack 2 land against rack 1's last
+      known layout. The tray registers a window frame, so it takes a drag as
+      well as a tap.
+- [x] Removing a rack or deleting a shelf opens the tray its bins fell into —
+      safe in the database and nowhere on the screen is the one impression
+      §11 must never give.
+- [x] Browse redrawn to match: filter, rack › shelf (fill, over) › bin rows
+      carrying item count and time since the last scan. Shelf editing shares
+      the map's `ShelfSheet`, with bulk-create and poster printing passed in
+      as extras.
+- [x] Bin detail: a place row that shows the bin on the map, *Add item* and
+      *Audit* as the two jobs that stay on screen, everything else one tap
+      deeper in an overflow sheet, and Select on the item list's own header.
+
+### Not carried over from the mock, deliberately
+- **The "MAP EDIT STILL ON" bar on other tabs.** Edit mode is local to the
+  map screen here rather than global state, and the edit header — with its
+  Done button — is the first thing you see on coming back.
+
+### Exit criteria
+- [x] Arrangement, rack order and rack shape survive a reopen (asserted
+      against the database, not the render tree).
+- [x] Blueprint §11 invariants: no AI writes, no percentages, providers
+      untouched, offline-only, zod at the backup and preference boundaries,
+      migrations append-only.
+- [x] Verified live on the Android emulator: edit mode and both steppers,
+      add-rack (pages to it), rail paging, drag reorder (persisted, undone),
+      drag-to-rail SEND with the §8.5 confirm, resting on a rail paging the
+      wall mid-drag, the whole-wall sheet, Browse and bin detail. Two bugs
+      only a device could show were found and fixed here: paging mid-drag
+      left the frozen drop geometry describing the previous rack (now
+      re-frozen after the page), and an unmounted rail's window frame kept
+      catching drops (now forgotten on unmount).
+- [x] Driven end to end on the emulator as a UX pass, which found six things
+      no test could see. The load-bearing one: **a hold that never moved put
+      the bin straight back down.** The pan activates on the hold itself, the
+      edge auto-scroll had already resolved the slot under the motionless
+      finger, and `planDrop` correctly answered "this changes nothing" — so
+      lift-and-place, the path that must always work and the only one a
+      screen reader drives, did nothing whenever the drag was on. A hold that
+      never travels is now a lift, guarded before every other branch.
+      Also fixed: the hits bar claimed all the leftover height (a horizontal
+      ScrollView in a flex column), the undo snackbar covered the tray and
+      the rack scrubber for six seconds after every move, the whole-wall
+      thumbnails stacked one per row on a 360 dp phone, the rack picker never
+      said which racks it was offering, `summarize` said "2 shelfves", and
+      the root stack still declared a `map` route that moved into `(tabs)`.
+- [x] A second pass on the two the first one left. **Bins kept a dotted
+      outline after being dragged**: on Android a view that has rendered
+      `borderStyle: 'dashed'` keeps it when the next style merely omits the
+      key, so the diff has nothing to send. The style object was right and
+      only the device was wrong, which is why it survived a snapshot. Every
+      base style a dashed variant sits on now restates `solid` — the bin
+      card, the rack rail, the banner, and the wall-sheet cells, all four of
+      which toggle. **"+ RACK" scrolled off the wall**: it was the last
+      segment of a strip that already overflows at three racks, so the only
+      way to add a rack left the screen exactly when you had enough racks to
+      want another. Pinning it outside the scroller kept it reachable but
+      sheared the last rack in half behind it; see the rebuilt strip below for
+      what the design actually does.
+- [x] **The rack panel rebuilt to the design, having first shipped a version
+      that only matched it from a distance.** Everything around the panel was
+      right and the panel itself — the hero of the screen — was the previous
+      version's: fixed 118pt cards in a sideways-scrolling strip on a flat
+      ground. Five structural corrections: the well is pegboard (a tiled dot
+      grid; RN has no CSS gradients, so it ships as a 14pt image), shelves
+      spread down the panel instead of stacking at the top, cells *share* the
+      row (`flex: 1 1 0` capped at 76pt, centred, no sideways scroll), the
+      card puts its code holder on top with the name and count under it and
+      carries no photo, and the plank is a 4pt ticked bar rather than a
+      chunky ledge. The panel is also its own scroller, as in the design, so
+      a tall rack scrolls inside its recess while the rails, tray and
+      scrubber stay put. `slotMidlines` takes a row width now instead of a
+      card constant, so the drag follows the flexible slots.
+- [x] **The chrome, which was still the navigator's.** Every tab was wearing
+      a stock header — the same title slab with the same settings gear —
+      where the design gives each tab a 54pt bar of its own with its *own*
+      right-hand action: Home says "Binocular" and offers Settings, Browse
+      offers a new bin in amber, Scan offers nothing, and the map has no
+      title bar at all. That last one is not cosmetic: the map is a picture
+      of a wall, and the header was costing it half a shelf. `ScreenHeader`
+      draws the bar and pads the status-bar inset itself, so 54pt stays 54pt
+      on every device. The tab bar is the design's too — 56pt, 21pt icons
+      over 10pt labels, Home's magnifier filling in when you stand on it —
+      plus the bottom inset, which a flat 56 was clipping the labels with.
+      Bin detail draws its own too — the design's 54pt bar with a back
+      chevron and a 17pt title, where the navigator was spending 90pt on a
+      24pt one that truncated the bin's name. The screens the design does not
+      draw keep the stack header, brought to the same 17pt so they do not
+      read as a different app.
+- [x] **A line-by-line pass over the map against the design source**, which
+      turned up three more:
+      **There is no idle banner.** `idleTitle` is computed in the mock and
+      never rendered — at rest the design shows toolbar, panel, tray,
+      scrubber and nothing else. A standing line saying "3 racks · 10
+      shelves / drag a bin to rearrange" was costing the wall a whole shelf
+      to explain that the wall is a wall.
+      **The carrying bars float.** Drag, held and pick are
+      `position: absolute; top: 58` in the design; only find, no-hits and
+      missing are in the flow. Mine pushed the panel down, so picking a bin
+      up moved the row you were aiming at. `MapBanner` is now two components
+      — `MapCarryBar` over the panel, `MapFindBar` in the flow — and the
+      drag variant is `pointerEvents="none"`, since a bar that swallowed the
+      finger would cancel the move it describes.
+      **A rack code was being invented outside the map.** The design splits
+      `"R1 · Door"` into code and label only where it needs the halves apart
+      — the edit header, the scrubber, the wall's edit mode. Everywhere else
+      it prints `locations.name` as stored. Browse and the wall's plain mode
+      were synthesising `"R1 · GARAGE"` for a rack the user had simply called
+      "Garage", putting a code on the screen that is nowhere in the data.
+      The toolbar went back to the design's metrics at the same time; the
+      "Lens" caption is dropped, and only that, because at 360pt the caption
+      plus three labels plus Find plus Edit do not fit and it is the one
+      element whose loss costs neither a control nor a legible word.
+- [x] Tests for all of it, each checked against the bug it exists for by
+      reverting the fix and watching it fail: the dashed-border restatements,
+      the sharing scrubber, the hits bar's height, the picker's subtitle, the
+      plural of "shelf", and a structural test that no `<Stack.Screen>` names
+      a route the filesystem does not have.
+- [x] **Swipe to page between racks**, having first left it out over the
+      crash. The thing that killed the process on the field phone was a
+      detector *per cell* — forty of them, each driving its own worklets. This
+      is one, raced against the drag's one, and the count does not grow with
+      the wall. The race has a clear winner rather than being a coin toss
+      because the two are recognised by different evidence: the drag wants a
+      400 ms hold that has not moved, the swipe wants 24pt of travel that has
+      not waited. It is also unambiguous inside the panel in a way it would
+      not have been before v3 — shelves no longer scroll sideways, so
+      horizontal travel over the wall means exactly one thing, and
+      `failOffsetY` hands anything steeper to the panel's own scroll. The
+      panel follows the finger at 0.55x to 90pt, commits at 60pt or a flick,
+      and barely gives at the ends of the wall so it answers "nothing that
+      way" instead of promising a rack. Thresholds live in `rackSwipe.ts` as
+      plain worklets so they are testable without a device; the hook is the
+      gesture and nothing else.
+- [x] **The scrubber rebuilt to share its width instead of queueing for it.**
+      The design's strip is a flex row — `flex:1 1 0; min-width:40px` per
+      rack, `flex:2 1 auto; min-width:132px` for the one you are on,
+      `flex:none` for "+ RACK" — so the whole wall is on screen at a glance,
+      which is the only reason to draw a wall-length strip. Mine gave every
+      segment its natural width in a scroller, which is what made the wall run
+      off the end at three racks and forced "+ RACK" outside it. The button is
+      back inline where the design has it, and the strip scrolls only as the
+      escape hatch `overflow-x:auto` is there: `flexGrow` on the content
+      container lets it stretch to the strip when it fits. On a long wall it
+      keeps the rack you are on in view, and while editing it keeps the button
+      with it, so adding a rack never leaves you looking at the rack you just
+      made and no way back to make another.
+- [x] Verified live again for both: swipe pages the wall in each direction,
+      refuses at both ends with the damped give, ignores a 33pt nudge and a
+      vertical drag, and — the regression that mattered — a 400 ms hold still
+      lifts a bin, arms the shelves and lands the §8.5 confirm, so racing the
+      two gestures did not cost the drag. "+ RACK" adds a rack, pages to it,
+      and stays on screen while it does.
+- [x] **A coverage audit before merge**, rather than a count of tests. Four
+      things this branch introduced were carrying real risk and no assertions,
+      and each is now covered and mutation-checked:
+      **`useMapDrag` (21% → 85%, 2% → 70% of branches).** The file the
+      lift-and-place regression lived in. Its gesture callbacks are now played
+      directly against measurements the screen would have reported — finger
+      down, moved or not, finger up — so "a hold that never travelled is a
+      lift" is asserted rather than remembered. Deleting that guard turns two
+      tests red; so does setting the slop to zero, and so does letting a
+      dismounted rail keep its frame.
+      **`useRackEdit` (55% → 95%).** Taking a rack off the wall is the one
+      operation here that deletes a row someone's inventory is filed against,
+      it sits behind a native `Alert` the screen test cannot reach, and it had
+      no test at all. Both confirm branches are now driven, including the §11
+      guarantee that the bins land in the tray and the tray opens to show them.
+      **Migration 011's backfill.** An existing workshop has no wall order to
+      preserve, so the backfill has to reproduce the alphabetical one it was
+      already being drawn in — otherwise someone who has walked the same wall
+      for months opens the app after an update and finds it rearranged, with
+      no undo and no record of the old order. Backfilling by insertion order
+      instead, or numbering shelves across the wall rather than within a rack,
+      now fails.
+      **The slot geometry and `scannedAgo` (both 0% → 100%).** `slotMidlines`
+      is what the drag hit-tests against: drawing cards centred while
+      computing midlines flush left would land every drop one slot off and
+      look perfectly correct in a snapshot.
+- [ ] Confirmed on the field-test phone that paging, the rails, the swipe and
+      the tray behave with gloves on. The swipe is the new unknown here: it is
+      the first thing on this screen a mitten can trigger by accident.
+- [ ] **Blueprint §4 needs `locations.sort_order` and `shelves.sort_order`
+      added to the schema listing, and D21 needs a line about racks.** Both
+      are `blueprint:` commits and are deliberately not made here.
+
 ## Diagnostics gaps found while field-testing the map
 
 ### Tasks

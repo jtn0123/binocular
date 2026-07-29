@@ -10,6 +10,7 @@ import {
   getBin,
   insertItem,
   listBinsForShelf,
+  listLocations,
   listShelves,
   setShelfCapacity,
   type BinRow,
@@ -50,7 +51,9 @@ jest.mock('react-native-gesture-handler', () => {
   const chain: Record<string, unknown> = {};
   for (const method of [
     'activateAfterLongPress',
+    'activeOffsetX',
     'enabled',
+    'failOffsetY',
     'maxPointers',
     'shouldCancelWhenOutside',
     'onBegin',
@@ -62,10 +65,19 @@ jest.mock('react-native-gesture-handler', () => {
     chain[method] = () => chain;
   }
   return {
-    Gesture: { Pan: () => chain },
+    // `Race` is how the drag and the swipe share the surface; here it only has
+    // to hand back something a detector will accept.
+    Gesture: { Pan: () => chain, Race: () => chain },
     GestureDetector: ({ children }: { children: React.ReactNode }) => children,
   };
 });
+
+// Tab screens draw their own title bar, which pads the status-bar inset. In
+// the app expo-router provides the safe-area context; a screen rendered on
+// its own has none, so it gets zero insets here.
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
 
 // `mock`-prefixed so jest's module factory may close over them.
 const mockPush = jest.fn();
@@ -144,6 +156,19 @@ describe('the map screen, driven by presses', () => {
 
       await fireEvent(cell, 'longPress');
       expect(screen.getByTestId('map-cancel-move')).toBeTruthy();
+    });
+
+    it('a lifted bin stays lifted — the map never puts it back down for you', async () => {
+      // On a device the pan activates on the hold itself, so releasing used
+      // to run the whole drag: the edge auto-scroll had already resolved the
+      // slot under the motionless finger, planDrop correctly said "this
+      // changes nothing", and the bin went straight back on the shelf. The
+      // visible symptom was that holding a bin did nothing at all, which
+      // silently removed lift-and-place whenever the drag was switched on.
+      const screen = await renderMap();
+      await fireEvent(screen.getByTestId('map-cell-B-001'), 'longPress');
+      expect(screen.getByTestId('map-cancel-move')).toBeTruthy();
+      expect(screen.getByText(/Moving B-001/)).toBeTruthy();
     });
 
     it('tapping the held bin puts it back down', async () => {
@@ -351,26 +376,42 @@ describe('the map screen, driven by presses', () => {
 
     it('closing the search puts the map back to idle', async () => {
       const screen = await search('screw');
-      await fireEvent.press(screen.getByTestId('map-search-close'));
+      // The Find chip is a toggle now: the same control opens and closes it.
+      await fireEvent.press(screen.getByTestId('map-search-toggle'));
       expect(screen.queryByTestId('map-search-input')).toBeNull();
       expect(screen.queryByText(/B-002 · Screws/)).toBeNull();
     });
   });
 
-  describe('the whole-wall strip', () => {
+  describe('the whole wall', () => {
     it('is out of the way until asked for', async () => {
       const screen = await renderMap();
-      expect(screen.queryByTestId('map-wall-strip')).toBeNull();
+      expect(screen.queryByTestId('wall-rack-R1')).toBeNull();
 
       await fireEvent.press(screen.getByTestId('map-wall-toggle'));
-      expect(screen.getByTestId('map-wall-strip')).toBeTruthy();
+      expect(screen.getByTestId('wall-rack-R1')).toBeTruthy();
     });
 
-    it('draws a strip per shelf, including the one you are not looking at', async () => {
+    it('draws every rack, and says which one you are standing at', async () => {
+      const shed = createLocation(db, { name: 'R2 · Shed' });
+      createShelf(db, { locationId: shed.id, name: 'Shed top' });
       const screen = await renderMap();
       await fireEvent.press(screen.getByTestId('map-wall-toggle'));
-      expect(screen.getByTestId(`map-wall-${shelfA.id}`)).toBeTruthy();
-      expect(screen.getByTestId(`map-wall-${shelfB.id}`)).toBeTruthy();
+      expect(screen.getByTestId('wall-rack-R1')).toBeTruthy();
+      expect(screen.getByTestId('wall-rack-R2')).toBeTruthy();
+      expect(screen.getByLabelText(/Rack R1, Garage, 3 of 3 slots used/)).toBeTruthy();
+    });
+
+    it('tapping a rack pages the map to it and closes', async () => {
+      const shed = createLocation(db, { name: 'R2 · Shed' });
+      createShelf(db, { locationId: shed.id, name: 'Shed top' });
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId('map-wall-toggle'));
+      await fireEvent.press(screen.getByTestId('wall-rack-R2'));
+      expect(screen.queryByTestId('wall-rack-R2')).toBeNull();
+      // The wall shows one rack at a time, so R1's bins are no longer drawn.
+      expect(screen.queryByTestId('map-cell-B-001')).toBeNull();
+      expect(screen.getByText('Shed top')).toBeTruthy();
     });
   });
 
@@ -440,6 +481,255 @@ describe('the map screen, driven by presses', () => {
       const screen = await renderMap();
       await fireEvent.press(screen.getByTestId(`map-edit-shelf-${shelfB.id}`));
       expect(screen.getByText(/moves its 1 bin to the unshelved tray/)).toBeTruthy();
+    });
+  });
+
+  /**
+   * The v3 wall: one rack at a time, with the scrubber and the side rails as
+   * the ways along it. Every assertion here is against the database or the
+   * controls, never the arrangement the screen happens to be holding.
+   */
+  describe('the wall of racks', () => {
+    /** A second rack, one shelf, one bin — enough to page between. */
+    const addShed = () => {
+      const shed = createLocation(db, { name: 'R2 · Shed' });
+      const top = createShelf(db, { locationId: shed.id, name: 'Shed top', capacity: 4 });
+      const bin = createBin(db, { name: 'Nails', shortCode: 'B-004', shelfId: top.id });
+      return { shed, top, bin };
+    };
+
+    it('draws one rack at a time, not the whole wall stacked up', async () => {
+      addShed();
+      const screen = await renderMap();
+      expect(screen.getByTestId('map-cell-B-001')).toBeTruthy();
+      expect(screen.queryByTestId('map-cell-B-004')).toBeNull();
+    });
+
+    it('the scrubber pages to another rack', async () => {
+      addShed();
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId('map-rack-R2'));
+      expect(screen.getByTestId('map-cell-B-004')).toBeTruthy();
+      expect(screen.queryByTestId('map-cell-B-001')).toBeNull();
+    });
+
+    it('a side rail walks you along the wall when your hands are empty', async () => {
+      addShed();
+      const screen = await renderMap();
+      expect(screen.queryByTestId('map-rail-prev')).toBeNull();
+      await fireEvent.press(screen.getByTestId('map-rail-next'));
+      expect(screen.getByTestId('map-cell-B-004')).toBeTruthy();
+      expect(screen.getByTestId('map-rail-prev')).toBeTruthy();
+    });
+
+    it('a rail with a bin in hand sends it to the next rack, after confirming', async () => {
+      const { top } = addShed();
+      const screen = await renderMap();
+      await fireEvent(screen.getByTestId('map-cell-B-001'), 'longPress');
+      await fireEvent.press(screen.getByTestId('map-rail-next'));
+
+      // Leaving the rack is a re-home, so the §8.5 confirm still asks.
+      expect(screen.getByTestId('map-move-confirm')).toBeTruthy();
+      expect(getBin(db, bins[0].id)?.shelf_id).toBe(shelfA.id);
+
+      await fireEvent.press(screen.getByTestId('map-move-confirm-go'));
+      expect(getBin(db, bins[0].id)?.shelf_id).toBe(top.id);
+    });
+
+    it('asks which rack when the direction alone cannot say', async () => {
+      addShed();
+      const loft = createLocation(db, { name: 'R3 · Loft' });
+      createShelf(db, { locationId: loft.id, name: 'Loft top', capacity: 4 });
+      const screen = await renderMap();
+
+      await fireEvent(screen.getByTestId('map-cell-B-001'), 'longPress');
+      await fireEvent.press(screen.getByTestId('map-rail-next'));
+      expect(screen.getByTestId('rack-pick-sheet')).toBeTruthy();
+      expect(screen.getByTestId('rack-pick-R2')).toBeTruthy();
+      expect(screen.getByTestId('rack-pick-R3')).toBeTruthy();
+      // Nothing is written until one is chosen.
+      expect(getBin(db, bins[0].id)?.shelf_id).toBe(shelfA.id);
+
+      await fireEvent.press(screen.getByTestId('rack-pick-R3'));
+      expect(getBin(db, bins[0].id)?.shelf_id).not.toBe(shelfA.id);
+    });
+
+    it('says where the other matches are rather than looking empty-handed', async () => {
+      addShed();
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId('map-search-toggle'));
+      await fireEvent.changeText(screen.getByTestId('map-search-input'), 'Nails');
+      expect(screen.getByTestId('map-hits-bar')).toBeTruthy();
+      expect(screen.getByTestId('map-hit-R2')).toBeTruthy();
+
+      await fireEvent.press(screen.getByTestId('map-hit-R2'));
+      expect(screen.getByTestId('map-cell-B-004')).toBeTruthy();
+    });
+  });
+
+  describe('shaping a rack', () => {
+    const enterEdit = async () => {
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId('map-edit-toggle'));
+      return screen;
+    };
+
+    it('the columns stepper sizes every shelf in the rack at once', async () => {
+      const screen = await enterEdit();
+      await fireEvent.press(screen.getByTestId('rack-cols-up'));
+      const shelves = listShelves(db, shelfA.location_id);
+      expect(shelves.map((s) => s.capacity)).toEqual([3, 3]);
+    });
+
+    it('never shrinks a shelf below the bins already standing on it', async () => {
+      // The number describes the shelf; shrinking past its contents would
+      // only manufacture an "over" warning about something nobody did.
+      setShelfCapacity(db, shelfA.id, 2);
+      setShelfCapacity(db, shelfB.id, 2);
+      const screen = await enterEdit();
+      await fireEvent.press(screen.getByTestId('rack-cols-down'));
+      expect(listShelves(db, shelfA.location_id).map((s) => s.capacity)).toEqual([2, 1]);
+    });
+
+    it('the rows stepper adds a shelf to the bottom of the rack', async () => {
+      const screen = await enterEdit();
+      await fireEvent.press(screen.getByTestId('rack-rows-up'));
+      const shelves = listShelves(db, shelfA.location_id);
+      expect(shelves.map((s) => s.name)).toEqual(['Shelf A', 'Shelf B', 'New shelf']);
+    });
+
+    it('the rows stepper only ever removes an empty shelf', async () => {
+      const screen = await enterEdit();
+      // Both shelves hold bins, so the control is dead rather than dangerous.
+      expect(screen.getByTestId('rack-rows-down')).toBeDisabled();
+      expect(listShelves(db, shelfA.location_id)).toHaveLength(2);
+    });
+
+    it("a shelf's own remove button takes that shelf off, not the last empty one", async () => {
+      // The stepper works from the bottom up; a button attached to a shelf
+      // has to mean the shelf it is attached to, or edit mode silently
+      // deletes the wrong furniture.
+      const top = createShelf(db, { locationId: shelfA.location_id, name: 'Empty top' });
+      const bottom = createShelf(db, { locationId: shelfA.location_id, name: 'Empty bottom' });
+      const screen = await enterEdit();
+      await fireEvent.press(screen.getByLabelText('Remove Empty top'));
+
+      const left = listShelves(db, shelfA.location_id).map((s) => s.id);
+      expect(left).not.toContain(top.id);
+      expect(left).toContain(bottom.id);
+    });
+
+    it('a rack can be renamed without renumbering the wall', async () => {
+      const screen = await enterEdit();
+      await fireEvent.press(screen.getByTestId('rack-rename'));
+      await fireEvent.changeText(screen.getByTestId('rack-rename-input'), 'Back wall');
+      await fireEvent(screen.getByTestId('rack-rename-input'), 'submitEditing');
+      // "Garage" had no code of its own, so it takes the positional one.
+      expect(listLocations(db)[0].name).toBe('R1 · Back wall');
+    });
+
+    it('adding a rack puts a whole one up and pages to it', async () => {
+      const screen = await enterEdit();
+      await fireEvent.press(screen.getByTestId('map-add-rack'));
+      const added = listLocations(db).find((l) => l.name.startsWith('R2'));
+      expect(added).toBeTruthy();
+      expect(listShelves(db, added!.id).map((s) => s.name)).toEqual([
+        'Top',
+        'Upper',
+        'Lower',
+        'Bottom',
+      ]);
+      expect(screen.queryByTestId('map-cell-B-001')).toBeNull();
+    });
+  });
+
+  describe('moving a stack of bins', () => {
+    it('is reachable from a lifted bin, and picks it up as the first of the stack', async () => {
+      const screen = await renderMap();
+      await fireEvent(screen.getByTestId('map-cell-B-001'), 'longPress');
+      await fireEvent.press(screen.getByTestId('map-select-more'));
+
+      // Picking, not holding: the next tap on a bin means "also this one".
+      expect(screen.queryByTestId('map-cancel-move')).toBeNull();
+      expect(screen.getByText('1 bin picked')).toBeTruthy();
+      await fireEvent.press(screen.getByTestId('map-cell-B-002'));
+      expect(screen.getByText('2 bins picked')).toBeTruthy();
+    });
+
+    it('picks several and lands them together, in one undo', async () => {
+      setShelfCapacity(db, shelfB.id, 4);
+      const screen = await renderMap();
+
+      await fireEvent(screen.getByTestId('map-cell-B-001'), 'longPress');
+      await fireEvent.press(screen.getByTestId('map-select-more'));
+      await fireEvent.press(screen.getByTestId('map-cell-B-002'));
+      await fireEvent.press(screen.getByTestId('map-move-picked'));
+      await fireEvent.press(screen.getByTestId(`map-gap-${shelfB.id}-0`));
+
+      expect(listBinsForShelf(db, shelfB.id).map((b) => b.short_code)).toEqual([
+        'B-003',
+        'B-001',
+        'B-002',
+      ]);
+      expect(listBinsForShelf(db, shelfA.id)).toHaveLength(0);
+
+      // One move, so one undo — not two that have to be pressed in order.
+      await fireEvent.press(screen.getByTestId('map-undo'));
+      expect(listBinsForShelf(db, shelfA.id).map((b) => b.short_code)).toEqual([
+        'B-001',
+        'B-002',
+      ]);
+    });
+  });
+
+  describe('the unshelved tray', () => {
+    it('stays shut until there is a reason to open it', async () => {
+      const loose = createBin(db, { name: 'Loose', shortCode: 'B-009', shelfId: null });
+      const screen = await renderMap();
+      expect(screen.queryByTestId(`map-cell-${loose.short_code}`)).toBeNull();
+
+      await fireEvent.press(screen.getByTestId('map-tray-toggle'));
+      expect(screen.getByTestId('map-cell-B-009')).toBeTruthy();
+    });
+
+    it('opens itself when bins land in it, so they never look deleted', async () => {
+      // §11: inventory is never silently lost — including from the screen.
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId(`map-edit-shelf-${shelfB.id}`));
+      await fireEvent.press(screen.getByTestId('map-sheet-delete-shelf'));
+      expect(screen.getByTestId('map-cell-B-003')).toBeTruthy();
+    });
+  });
+
+  describe('an over-full shelf', () => {
+    it('offers the way out instead of only complaining', async () => {
+      setShelfCapacity(db, shelfA.id, 1);
+      setShelfCapacity(db, shelfB.id, 4);
+      const screen = await renderMap();
+      expect(screen.getByText(/2\/1 — over/)).toBeTruthy();
+
+      await fireEvent.press(screen.getByTestId(`map-over-fix-${shelfA.id}`));
+      // Crossing shelves, so it still asks before re-homing.
+      await fireEvent.press(screen.getByTestId('map-move-confirm-go'));
+      expect(listBinsForShelf(db, shelfA.id).map((b) => b.short_code)).toEqual(['B-001']);
+      expect(getBin(db, bins[1].id)?.shelf_id).toBe(shelfB.id);
+    });
+  });
+
+  describe('arranging the wall itself', () => {
+    it('nudging a rack along the wall is persisted, not just drawn', async () => {
+      createLocation(db, { name: 'R2 · Shed' });
+      createShelf(db, {
+        locationId: listLocations(db)[1].id,
+        name: 'Shed top',
+        capacity: 4,
+      });
+      const screen = await renderMap();
+      await fireEvent.press(screen.getByTestId('map-wall-toggle'));
+      await fireEvent.press(screen.getByTestId('wall-edit-toggle'));
+      await fireEvent.press(screen.getByTestId('wall-move-right-R1'));
+
+      expect(listLocations(db).map((l) => l.name)).toEqual(['R2 · Shed', 'Garage']);
     });
   });
 

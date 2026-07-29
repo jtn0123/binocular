@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { BinThumb } from '@/components/BinThumb';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { CodeTag } from '@/components/CodeTag';
 import { QrModal } from '@/components/QrModal';
 import { useDb } from '@/db/DbProvider';
@@ -235,7 +236,17 @@ export default function HomeScreen() {
   const scansWaiting = scans.review + scans.working + scans.failed;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.screen}>
+      <ScreenHeader
+        title="Binocular"
+        action={{
+          icon: 'settings-outline',
+          label: 'Settings',
+          onPress: () => router.push('/settings'),
+          testID: 'home-settings',
+        }}
+      />
+      <View style={styles.container}>
       <View style={styles.searchWrap}>
         <Ionicons name="search" size={17} color={colors.textFaint} />
         <TextInput
@@ -471,12 +482,14 @@ export default function HomeScreen() {
         </>
       )}
       <QrModal bin={qrBin} onClose={() => setQrBin(null)} />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, padding: sp(4), gap: sp(3) },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, paddingHorizontal: sp(4), paddingBottom: sp(4), gap: sp(3) },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',

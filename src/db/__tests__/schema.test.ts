@@ -151,6 +151,104 @@ describe('migration runner', () => {
     ).toBeNull();
   });
 
+  /**
+   * Migration 011, the one that gave the wall an order.
+   *
+   * An existing workshop has no wall order to preserve — it was drawn
+   * alphabetically — so the backfill has to reproduce exactly that, or someone
+   * who has walked the same wall for months opens the app after an update and
+   * finds their racks rearranged. There is no undo for that and no way to tell
+   * them what the old order was.
+   */
+  describe('migration 011, on a workshop that already exists', () => {
+    /** A database stopped at version 10, before the wall had an order. */
+    const atVersion10 = () => {
+      db.withTransactionSync(() => {
+        for (let i = 0; i < 10; i++) db.execSync(MIGRATIONS[i]);
+        db.execSync('PRAGMA user_version = 10');
+      });
+    };
+    const location = (id: string, name: string) =>
+      db.runSync("INSERT INTO locations (id, name, created_at) VALUES (?, ?, '2026-01-01T00:00:00Z')", [
+        id,
+        name,
+      ]);
+    const shelf = (id: string, locationId: string, name: string) =>
+      db.runSync(
+        "INSERT INTO shelves (id, location_id, name, created_at) VALUES (?, ?, ?, '2026-01-01T00:00:00Z')",
+        [id, locationId, name],
+      );
+    const orderOf = (table: 'locations' | 'shelves') =>
+      db
+        .getAllSync<{ name: string }>(`SELECT name FROM ${table} ORDER BY sort_order, name`)
+        .map((r) => r.name);
+
+    it('leaves the wall in the order it was already being drawn in', () => {
+      atVersion10();
+      // Inserted out of order on purpose: insertion order is what a naive
+      // backfill would capture, and it is not what was on the screen.
+      location('l2', 'Shed');
+      location('l1', 'Garage');
+      location('l3', 'Workshop');
+
+      runMigrations(db);
+
+      expect(orderOf('locations')).toEqual(['Garage', 'Shed', 'Workshop']);
+      expect(
+        db
+          .getAllSync<{ sort_order: number }>('SELECT sort_order FROM locations ORDER BY sort_order')
+          .map((r) => r.sort_order),
+      ).toEqual([0, 1, 2]);
+    });
+
+    it('numbers shelves within their own rack, not across the wall', () => {
+      // Shelves are ordered inside a rack. Numbering them globally would put
+      // rack two's top shelf below rack one's bottom one.
+      atVersion10();
+      location('l1', 'Garage');
+      location('l2', 'Shed');
+      shelf('s2', 'l1', 'B top');
+      shelf('s1', 'l1', 'A top');
+      shelf('s3', 'l2', 'A shed');
+
+      runMigrations(db);
+
+      const rows = db.getAllSync<{ id: string; sort_order: number }>(
+        'SELECT id, sort_order FROM shelves ORDER BY location_id, sort_order',
+      );
+      expect(rows).toEqual([
+        { id: 's1', sort_order: 0 },
+        { id: 's2', sort_order: 1 },
+        { id: 's3', sort_order: 0 },
+      ]);
+    });
+
+    it('gives two racks with the same name a stable order rather than a tie', () => {
+      // Nothing stops two racks being called the same thing. A tie in the
+      // backfill would let SQLite return them in either order on each read,
+      // so the wall would shuffle between launches.
+      atVersion10();
+      location('l2', 'Bench');
+      location('l1', 'Bench');
+
+      runMigrations(db);
+
+      const orders = db
+        .getAllSync<{ sort_order: number }>('SELECT sort_order FROM locations')
+        .map((r) => r.sort_order)
+        .sort();
+      expect(orders).toEqual([0, 1]);
+    });
+
+    it('is safe to run twice, as the runner may well do', () => {
+      atVersion10();
+      location('l1', 'Garage');
+      runMigrations(db);
+      expect(() => runMigrations(db)).not.toThrow();
+      expect(getSchemaVersion(db)).toBe(MIGRATIONS.length);
+    });
+  });
+
   it('keeps the rebuilt FTS triggers in step on update and delete', () => {
     runMigrations(db);
     db.runSync(

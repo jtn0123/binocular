@@ -41,25 +41,48 @@ export function describeRow(areas: readonly MapArea[], row: MapRow): string {
   return area ? `${area.name} › ${row.name}` : row.name;
 }
 
-/** What the idle banner says the map is: the places, and how many shelves. */
-export function summarize(areas: readonly MapArea[], total: number, busy: boolean): string {
-  if (busy) return `${total} bins`;
-  const places = areas.map((a) => a.name).join(', ');
-  const shelves = areas.reduce((n, a) => n + a.rows.filter((r) => r.shelfId).length, 0);
-  return `${places} — ${shelves} shelf${shelves === 1 ? '' : 'ves'}`;
-}
-
-/** The footer's one-line instruction, which depends on what is switched on. */
-export function footHint(busy: boolean, dragEnabled: boolean): string {
-  if (busy) return '';
-  return dragEnabled
-    ? ' Hold a bin and drag it, or hold and tap where it goes.'
-    : ' Hold a bin to lift it, then tap where it goes.';
-}
-
-/** "Moving B-014 · Grout & spacers" — what the held banner announces. */
-export function heldLabel(areas: readonly MapArea[], held: string | null): string {
+/**
+ * "Moving B-014 · Grout & spacers" — what the held banner announces. A stack
+ * says how many rather than naming one of them, because naming the first and
+ * silently carrying four is how a group move surprises someone.
+ */
+export function heldLabel(
+  areas: readonly MapArea[],
+  held: string | null,
+  carriedCount = 1,
+): string {
   if (!held) return '';
+  if (carriedCount > 1) return `Moving ${carriedCount} bins together`;
   const found = locateMany(areas, [held])[0];
   return found ? `Moving ${found.cell.code} · ${found.cell.name}` : '';
+}
+
+/** How a lifted bin — or a lifted stack — can be put down. */
+export function heldHint(carriedCount: number, canSend: boolean): string {
+  if (carriedCount > 1) return 'Tap a slot and they all land there, in this order.';
+  return canSend
+    ? 'Tap a bin to slide in front of it, a slot to drop there, or a side rail to send it to another rack.'
+    : 'Tap a bin to slide in front of it, or a slot to drop there.';
+}
+
+/**
+ * What releasing on a side rail would do. Named cases rather than one
+ * sentence with holes in it: "full" and "several racks that way" lead to
+ * different actions, and the banner is the only place that says so before
+ * the sheet appears.
+ */
+export function sendHint(input: {
+  code: string;
+  label: string;
+  /** Racks in that direction — more than one means the picker will ask. */
+  pool: number;
+  full: boolean;
+}): string {
+  if (input.pool === 0) return '';
+  if (input.pool > 1) {
+    return `Release to choose a rack — ${input.code} or further along · hold to page there`;
+  }
+  return input.full
+    ? `${input.code} is full — release anyway and the shelf reads over · hold to page there`
+    : `Release to send it to ${input.code} · ${input.label} · hold to page there`;
 }

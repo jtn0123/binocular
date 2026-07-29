@@ -1,24 +1,25 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Link, Tabs } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useDb } from '@/db/DbProvider';
 import { countAttentionScans } from '@/db/queries';
-import { colors, navTheme } from '@/theme';
+import { colors } from '@/theme';
 
-function SettingsGear() {
-  return (
-    <Link href="/settings" asChild>
-      <Pressable style={{ paddingHorizontal: 16 }} accessibilityLabel="Settings">
-        <Ionicons name="settings-outline" size={22} color={colors.textDim} />
-      </Pressable>
-    </Link>
-  );
-}
-
+/**
+ * The four tabs, and nothing else.
+ *
+ * No navigator header: each tab draws its own title bar (see
+ * `ScreenHeader`), because the right-hand action belongs to the tab rather
+ * than to the app — and because the map wants that 54pt back.
+ *
+ * The bar itself is the design's: 56pt, an icon over a small label, amber for
+ * where you are and a dim grey for where you are not.
+ */
 export default function TabsLayout() {
   const db = useDb();
+  const insets = useSafeAreaInsets();
   const [pending, setPending] = useState(0);
 
   useEffect(() => {
@@ -31,13 +32,19 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        ...navTheme,
-        headerRight: () => <SettingsGear />,
+        headerShown: false,
         sceneStyle: { backgroundColor: colors.bg },
         tabBarStyle: {
+          // 56pt of bar, plus whatever the gesture area needs under it —
+          // a flat 56 clips the labels on a phone with a home indicator.
+          height: 56 + insets.bottom,
+          paddingBottom: insets.bottom,
           backgroundColor: colors.surfaceSunken,
           borderTopColor: colors.border,
+          borderTopWidth: 1,
         },
+        tabBarItemStyle: { paddingVertical: 4 },
+        tabBarLabelStyle: { fontSize: 10, marginTop: 3 },
         tabBarActiveTintColor: colors.amber,
         tabBarInactiveTintColor: colors.textFaint,
       }}
@@ -46,14 +53,17 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />,
+          // Home *is* search — the icon fills in when you are standing on it.
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'search' : 'search-outline'} size={21} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="scan"
         options={{
           title: 'Scan',
-          tabBarIcon: ({ color, size }) => <Ionicons name="camera" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="camera" size={21} color={color} />,
           tabBarBadge: pending > 0 ? pending : undefined,
           tabBarBadgeStyle: { backgroundColor: colors.amber, color: colors.amberInkOn },
         }}
@@ -62,8 +72,8 @@ export default function TabsLayout() {
         name="browse"
         options={{
           title: 'Browse',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="file-tray-stacked" size={size} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="file-tray-stacked" size={21} color={color} />
           ),
         }}
       />
@@ -78,7 +88,7 @@ export default function TabsLayout() {
         name="map"
         options={{
           title: 'Map',
-          tabBarIcon: ({ color, size }) => <Ionicons name="map" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="map" size={21} color={color} />,
         }}
       />
     </Tabs>

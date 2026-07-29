@@ -6,6 +6,13 @@ import { createNodeAdapter, type NodeDbAdapter } from '../../db/nodeAdapter';
 import { createBin, createLocation, createShelf } from '../../db/queries';
 import { runMigrations } from '../../db/schema';
 
+// Tab screens draw their own title bar, which pads the status-bar inset. In
+// the app expo-router provides the safe-area context; a screen rendered on
+// its own has none, so it gets zero insets here.
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
 // `mock`-prefixed so jest's module factory may close over them.
 const mockPush = jest.fn();
 const mockHrefs: string[] = [];

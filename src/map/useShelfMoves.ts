@@ -2,8 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { MoveConfirmRequest } from '@/components/map/MoveConfirmSheet';
 import type { DbAdapter } from '@/db/adapter';
-import { describePlace, locateMany, planDrop, type DropTarget, type MapArea } from '@/db/mapView';
-import { placeBin } from '@/db/queries';
+import {
+  describePlace,
+  locateMany,
+  planDrop,
+  planMultiDrop,
+  type DropTarget,
+  type MapArea,
+} from '@/db/mapView';
+import { placeBin, placeBins } from '@/db/queries';
 import { logEvent } from '@/diagnostics/events';
 import { hapticShutter, hapticSuccess } from '@/lib/haptics';
 
@@ -22,7 +29,18 @@ export interface ShelfMoves {
   /** Puts down whatever is in hand. Stable, so the pan can depend on it. */
   cancelHold: () => void;
   lift: (binId: string) => void;
-  executeDrop: (binId: string, target: DropTarget) => void;
+  /**
+   * `settled` skips the re-home confirm because something else already was
+   * one — the rack picker names the rack, the shelf and the slot before you
+   * choose it, so asking again straight afterwards is a tax, not a safeguard.
+   */
+  executeDrop: (binId: string, target: DropTarget, options?: { settled?: boolean }) => void;
+  /**
+   * The same drop for a picked stack (v3). One transaction, one undo, and
+   * no confirm: the group move was already an explicit "move them", so a
+   * second modal on top of it is a tax rather than a safeguard.
+   */
+  executeMultiDrop: (binIds: readonly string[], target: DropTarget) => void;
   /** Bin that just landed, for the settle ring. */
   settling: string | null;
   confirm: (MoveConfirmRequest & { commit: () => void }) | null;
@@ -116,7 +134,7 @@ export function useShelfMoves({
   );
 
   const executeDrop = useCallback(
-    (binId: string, target: DropTarget) => {
+    (binId: string, target: DropTarget, options?: { settled?: boolean }) => {
       const plan = planDrop(areas, binId, target);
       if (!plan) {
         hold(null);
@@ -155,7 +173,7 @@ export function useShelfMoves({
         });
       };
 
-      if (plan.crossShelf) {
+      if (plan.crossShelf && !options?.settled) {
         // The §8.5 move — a real filing change, so it asks first.
         const destination = findRow(areas, plan.shelfId);
         const capacity = destination?.capacity ?? null;
@@ -172,6 +190,48 @@ export function useShelfMoves({
         return;
       }
       commit();
+    },
+    [areas, db, hold, offerUndo, onChange],
+  );
+
+  const executeMultiDrop = useCallback(
+    (binIds: readonly string[], target: DropTarget) => {
+      const plan = planMultiDrop(areas, binIds, target);
+      if (!plan) {
+        hold(null);
+        return;
+      }
+      // Where each one sat before, captured now: after the write the map is
+      // redrawn from the database and the old arrangement is gone. Grouped by
+      // shelf so undo rewrites each source row's order exactly once.
+      const previous = plan.binIds.map((id) => {
+        const came = locateMany(areas, [id])[0] ?? null;
+        return {
+          binId: id,
+          shelfId: came?.row.shelfId ?? null,
+          orderedIds: came ? came.row.bins.map((c) => c.binId) : [],
+        };
+      });
+
+      placeBins(db, { binIds: plan.binIds, shelfId: plan.shelfId, orderedIds: plan.orderedIds });
+      logEvent(db, {
+        kind: 'organize',
+        name: 'bins_moved',
+        detail: { bins: plan.binIds.length, to: plan.place },
+      });
+      hapticSuccess();
+      hold(null);
+      setSettling(plan.binIds[0]);
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+      settleTimer.current = setTimeout(() => setSettling(null), 600);
+      onChange();
+      offerUndo(`${plan.binIds.length} bins → ${plan.place}`, () => {
+        for (const step of previous) {
+          placeBin(db, { binId: step.binId, shelfId: step.shelfId, orderedIds: step.orderedIds });
+        }
+        logEvent(db, { kind: 'organize', name: 'move_undone', detail: { bins: plan.binIds.length } });
+        onChange();
+      });
     },
     [areas, db, hold, offerUndo, onChange],
   );
@@ -202,6 +262,7 @@ export function useShelfMoves({
     cancelHold,
     lift,
     executeDrop,
+    executeMultiDrop,
     settling,
     confirm,
     cancelConfirm,

@@ -1,8 +1,8 @@
 import { useCallback, useRef } from 'react';
 import type { ScrollView, LayoutRectangle } from 'react-native';
 
-import { CARD_W, slotMidlines } from '@/components/map/metrics';
-import type { MapArea, MapRow } from '@/db/mapView';
+import { slotMidlines, slotWidth } from '@/components/map/metrics';
+import { rowGaps, type MapArea, type MapRow } from '@/db/mapView';
 import { sp } from '@/theme';
 
 import type { RowMeasurement } from './dragGeometry';
@@ -33,7 +33,6 @@ export interface MapFrames {
   setWellFrame: (areaKey: string, frame: LayoutRectangle) => void;
   setBoardFrame: (rowKey: string, frame: LayoutRectangle) => void;
   setStripFrame: (rowKey: string, frame: LayoutRectangle) => void;
-  setStripScroll: (rowKey: string, x: number) => void;
   scrollToRow: (areaKey: string, rowKey: string) => void;
   jumpToShelf: (areas: readonly MapArea[], shelfId: string | null) => void;
   measureRows: (areas: readonly MapArea[]) => RowMeasurement[];
@@ -48,7 +47,6 @@ export function useMapFrames(): MapFrames {
   const wellFrames = useRef<Record<string, LayoutRectangle>>({});
   const boardFrames = useRef<Record<string, LayoutRectangle>>({});
   const stripFrames = useRef<Record<string, LayoutRectangle>>({});
-  const stripScrollX = useRef<Record<string, number>>({});
 
   const areaKeyOf = useCallback(
     (index: number, locationId: string | null) => locationId ?? `unplaced-${index}`,
@@ -76,14 +74,18 @@ export function useMapFrames(): MapFrames {
 
   /**
    * Every shelf row as it sits on screen right now, in the gesture view's
-   * space. Card positions are arithmetic rather than measured: every card is
-   * the same width, so a row is a uniform strip offset by its own sideways
-   * scroll. That is what keeps the drag to one detector for the whole map.
-   */
-  /**
-   * One row, summed down the whole chain: area → well → board → sideways
-   * strip scroll. Null when any link has not laid out yet — a row that cannot
-   * be placed exactly must not be placed approximately.
+   * space. Card positions are arithmetic rather than measured: every cell in
+   * a row is the same width, so the row is a uniform centred block and the
+   * slot under a finger falls out of its measured width. That is what keeps
+   * the drag to one detector for the whole map.
+   *
+   * One row, summed down the whole chain: area → well → board → strip. Null
+   * when any link has not laid out yet — a row that cannot be placed exactly
+   * must not be placed approximately.
+   *
+   * The cell count includes the *free* slots, not just the bins: they share
+   * the row's width, so ignoring them would compute a slot pitch for a full
+   * shelf and place every landing index too far left on a half-empty one.
    */
   const measureRow = useCallback(
     (area: LayoutRectangle, well: LayoutRectangle, row: MapRow): RowMeasurement | null => {
@@ -92,16 +94,20 @@ export function useMapFrames(): MapFrames {
       const strip = stripFrames.current[key];
       if (!board || !strip) return null;
       const top = area.y + well.y + board.y - scrollY.current;
-      const left = area.x + well.x + board.x + strip.x - (stripScrollX.current[key] ?? 0);
+      const left = area.x + well.x + board.x + strip.x;
+      const cells = Math.max(1, row.bins.length + rowGaps(row));
+      const width = slotWidth(strip.width, cells);
       return {
         shelfId: row.shelfId,
         top,
         bottom: top + board.height,
-        cards: slotMidlines(left, row.bins.length).map((mid, i) => ({
-          binId: row.bins[i].binId,
-          x: mid - CARD_W / 2,
-          width: CARD_W,
-        })),
+        cards: slotMidlines(left, strip.width, cells)
+          .slice(0, row.bins.length)
+          .map((mid, i) => ({
+            binId: row.bins[i].binId,
+            x: mid - width / 2,
+            width,
+          })),
       };
     },
     [rowKey],
@@ -140,9 +146,6 @@ export function useMapFrames(): MapFrames {
   const setStripFrame = useCallback((key: string, frame: LayoutRectangle) => {
     stripFrames.current[key] = frame;
   }, []);
-  const setStripScroll = useCallback((key: string, x: number) => {
-    stripScrollX.current[key] = x;
-  }, []);
   const setViewport = useCallback((frame: LayoutRectangle) => {
     viewport.current = frame;
   }, []);
@@ -169,7 +172,6 @@ export function useMapFrames(): MapFrames {
     setWellFrame,
     setBoardFrame,
     setStripFrame,
-    setStripScroll,
     scrollToRow,
     jumpToShelf,
     measureRows,
