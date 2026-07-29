@@ -1,0 +1,70 @@
+[tool.semantic_release]
+# Binocular is a React Native app, not a Python project. The only reason this
+# file exists is to hold the python-semantic-release config — see
+# .github/workflows/release.yml. PSR's preferred config location is
+# pyproject.toml, and the same setup runs jtn0123/VoltTracker and
+# jtn0123/InkyPi, so keeping the shape identical means one thing to remember
+# across all three rather than three.
+#
+# IMPORTANT: comments inside this table survive PSR's version bumps; comments
+# at the top of the file ABOVE the first table get eaten on rewrite, which is
+# why this preamble lives here instead.
+#
+# The `version` key below is the source of truth. `build_command` keeps the
+# plaintext VERSION file and app.json's `expo.version` — the base the APK's
+# versionName is built from — in step with it on every bump.
+version = "0.1.0"
+# Self-anchor on this same key so PSR rewrites it on every bump.
+version_toml = [
+  "pyproject.toml:tool.semantic_release.version",
+]
+branch = "main"
+tag_format = "v{version}"
+upload_to_pypi = false
+# PSR exports NEW_VERSION into build_command's env. The literal `{version}`
+# placeholder is NOT expanded in build_command, so the script reads the
+# environment variable instead.
+build_command = "node scripts/ci/set-version.mjs"
+# Listed so PSR commits them alongside the version bump. Listing a file here
+# does not make it a downloadable release asset — release.yml strips the
+# build-only ones from the release listing.
+assets = ["VERSION", "app.json"]
+# Treat any commit on a 0.x version as eligible for a minor bump. PSR's
+# default under 0.x clamps `feat:` to a patch (0.1.0 → 0.1.1 rather than
+# 0.2.0), and this app is nowhere near 1.0 — a feature should still read as a
+# feature in the version.
+major_on_zero = true
+allow_zero_version = true
+
+[tool.semantic_release.changelog]
+# Custom changelog and release-notes style, rendered from the Jinja templates
+# in ./templates/ — a copy of PSR 9.21's bundled angular/md templates with
+# .components/changes.md.j2 modified. Instead of PSR's default "### Features"
+# headings that dump each whole commit body, a release renders compact emoji
+# sections — ✳️ New (feat) / 🔺 Fix (fix) / 🔷 Changed (everything else) —
+# one scannable line per change, plus an optional italic note taken from an
+# "Impact:" line in the commit body.
+#
+# "update" prepends each new release to the file. VoltTracker uses "init",
+# which regenerates the whole changelog from git history every time — right
+# there, because its history has been conventional from the start. Binocular's
+# is not: everything before this pipeline has prose subjects like "The map was
+# killing the process", which the parser cannot read and files under whichever
+# heading it defaults to. Regenerating produced 350 lines of miscategorised
+# history on the first run. So the changelog starts here and grows forwards.
+mode = "update"
+template_dir = "templates"
+
+[tool.semantic_release.commit_parser_options]
+# Conventional Commits → bump. feat = minor, fix/perf = patch,
+# BREAKING CHANGE = major. Everything else (chore, docs, ci, refactor, style,
+# test, build, revert) does NOT bump; release.yml surfaces those runs loudly
+# so a streak of unreleased merges cannot pile up unnoticed.
+#
+# Keep in step with .github/workflows/pr-title-lint.yml's `types`.
+allowed_tags = [
+  "feat", "fix", "perf",
+  "refactor", "docs", "style", "test", "build", "ci", "chore", "revert",
+]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
