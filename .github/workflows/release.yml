@@ -109,12 +109,10 @@ jobs:
         # dependency, in the job holding the token that can tag and publish.
         run: 'pip install --only-binary :all: python-semantic-release==9.21.1'
 
-      - name: Version and publish
+      - name: Version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          semantic-release version
-          semantic-release publish
+        run: semantic-release version
 
       - name: Resolve the tag, if there is one
         id: resolve
@@ -133,6 +131,36 @@ jobs:
             echo "released=false" >> "$GITHUB_OUTPUT"
             echo "tag=" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Publish
+        # Only when something was actually cut. `publish` was previously run
+        # unconditionally alongside `version`, which is harmless on a no-bump
+        # run but means the one command that writes to the release exists on a
+        # path where there is no release to write to.
+        if: steps.resolve.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: semantic-release publish
+
+      - name: Keep build-only files out of the release listing
+        # `VERSION` and `app.json` are in pyproject.toml's `assets` so that PSR
+        # *commits* them alongside the bump — but the same setting makes
+        # `publish` upload them as downloadable release assets, which is not
+        # what they are. Nobody installs app.json; it lives in the repository.
+        # (Ported from jtn0123/VoltTracker, where this step was missed the
+        # first time and the release listing carried a stray VERSION file.)
+        if: steps.resolve.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          for asset in VERSION app.json; do
+            if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fxq "$asset"; then
+              gh release delete-asset "$TAG" "$asset" --yes
+              echo "Removed ${asset} from ${TAG}"
+            fi
+          done
 
       - name: Say so when no version was cut
         if: steps.resolve.outputs.released != 'true'
@@ -521,7 +549,14 @@ jobs:
           APK: ${{ needs.build.outputs.apk }}
           VERSION_NAME: ${{ needs.build.outputs.version_name }}
           VERSIONED: ${{ needs.build.outputs.versioned }}
-          PRERELEASE: ${{ inputs.prerelease && '--prerelease' || '' }}
+          # A rolling build is a pre-release unless a *manual* run explicitly
+          # said otherwise. Reading `inputs.prerelease` alone was wrong: on a
+          # push there are no inputs, so it evaluated empty and every merge
+          # published itself as "Latest" — outranking real versions in the list
+          # the phone reads, and in `/releases/latest`.
+          PRERELEASE: >-
+            ${{ (github.event_name == 'workflow_dispatch' && !inputs.prerelease)
+                && '' || '--prerelease' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
