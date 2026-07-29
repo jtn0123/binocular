@@ -562,6 +562,28 @@ strip along the bottom is the whole run of shelving.
       way" instead of promising a rack. Thresholds live in `rackSwipe.ts` as
       plain worklets so they are testable without a device; the hook is the
       gesture and nothing else.
+- [x] **The page itself, which was going the wrong way.** Everything up to the
+      release was right and the release was reversed: the rack was swapped and
+      the panel slid *back* to the middle from wherever the finger had left
+      it, so the incoming rack entered from the side the outgoing one had just
+      been pushed towards. Swipe left for the next rack and the wall appeared
+      to shove you back the way you came. Now it is three moves — carry on out
+      past the edge (120 ms), swap while nothing of the panel is on screen
+      (50 ms), come back from the *opposite* edge (200 ms, decelerating). The
+      middle beat is the margin for `onPage` being a `setState`: the new rack
+      is not drawn until React has re-rendered, and without it a slow frame
+      brings the old one back on from the wrong side and then pops. Two things
+      had to change with it. `onFinalize` fires straight after `onEnd`, so it
+      would have cancelled the transition a frame in — it now knows a page is
+      under way. And `onEnd` fires for a cancellation too, with `success`
+      false, which the old code ignored: a gesture taken over mid-swipe paged
+      the wall on whatever translation it happened to have reached.
+
+      Every old assertion still passed against the reversed version, because
+      they all read the panel's final position — 0 either way. The new ones
+      read the *route*: the mocked shared value records everything assigned to
+      it, and the test asserts the trail ends `[-w, +w, 0]` going right and
+      `[+w, -w, 0]` going left. Reverting either sign fails it.
 - [x] **The scrubber rebuilt to share its width instead of queueing for it.**
       The design's strip is a flex row — `flex:1 1 0; min-width:40px` per
       rack, `flex:2 1 auto; min-width:132px` for the one you are on,

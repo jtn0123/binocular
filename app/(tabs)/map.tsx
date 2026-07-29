@@ -680,42 +680,57 @@ export default function MapScreen() {
           onLayout={(e) => frames.setViewport(e.nativeEvent.layout)}
         >
           {rack ? (
-            <Animated.View
-              key={rack.locationId ?? 'rack'}
-              style={[styles.area, panelStyle]}
-              testID={`map-area-${frames.areaKeyOf(areas.indexOf(rack), rack.locationId)}`}
-              onLayout={(e) =>
-                frames.setAreaFrame(
-                  frames.areaKeyOf(areas.indexOf(rack), rack.locationId),
-                  e.nativeEvent.layout,
-                )
-              }
-            >
-              {/*
-                The panel *is* the scroller, as in the design: a rack taller
-                than the screen scrolls inside its own recess rather than
-                taking the page with it, which is what keeps the rails, the
-                tray and the scrubber fixed either side of it. Measured
-                because a board's layout is reported relative to this, not to
-                the area — the drag sums the whole chain.
-              */}
-              {/* In v3 the well *is* the scroller, so it answers to both
-                  handles the drag tests reach for. */}
-              <ScrollView
-                ref={frames.scrollRef}
-                testID="map-scroll"
-                style={styles.well}
-                contentContainerStyle={styles.wellBody}
-                scrollEnabled={dragging === null}
-                scrollEventThrottle={16}
-                onScroll={(e) => frames.setScrollY(e.nativeEvent.contentOffset.y)}
+            /*
+              Two nodes rather than one, and the split is load-bearing.
+
+              The slide has to survive the rack changing under it — that is
+              the whole transition — so the animated node must not be the one
+              that is keyed. If it were, paging would unmount it mid-slide and
+              the replacement would draw at rest for a frame before Reanimated
+              caught up: the new rack flashing in the middle of the screen
+              just as the old one left the side.
+
+              The keyed node is inside, where remounting still does what it is
+              here for: every board reports its layout afresh, so the drag
+              never measures the new rack against the last one's geometry.
+            */
+            <Animated.View style={[styles.panel, panelStyle]}>
+              <View
+                key={rack.locationId ?? 'rack'}
+                style={styles.area}
+                testID={`map-area-${frames.areaKeyOf(areas.indexOf(rack), rack.locationId)}`}
                 onLayout={(e) =>
-                  frames.setWellFrame(
+                  frames.setAreaFrame(
                     frames.areaKeyOf(areas.indexOf(rack), rack.locationId),
                     e.nativeEvent.layout,
                   )
                 }
               >
+                {/*
+                  The panel *is* the scroller, as in the design: a rack taller
+                  than the screen scrolls inside its own recess rather than
+                  taking the page with it, which is what keeps the rails, the
+                  tray and the scrubber fixed either side of it. Measured
+                  because a board's layout is reported relative to this, not to
+                  the area — the drag sums the whole chain.
+                */}
+                {/* In v3 the well *is* the scroller, so it answers to both
+                    handles the drag tests reach for. */}
+                <ScrollView
+                  ref={frames.scrollRef}
+                  testID="map-scroll"
+                  style={styles.well}
+                  contentContainerStyle={styles.wellBody}
+                  scrollEnabled={dragging === null}
+                  scrollEventThrottle={16}
+                  onScroll={(e) => frames.setScrollY(e.nativeEvent.contentOffset.y)}
+                  onLayout={(e) =>
+                    frames.setWellFrame(
+                      frames.areaKeyOf(areas.indexOf(rack), rack.locationId),
+                      e.nativeEvent.layout,
+                    )
+                  }
+                >
                   {/* The pegboard the rack is recessed into — a tiled dot
                       grid, because the panel is a picture of a wall and a
                       flat rectangle reads as a form field. */}
@@ -791,7 +806,8 @@ export default function MapScreen() {
                       />
                     );
                   })}
-              </ScrollView>
+                </ScrollView>
+              </View>
             </Animated.View>
           ) : (
             <Text style={styles.foot}>
@@ -1052,6 +1068,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   dim: { ...type.dim, textAlign: 'center', lineHeight: 20 },
+  /** The node that slides. Holds no padding of its own — see the JSX. */
+  panel: { flex: 1 },
   area: { flex: 1, paddingHorizontal: sp(3), paddingBottom: sp(2) },
   well: {
     flex: 1,
