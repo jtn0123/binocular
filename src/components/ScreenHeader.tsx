@@ -20,7 +20,7 @@ import { colors, sp } from '@/theme';
 export function ScreenHeader({
   title,
   action,
-}: {
+}: Readonly<{
   title: string;
   /** The one thing this tab offers from its title bar, if it offers anything. */
   action?: {
@@ -31,7 +31,7 @@ export function ScreenHeader({
     tone?: 'amber' | 'dim';
     testID?: string;
   } | null;
-}) {
+}>) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.bar, { paddingTop: insets.top }]}>
@@ -70,11 +70,11 @@ export function DetailHeader({
   title,
   onBack,
   testID,
-}: {
+}: Readonly<{
   title: string;
   onBack: () => void;
   testID?: string;
-}) {
+}>) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.bar, { paddingTop: insets.top }]}>

@@ -40,6 +40,7 @@ import {
 import { quickCreateBin } from '@/db/scaffold';
 import { useFocusTick } from '@/lib/useFocusTick';
 import { scannedAgo } from '@/lib/time';
+import { plural } from '@/lib/text';
 import { printLabelSheet, printShelfPoster } from '@/qr/print';
 import { colors, mono, radius, sp, type } from '@/theme';
 
@@ -59,10 +60,10 @@ import { colors, mono, radius, sp, type } from '@/theme';
 function BinLine({
   bin,
   itemCount,
-}: {
+}: Readonly<{
   bin: BinRow;
   itemCount: number;
-}) {
+}>) {
   return (
     <Link href={{ pathname: '/bin/[id]', params: { id: bin.id } }} asChild>
       <Pressable
@@ -78,7 +79,7 @@ function BinLine({
             {bin.name}
           </Text>
           <Text style={styles.binMeta} numberOfLines={1}>
-            {itemCount === 0 ? 'empty' : `${itemCount} item${itemCount === 1 ? '' : 's'}`} ·{' '}
+            {itemCount === 0 ? 'empty' : plural(itemCount, 'item')} ·{' '}
             {scannedAgo(bin.last_scanned_at)}
           </Text>
         </View>
@@ -93,12 +94,12 @@ function IconButton({
   label,
   onPress,
   danger,
-}: {
+}: Readonly<{
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   danger?: boolean;
-}) {
+}>) {
   return (
     <Pressable style={styles.iconButton} onPress={onPress} accessibilityLabel={label} hitSlop={6}>
       <Ionicons name={icon} size={16} color={danger ? colors.danger : colors.steel} />
@@ -150,6 +151,8 @@ export default function BrowseScreen() {
     !filter ||
     bin.name.toLowerCase().includes(filter) ||
     bin.short_code.toLowerCase().includes(filter);
+  /** Filtered once: the tray's heading and its rows ask the same question. */
+  const looseMatches = unassigned.filter(matches);
 
   function openPrintPicker() {
     const bins = listBins(db);
@@ -311,11 +314,13 @@ export default function BrowseScreen() {
 
         {locations.map((location) => {
           const shelves = listShelves(db, location.id);
-          const rows = shelves.map((shelf) => ({
-            shelf,
-            bins: listBinsForShelf(db, shelf.id).filter(matches),
-            total: listBinsForShelf(db, shelf.id).length,
-          }));
+          const rows = shelves.map((shelf) => {
+            // One query per shelf, not two. The whole render body re-runs on
+            // every keystroke in the filter, so a duplicate here is a
+            // duplicate multiplied by the number of shelves on the wall.
+            const all = listBinsForShelf(db, shelf.id);
+            return { shelf, bins: all.filter(matches), total: all.length };
+          });
           // A filtered view that keeps every empty heading answers the
           // question with a wall of nothing.
           const visible = filter ? rows.filter((r) => r.bins.length > 0) : rows;
@@ -429,13 +434,13 @@ export default function BrowseScreen() {
           );
         })}
 
-        {unassigned.filter(matches).length > 0 && (
+        {looseMatches.length > 0 && (
           <View style={styles.area}>
             <View style={styles.areaHead}>
               <Text style={styles.areaName}>Not on a shelf</Text>
             </View>
             <View style={styles.shelf}>
-              {unassigned.filter(matches).map((bin) => (
+              {looseMatches.map((bin) => (
                 <BinLine key={bin.id} bin={bin} itemCount={counts.get(bin.id) ?? 0} />
               ))}
             </View>
@@ -596,7 +601,7 @@ export default function BrowseScreen() {
 }
 
 /** Says nothing matched, but only once the filter really has excluded it all. */
-function BrowseFilterEmpty({ query, anyMatch }: { query: string; anyMatch: boolean }) {
+function BrowseFilterEmpty({ query, anyMatch }: Readonly<{ query: string; anyMatch: boolean }>) {
   if (anyMatch) return null;
   return <Text style={styles.empty}>No bin matches “{query}”.</Text>;
 }

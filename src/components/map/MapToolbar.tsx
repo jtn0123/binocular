@@ -45,7 +45,7 @@ export interface MapToolbarProps {
   canRemoveRow: boolean;
 }
 
-export function MapToolbar(props: MapToolbarProps) {
+export function MapToolbar(props: Readonly<MapToolbarProps>) {
   if (props.editing) return <EditRow {...props} />;
 
   return (
@@ -146,7 +146,7 @@ export function MapToolbar(props: MapToolbarProps) {
 }
 
 /** COLUMNS and ROWS: the two numbers that describe the shape of a rack. */
-function EditRow(props: MapToolbarProps) {
+function EditRow(props: Readonly<MapToolbarProps>) {
   return (
     <View style={styles.editRow}>
       <Text style={styles.editLabel}>COLUMNS</Text>
@@ -203,13 +203,13 @@ function StepButton({
   label,
   onPress,
   testID,
-}: {
+}: Readonly<{
   icon: 'add' | 'remove';
   live: boolean;
   label: string;
   onPress: () => void;
   testID: string;
-}) {
+}>) {
   return (
     <Pressable
       style={[styles.step, !live && styles.stepDead]}

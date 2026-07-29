@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 
 import { colors, mono, radius, sp } from '@/theme';
+import { plural } from '@/lib/text';
 
 /**
  * Where the other matches are (v3).
@@ -22,11 +23,11 @@ export function HitsBar({
   hereCount,
   elsewhere,
   onGo,
-}: {
+}: Readonly<{
   hereCount: number;
   elsewhere: readonly RackHit[];
   onGo: (index: number) => void;
-}) {
+}>) {
   if (elsewhere.length === 0) return null;
 
   return (
@@ -41,9 +42,7 @@ export function HitsBar({
       testID="map-hits-bar"
     >
       <Text style={styles.here}>
-        {hereCount > 0
-          ? `${hereCount} hit${hereCount === 1 ? '' : 's'} here ·`
-          : 'none in this rack ·'}
+        {hereCount > 0 ? `${plural(hereCount, 'hit')} here ·` : 'none in this rack ·'}
       </Text>
       {elsewhere.map((hit) => (
         <Pressable

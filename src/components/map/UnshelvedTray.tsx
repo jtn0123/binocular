@@ -37,7 +37,7 @@ export function UnshelvedTray({
   onDropAtEnd,
   onFrame,
   heatFor,
-}: {
+}: Readonly<{
   row: MapRow;
   open: boolean;
   onToggle: () => void;
@@ -61,7 +61,7 @@ export function UnshelvedTray({
    */
   onFrame: (frame: WindowFrame) => void;
   heatFor: (cell: MapCell) => ViewStyle | null;
-}) {
+}>) {
   const count = row.bins.length;
   const head = useRef<View | null>(null);
 

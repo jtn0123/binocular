@@ -20,7 +20,7 @@ export function RackHeader({
   onRename,
   onOpenSettings,
   onDone,
-}: {
+}: Readonly<{
   code: string;
   label: string;
   /** "7/16" — bins filed against slots declared, across the whole rack. */
@@ -28,7 +28,7 @@ export function RackHeader({
   onRename: (label: string) => void;
   onOpenSettings: () => void;
   onDone: () => void;
-}) {
+}>) {
   const [draft, setDraft] = useState<string | null>(null);
 
   return (

@@ -31,7 +31,7 @@ export function WallSheet({
   onRemove,
   onAddRack,
   trayLabel,
-}: {
+}: Readonly<{
   racks: readonly MapArea[];
   currentIndex: number;
   matchedBinIds: readonly string[];
@@ -44,7 +44,7 @@ export function WallSheet({
   onRemove: (index: number) => void;
   onAddRack: () => void;
   trayLabel: string;
-}) {
+}>) {
   const [renaming, setRenaming] = useState<number | null>(null);
   const [draft, setDraft] = useState('');
 
@@ -243,12 +243,12 @@ function ArrowButton({
   live,
   code,
   onPress,
-}: {
+}: Readonly<{
   direction: -1 | 1;
   live: boolean;
   code: string;
   onPress: () => void;
-}) {
+}>) {
   return (
     <Pressable
       style={[styles.arrow, live && styles.arrowLive]}

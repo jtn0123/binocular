@@ -838,7 +838,7 @@ function ItemSheet({
   onCheckoutOrReturn,
   onDelete,
   onPhotoTaken,
-}: {
+}: Readonly<{
   db: ReturnType<typeof useDb>;
   item: ItemRow | null;
   onClose: () => void;
@@ -849,7 +849,7 @@ function ItemSheet({
   onCheckoutOrReturn: (item: ItemRow) => void;
   onDelete: (item: ItemRow) => void;
   onPhotoTaken: (item: ItemRow, uri: string) => void;
-}) {
+}>) {
   const sourceScan = item?.source_scan_id ? getScan(db, item.source_scan_id) : null;
   const [photoMenu, setPhotoMenu] = useState(false);
   const displayUri = item?.photo_uri ?? sourceScan?.photo_uri ?? null;
@@ -969,12 +969,12 @@ function SheetRow({
   label,
   onPress,
   danger,
-}: {
+}: Readonly<{
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   danger?: boolean;
-}) {
+}>) {
   return (
     <Pressable style={styles.sheetRow} onPress={onPress} accessibilityRole="button">
       <Ionicons name={icon} size={18} color={danger ? colors.danger : colors.steel} />
@@ -990,14 +990,14 @@ function BinPicker({
   title,
   onClose,
   onPick,
-}: {
+}: Readonly<{
   visible: boolean;
   bins: BinRow[];
   excludeBinId: string;
   title: string;
   onClose: () => void;
   onPick: (bin: BinRow) => void;
-}) {
+}>) {
   const candidates = bins.filter((b) => b.id !== excludeBinId);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>

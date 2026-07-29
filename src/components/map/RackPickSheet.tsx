@@ -2,7 +2,15 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { areaFill, openRowOf, rackCodeOf, rackLabelOf, rackRoom, type MapArea } from '@/db/mapView';
+import {
+  areaFill,
+  openRowOf,
+  rackCodeOf,
+  rackLabelOf,
+  rackRoom,
+  type MapArea,
+  type MapRow,
+} from '@/db/mapView';
 import { colors, mono, radius, sp } from '@/theme';
 
 /**
@@ -25,16 +33,27 @@ export interface RackPickRequest {
   candidates: readonly { index: number; area: MapArea }[];
 }
 
+/** What this rack would do with the bin, in the one line the row has for it. */
+function landingLine(
+  open: MapRow | null,
+  full: boolean,
+  fill: { filled: number; slots: number },
+): string {
+  if (!open) return 'no shelves yet';
+  if (full) return `full — ${open.name} would read over`;
+  return `lands on ${open.name} · slot ${open.bins.length + 1} · ${fill.filled}/${fill.slots} full`;
+}
+
 export function RackPickSheet({
   request,
   onPick,
   onCancel,
-}: {
+}: Readonly<{
   request: RackPickRequest | null;
   /** The chosen shelf, and the rack it belongs to so the map can page there. */
   onPick: (rackIndex: number, shelfId: string) => void;
   onCancel: () => void;
-}) {
+}>) {
   const [expanded, setExpanded] = useState<number | null>(null);
   if (!request) return null;
 
@@ -81,11 +100,7 @@ export function RackPickSheet({
                         {rackLabelOf(area.name)}
                       </Text>
                       <Text style={styles.rackWhere} numberOfLines={2}>
-                        {!open
-                          ? 'no shelves yet'
-                          : full
-                            ? `full — ${open.name} would read over`
-                            : `lands on ${open.name} · slot ${open.bins.length + 1} · ${fill.filled}/${fill.slots} full`}
+                        {landingLine(open, full, fill)}
                       </Text>
                     </View>
                   </Pressable>

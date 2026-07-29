@@ -59,7 +59,7 @@ export interface ShelfSheetProps {
   extras?: readonly ShelfExtra[];
 }
 
-export function ShelfSheet(props: ShelfSheetProps) {
+export function ShelfSheet(props: Readonly<ShelfSheetProps>) {
   const { shelf, onClose } = props;
   return (
     <Modal

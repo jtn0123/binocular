@@ -64,14 +64,14 @@ export function BinCard({
   onPress,
   onLongPress,
   onLayout,
-}: {
+}: Readonly<{
   cell: MapCell;
   state: BinCardState;
   heatStyle: ViewStyle | null;
   onPress: () => void;
   onLongPress: () => void;
   onLayout?: (event: LayoutChangeEvent) => void;
-}) {
+}>) {
   // The loud face pulses, so anything underneath shows through it — and the
   // resting card puts its code at the top where the loud one puts its name.
   // Drawing both at once reads as doubled text rather than as breathing.
@@ -132,7 +132,7 @@ export function BinCard({
  * The card turned inside out in amber: what a bin looks like when it is the
  * answer to the question you asked, or the thing in your hand.
  */
-function LoudFace({ cell, icon }: { cell: MapCell; icon: 'locate' | 'move' }) {
+function LoudFace({ cell, icon }: Readonly<{ cell: MapCell; icon: 'locate' | 'move' }>) {
   return (
     <View pointerEvents="none" style={styles.loud}>
       <Ionicons name={icon} size={12} color={colors.amberInkOn} />
@@ -147,7 +147,7 @@ function LoudFace({ cell, icon }: { cell: MapCell; icon: 'locate' | 'move' }) {
 }
 
 /** The bin in hand: the loud face, breathing, so "still holding this" shows. */
-function HeldFace({ cell }: { cell: MapCell }) {
+function HeldFace({ cell }: Readonly<{ cell: MapCell }>) {
   const opacity = useSharedValue(0.95);
   useEffect(() => {
     opacity.value = withRepeat(

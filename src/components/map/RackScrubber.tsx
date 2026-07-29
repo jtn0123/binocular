@@ -78,19 +78,26 @@ export interface RackSegment {
   current: boolean;
 }
 
+/** How full a rack reads at a glance: packed, tight, here, or elsewhere. */
+function barTone(segment: RackSegment) {
+  if (segment.room === 0) return styles.barFull;
+  if (segment.room <= 2) return styles.barTight;
+  return segment.current ? styles.barOn : styles.barOff;
+}
+
 export function RackScrubber({
   segments,
   editing,
   onGo,
   onOpenWall,
   onAddRack,
-}: {
+}: Readonly<{
   segments: readonly RackSegment[];
   editing: boolean;
   onGo: (index: number) => void;
   onOpenWall: () => void;
   onAddRack: () => void;
-}) {
+}>) {
   const scroller = useRef<ScrollView>(null);
   /** Where each segment sits in the content, for scrolling one into view. */
   const spans = useRef(new Map<number, { x: number; width: number }>());
@@ -197,13 +204,7 @@ export function RackScrubber({
                 style={[
                   styles.bar,
                   { width: `${Math.round(Math.max(0, Math.min(1, segment.ratio)) * 100)}%` },
-                  segment.room === 0
-                    ? styles.barFull
-                    : segment.room <= 2
-                      ? styles.barTight
-                      : segment.current
-                        ? styles.barOn
-                        : styles.barOff,
+                  barTone(segment),
                 ]}
               />
             </View>

@@ -20,14 +20,14 @@ export function DragGhost({
   y,
   scale,
   opacity,
-}: {
+}: Readonly<{
   cell: MapCell;
   x: SharedValue<number>;
   y: SharedValue<number>;
   /** Lift-pop on pick-up, and the shrink back on a snap-back. */
   scale: SharedValue<number>;
   opacity: SharedValue<number>;
-}) {
+}>) {
   const style = useAnimatedStyle(() => ({
     opacity: opacity.value,
     transform: [{ translateX: x.value }, { translateY: y.value }, { scale: scale.value }],

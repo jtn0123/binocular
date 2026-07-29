@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { MapCell } from '@/db/mapView';
+import { plural } from '@/lib/text';
 import { colors, mono, radius, sp } from '@/theme';
 
 /**
@@ -48,7 +49,7 @@ export interface MapCarryBarProps {
   onClearPicked: () => void;
 }
 
-export function MapCarryBar(props: MapCarryBarProps) {
+export function MapCarryBar(props: Readonly<MapCarryBarProps>) {
   if (props.dragged) return <DragBar {...props} dragged={props.dragged} />;
   if (props.held) return <HeldBar {...props} />;
   if (props.picking) return <PickBar {...props} />;
@@ -140,9 +141,7 @@ function PickBar({ pickedCount, onMovePicked, onClearPicked }: MapCarryBarProps)
     >
       <Ionicons name="layers" size={18} color={colors.amber} />
       <Text style={styles.summary} numberOfLines={2}>
-        {pickedCount > 0
-          ? `${pickedCount} bin${pickedCount === 1 ? '' : 's'} picked`
-          : 'Tap the bins you want to move'}
+        {pickedCount > 0 ? `${plural(pickedCount, 'bin')} picked` : 'Tap the bins you want to move'}
       </Text>
       {pickedCount > 0 ? (
         <Pressable
@@ -181,7 +180,7 @@ export interface MapFindBarProps {
 }
 
 /** The answer to a search, in the flow above the panel. */
-export function MapFindBar(props: MapFindBarProps) {
+export function MapFindBar(props: Readonly<MapFindBarProps>) {
   if (props.focused) {
     return (
       <View style={[styles.inFlow, styles.found]} accessibilityLiveRegion="polite">

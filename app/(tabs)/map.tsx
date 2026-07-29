@@ -112,6 +112,12 @@ import { colors, shelf as shelfTheme, sp, type } from '@/theme';
  */
 export { MapErrorBoundary as ErrorBoundary } from '@/components/map/MapErrorBoundary';
 
+/** Everything in hand, whether that is a picked stack or one lifted bin. */
+function pickCarried(stack: readonly string[], held: string | null): string[] {
+  if (stack.length > 0) return [...stack];
+  return held ? [held] : [];
+}
+
 export default function MapScreen() {
   // The map is a tab now, so it is usually opened with no params at all;
   // `highlight` only arrives when Home or a bin sent you here to find one.
@@ -421,7 +427,13 @@ export default function MapScreen() {
   const swipeOffset = swipe.offset;
   const panelStyle = useAnimatedStyle(() => ({ transform: [{ translateX: swipeOffset.value }] }));
   /** Everything currently being carried, whether that is a stack or one bin. */
-  const carriedNow = carried.length > 0 ? carried : moves.held ? [moves.held] : [];
+  const carriedNow = pickCarried(carried, moves.held);
+  /**
+   * The bins drawn as chosen: the picking set while picking, otherwise a
+   * carried stack — but never a single carried bin, which is already drawn as
+   * the one in hand and would read as selected twice.
+   */
+  const highlighted = picking ? picked : carried.length > 1 ? carried : [];
 
   /**
    * Resting on a rail pages the wall under you with the bin still in hand —
@@ -561,7 +573,8 @@ export default function MapScreen() {
   };
   const prevRail = railFor('prev');
   const nextRail = railFor('next');
-  const activeRail = edge === 'prev' ? prevRail : edge === 'next' ? nextRail : null;
+  const railsBySide = { prev: prevRail, next: nextRail };
+  const activeRail = edge ? railsBySide[edge] : null;
 
   const columns = rack
     ? Math.max(1, ...rack.rows.map((row) => row.capacity ?? row.bins.length), 1)
@@ -717,7 +730,7 @@ export default function MapScreen() {
                         landingIndex={isTarget ? slot.index : null}
                         draggingBinId={dragging}
                         heldBinId={moves.held}
-                        selectedBinIds={picking ? picked : carried.length > 1 ? carried : []}
+                        selectedBinIds={highlighted}
                         matchedBinIds={wantedIds}
                         focusedBinId={focused?.cell.binId ?? null}
                         settlingBinId={moves.settling}
@@ -756,7 +769,7 @@ export default function MapScreen() {
                             ? {
                                 label: `move 1 → ${spill.shelfId === null ? 'tray' : spill.name}`,
                                 run: () => {
-                                  const last = row.bins[row.bins.length - 1];
+                                  const last = row.bins.at(-1);
                                   if (last) {
                                     moves.executeDrop(last.binId, { shelfId: spill.shelfId });
                                   }
@@ -887,7 +900,7 @@ export default function MapScreen() {
         holding={moves.held !== null}
         draggingBinId={dragging}
         heldBinId={moves.held}
-        selectedBinIds={picking ? picked : carried.length > 1 ? carried : []}
+        selectedBinIds={highlighted}
         matchedBinIds={wantedIds}
         focusedBinId={focused?.cell.binId ?? null}
         settlingBinId={moves.settling}

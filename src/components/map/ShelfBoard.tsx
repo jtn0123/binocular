@@ -72,7 +72,7 @@ export interface ShelfBoardProps {
   onRowLayout?: (event: LayoutChangeEvent) => void;
 }
 
-export function ShelfBoard(props: ShelfBoardProps) {
+export function ShelfBoard(props: Readonly<ShelfBoardProps>) {
   const { row, lit, showTicks, editing } = props;
   const over = row.capacity !== null && row.bins.length > row.capacity;
   const key = row.shelfId ?? 'unshelved';
@@ -148,22 +148,34 @@ export function ShelfBoard(props: ShelfBoardProps) {
             </Pressable>
           ) : null}
 
-          {editing && props.onWidth ? (
-            <WidthStepper row={row} onWidth={props.onWidth} keyId={key} />
-          ) : props.onEditShelf ? (
-            <Pressable
-              onPress={props.onEditShelf}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel={`Edit ${row.name}`}
-              testID={`map-edit-shelf-${key}`}
-            >
-              <Ionicons name="pencil" size={13} color={colors.textFaint} />
-            </Pressable>
-          ) : null}
+          <ShelfControl {...props} shelfKey={key} />
         </View>
       </View>
     </View>
+  );
+}
+
+/**
+ * The control at the right-hand end of a plank: a width stepper while the
+ * rack is being edited, otherwise the pencil that opens the shelf sheet, and
+ * nothing at all on a row that offers neither — the tray, for one.
+ */
+function ShelfControl(props: ShelfBoardProps & { shelfKey: string }) {
+  const { row, editing, shelfKey } = props;
+  if (editing && props.onWidth) {
+    return <WidthStepper row={row} onWidth={props.onWidth} keyId={shelfKey} />;
+  }
+  if (!props.onEditShelf) return null;
+  return (
+    <Pressable
+      onPress={props.onEditShelf}
+      hitSlop={12}
+      accessibilityRole="button"
+      accessibilityLabel={`Edit ${row.name}`}
+      testID={`map-edit-shelf-${shelfKey}`}
+    >
+      <Ionicons name="pencil" size={13} color={colors.textFaint} />
+    </Pressable>
   );
 }
 
@@ -259,12 +271,12 @@ function SlotPlaceholder({
   rowName,
   onPress,
   testID,
-}: {
+}: Readonly<{
   holding: boolean;
   rowName: string;
   onPress: () => void;
   testID: string;
-}) {
+}>) {
   return (
     <Pressable
       style={[styles.slot, holding && styles.slotActive]}
@@ -288,7 +300,7 @@ function SlotPlaceholder({
  * The shelf edge, seen straight on: a 4pt bar with the slot divisions scored
  * into it. Lit while a bin would land here, red while the shelf reads over.
  */
-function Plank({ lit, over, showTicks }: { lit: boolean; over: boolean; showTicks: boolean }) {
+function Plank({ lit, over, showTicks }: Readonly<{ lit: boolean; over: boolean; showTicks: boolean }>) {
   const [width, setWidth] = useState(0);
   const spacing = 24;
   const ticks = showTicks && width > 0 ? Math.floor(width / spacing) : 0;
@@ -309,11 +321,11 @@ function ShelfName({
   name,
   onRename,
   testID,
-}: {
+}: Readonly<{
   name: string;
   onRename: (next: string) => void;
   testID: string;
-}) {
+}>) {
   const [draft, setDraft] = useState<string | null>(null);
 
   if (draft === null) {
@@ -368,11 +380,11 @@ function WidthStepper({
   row,
   onWidth,
   keyId,
-}: {
+}: Readonly<{
   row: MapRow;
   onWidth: (capacity: number) => void;
   keyId: string;
-}) {
+}>) {
   const current = row.capacity ?? row.bins.length;
   /** A shelf never declares fewer slots than it is already holding. */
   const floor = Math.max(1, row.bins.length);

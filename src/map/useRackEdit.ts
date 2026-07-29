@@ -25,6 +25,7 @@ import {
   setShelfCapacity,
 } from '@/db/queries';
 import { logEvent } from '@/diagnostics/events';
+import { plural } from '@/lib/text';
 
 /** A fresh rack is four shelves tall, top to bottom, like the ones on the wall. */
 const NEW_RACK_SHELVES = ['Top', 'Upper', 'Lower', 'Bottom'];
@@ -118,7 +119,7 @@ export function useRackEdit({
       Alert.alert(
         `Take ${code} off the wall?`,
         bins > 0
-          ? `${bins} bin${bins === 1 ? ' moves' : 's move'} to the unshelved tray. Nothing is thrown away.`
+          ? `${plural(bins, 'bin')} ${bins === 1 ? 'moves' : 'move'} to the unshelved tray. Nothing is thrown away.`
           : 'This rack is empty.',
         [
           { text: 'Cancel', style: 'cancel' },

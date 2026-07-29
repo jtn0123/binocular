@@ -27,7 +27,7 @@ export function RackRail({
   hot,
   onPress,
   onFrame,
-}: {
+}: Readonly<{
   side: RackEdge;
   /** Short code of the rack immediately that way. */
   code: string;
@@ -39,7 +39,7 @@ export function RackRail({
   hot: boolean;
   onPress: () => void;
   onFrame: (frame: WindowFrame | null) => void;
-}) {
+}>) {
   const ref = useRef<View | null>(null);
 
   const report = () => {
@@ -61,6 +61,14 @@ export function RackRail({
 
   const label = more ? `${code}+` : code;
 
+  // Named rather than inlined: what the chevron is doing and what it will do
+  // are two different questions, and reading them as one nested expression
+  // was the thing that made this rail hard to change.
+  const chevronTone = hot ? colors.amberInkOn : carrying ? colors.amber : colors.textDim;
+  const spokenLabel = carrying
+    ? `Send this bin to rack ${code}${more ? ' or further along' : ''}`
+    : `Go to rack ${code}`;
+
   return (
     <Pressable
       ref={ref}
@@ -75,17 +83,13 @@ export function RackRail({
         hot && (side === 'prev' ? styles.hotPrev : styles.hotNext),
       ]}
       accessibilityRole="button"
-      accessibilityLabel={
-        carrying
-          ? `Send this bin to rack ${code}${more ? ' or further along' : ''}`
-          : `Go to rack ${code}`
-      }
+      accessibilityLabel={spokenLabel}
       testID={`map-rail-${side}`}
     >
       <Ionicons
         name={side === 'prev' ? 'chevron-back' : 'chevron-forward'}
         size={carrying ? 15 : 11}
-        color={hot ? colors.amberInkOn : carrying ? colors.amber : colors.textDim}
+        color={chevronTone}
       />
       {carrying ? (
         <Text style={[styles.send, hot && styles.inkOn]} numberOfLines={1}>

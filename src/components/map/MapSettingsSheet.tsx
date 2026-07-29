@@ -19,12 +19,12 @@ export function MapSettingsSheet({
   prefs,
   onChange,
   onClose,
-}: {
+}: Readonly<{
   visible: boolean;
   prefs: MapPrefs;
   onChange: <K extends keyof MapPrefs>(key: K, value: MapPrefs[K]) => void;
   onClose: () => void;
-}) {
+}>) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />

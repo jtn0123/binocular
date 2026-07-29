@@ -326,12 +326,7 @@ export function planMultiDrop(
 
   const carried = new Set(binIds);
   const without = destination.row.bins.map((c) => c.binId).filter((id) => !carried.has(id));
-  const at =
-    target.index !== undefined
-      ? Math.max(0, Math.min(Math.trunc(target.index), without.length))
-      : target.beforeBinId && !carried.has(target.beforeBinId)
-        ? indexOrEnd(without, target.beforeBinId)
-        : without.length;
+  const at = landingIndex(target, without, carried);
 
   const orderedIds = [...without];
   orderedIds.splice(at, 0, ...binIds);
@@ -424,6 +419,27 @@ export function planDrop(
   }
 
   return { binId, shelfId: target.shelfId, orderedIds, crossShelf, place: describePlace(destination) };
+}
+
+/**
+ * Where a carried stack lands in the destination row.
+ *
+ * An explicit index wins and is clamped to the row. Otherwise the bin that was
+ * aimed at names the slot — unless it is one of the ones being carried, which
+ * names no slot that will still exist, so the stack goes to the end.
+ */
+function landingIndex(
+  target: DropTarget,
+  without: readonly string[],
+  carried: ReadonlySet<string>,
+): number {
+  if (target.index !== undefined) {
+    return Math.max(0, Math.min(Math.trunc(target.index), without.length));
+  }
+  if (target.beforeBinId && !carried.has(target.beforeBinId)) {
+    return indexOrEnd(without, target.beforeBinId);
+  }
+  return without.length;
 }
 
 function indexOrEnd(ids: readonly string[], id: string): number {

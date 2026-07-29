@@ -33,13 +33,13 @@ function BinCard({
   itemPhotoUris,
   place,
   onShowQr,
-}: {
+}: Readonly<{
   bin: BinRow;
   itemCount: number;
   itemPhotoUris: string[];
   place: string | null;
   onShowQr: () => void;
-}) {
+}>) {
   return (
     <Link href={{ pathname: '/bin/[id]', params: { id: bin.id } }} asChild>
       <Pressable
@@ -81,12 +81,12 @@ function ResultRow({
   onPress,
   onShowQr,
   onShowMap,
-}: {
+}: Readonly<{
   result: SearchResult;
   onPress: () => void;
   onShowQr: () => void;
   onShowMap: () => void;
-}) {
+}>) {
   const where =
     [result.binName, result.shelfName, result.locationName].filter(Boolean).join(', ') ||
     'unassigned';
@@ -148,13 +148,13 @@ function StatusRow({
   actionLabel,
   onAction,
   onOpen,
-}: {
+}: Readonly<{
   item: ItemWithBin;
   detail: string;
   actionLabel?: string;
   onAction?: () => void;
   onOpen: () => void;
-}) {
+}>) {
   return (
     <Pressable
       style={styles.statusRow}
