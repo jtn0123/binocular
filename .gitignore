@@ -50,3 +50,6 @@ eval/pool/*.jpg
 
 # Exported diagnostics bundles
 binocular-diagnostics-*.zip
+
+# Coverage (written by jest --coverage, read by the Sonar scan in CI)
+coverage/

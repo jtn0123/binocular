@@ -12,6 +12,16 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/__tests__/helpers/"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.{ts,tsx}",
+      "app/**/*.{ts,tsx}",
+      "!**/__tests__/**",
+      "!**/*.d.ts"
+    ],
+    "coverageReporters": [
+      "text-summary",
+      "lcov"
     ]
   },
   "scripts": {

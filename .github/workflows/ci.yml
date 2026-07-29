@@ -8,8 +8,17 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    env:
+      # Read once here so the scan step can ask whether it exists. A step
+      # cannot branch on `secrets` directly, and on a pull request from a fork
+      # it is empty — which should skip the scan, not fail the build.
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Sonar dates "new code" from the git history; a shallow clone makes
+          # every line look new and the new-code gate meaningless.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -37,4 +46,10 @@ jobs:
       - run: npm run audit:worklets
       # A GitHub runner has 2 cores; jest's default (cores - 1) still leaves
       # workers fighting, and each worker pays its own module-registry cost.
-      - run: npm test -- --ci --cacheDirectory ~/.cache/jest --maxWorkers=2
+      - run: npm test -- --ci --coverage --cacheDirectory ~/.cache/jest --maxWorkers=2
+
+      # Coverage is the whole reason this moved off Automatic Analysis, which
+      # only ever sees the repository and so reported 0.0% forever.
+      - name: SonarQube Cloud scan
+        if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@v6
