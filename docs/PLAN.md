@@ -632,17 +632,32 @@ strip along the bottom is the whole run of shelving.
       undo restoring a bin to the *tray* it was dragged out of. Break that and
       the screen test still passes, which is how a one-way trip for a loose
       bin would have shipped.
-- [ ] **Re-point `src/map/__tests__/helpers/wall.tsx` at the v3 wall**, and
-      un-skip the 22 drag tests it drives. The harness sums the layout chain
-      independently of `useMapFrames`, which is the whole reason it catches
-      anything; v3 inverts that chain — one scroller containing every rack
-      becomes a rack containing its own scroller — and gives cells a shared
-      width instead of a fixed one. Re-deriving the offsets against the new
-      implementation is quick and self-defeating, because the same hand would
-      then be writing both sides of the check, so this wants the eyes that
-      wrote it. Until then the same chain is covered from below, by
-      `mapFrames.test.ts` link by link and `mapDrag.test.ts` gesture by
-      gesture.
+- [x] **`helpers/wall.tsx` re-pointed at the v3 wall**, and its drag tests are
+      running again: 21 of the 22, end to end through the screen. Three things
+      changed, and the last one is the one to know about.
+      **The chain inverted.** One scroller holding every rack became one rack
+      holding its own scroller, so `map-scroll` is reported inside the area
+      rather than around it.
+      **The rack panel gained real offsets.** v3 shows one rack at a time, so
+      the second location that used to keep `area.x`/`area.y` non-zero is no
+      longer drawn — and an area at the origin hides a dropped area offset
+      completely, which is exactly the hole the two-location fixture existed
+      to close. The panel is inset below the toolbar and in from the edge in
+      the running app, so the harness now says so. Every one of the seven
+      links is checked: dropping any of `area.x`, `area.y`, `well.x`,
+      `well.y`, `board.y`, `strip.x` or the scroll offset turns this file red,
+      where on main a dropped `area.y` was invisible for the first rack.
+      **Some independence was lost, deliberately and visibly.** Cards no
+      longer have a fixed width and pitch, so their mid-lines come from
+      `slotMidlines` — the same function the board draws with. A fault in
+      *that* would move the cards and the expectations together and this would
+      not see it. The summing of the chain, which is the part that has
+      actually broken before, is still written out here link by link and owes
+      nothing to the implementation.
+- [x] **One drag test retired with the thing it tested**: shelves no longer
+      scroll sideways, so there is no sideways offset left to forget. What it
+      guarded — a constant horizontal error — is guarded by its neighbour,
+      which releases three points either side of a card's mid-line.
 - [ ] Confirmed on the field-test phone that paging, the rails, the swipe and
       the tray behave with gloves on. The swipe is the new unknown here: it is
       the first thing on this screen a mitten can trigger by accident.
