@@ -231,6 +231,95 @@ describe('editing the wall', () => {
     });
   });
 
+  /**
+   * A rack's shelf names describe where the shelves are, so they have to stay
+   * true when the ROWS stepper changes how many there are. Only while nobody
+   * has said otherwise: a typed name, or a shelf with bins filed against it,
+   * and the stepper leaves the names alone (see `ladderFor`).
+   */
+  describe('the shelf names, as a rack changes height', () => {
+    /** A rack built the way "+ RACK" builds one, and its shelves. */
+    const shelvesOf = () => listShelves(db, listLocations(db)[0].id).map((s) => s.name);
+
+    it('builds a fresh rack four shelves tall, named top to bottom', async () => {
+      (await edit()).addRack(4);
+      expect(shelvesOf()).toEqual(['Top', 'Upper', 'Lower', 'Bottom']);
+    });
+
+    it('re-reads the ladder all the way down to one shelf', async () => {
+      const rackEdit = await edit();
+      rackEdit.addRack(4);
+
+      // Four has a word for each rung; three does not, and leaving "Upper"
+      // and "Lower" on a rack with nothing between them describes a rack that
+      // no longer exists.
+      rackEdit.removeLastShelf(areas()[0]);
+      expect(shelvesOf()).toEqual(['Top', 'Middle', 'Bottom']);
+
+      rackEdit.removeLastShelf(areas()[0]);
+      expect(shelvesOf()).toEqual(['Top', 'Bottom']);
+
+      rackEdit.removeLastShelf(areas()[0]);
+      expect(shelvesOf()).toEqual(['Top']);
+    });
+
+    it('re-reads it going back up, naming the new shelf as part of the ladder', async () => {
+      const rackEdit = await edit();
+      rackEdit.addRack(4);
+      rackEdit.addShelf(areas()[0], 4);
+
+      // Not Top / Upper / Lower / Bottom / New shelf: the rack got taller, so
+      // every shelf on it is somewhere different.
+      expect(shelvesOf()).toEqual(['Top', 'Upper', 'Middle', 'Lower', 'Bottom']);
+    });
+
+    it('says so, rather than rewriting three labels silently', async () => {
+      const rackEdit = await edit();
+      rackEdit.addRack(4);
+      rackEdit.removeLastShelf(areas()[0]);
+
+      expect(notify).toHaveBeenCalledWith('Bottom removed — now Top, Middle, Bottom');
+    });
+
+    it('stops the moment one shelf has been named by hand', async () => {
+      const rackEdit = await edit();
+      rackEdit.addRack(4);
+      const shelves = listShelves(db, listLocations(db)[0].id);
+      rackEdit.renameShelf(shelves[1].id, 'Paint tins');
+
+      rackEdit.removeLastShelf(areas()[0]);
+      // Nothing renamed, and nothing claimed to have been.
+      expect(shelvesOf()).toEqual(['Top', 'Paint tins', 'Lower']);
+      expect(notify).toHaveBeenCalledWith('Bottom removed');
+
+      rackEdit.addShelf(areas()[0], 4);
+      expect(shelvesOf()).toEqual(['Top', 'Paint tins', 'Lower', 'New shelf']);
+    });
+
+    it('stops once anything has been filed on the rack', async () => {
+      // A shelf holding bins is a shelf whose name is on every breadcrumb
+      // pointing at them, and the ROWS stepper is not where anyone expects
+      // that to be rewritten.
+      const rackEdit = await edit();
+      rackEdit.addRack(4);
+      const shelves = listShelves(db, listLocations(db)[0].id);
+      createBin(db, { name: 'Wire', shortCode: 'B-800', shelfId: shelves[0].id });
+
+      rackEdit.removeLastShelf(areas()[0]);
+      expect(shelvesOf()).toEqual(['Top', 'Upper', 'Lower']);
+    });
+
+    it('leaves a rack that was never on the ladder entirely alone', async () => {
+      // Racks made before any of this existed, and racks made by hand.
+      const { location } = rack('R1 · Garage');
+      createShelf(db, { locationId: location.id, name: 'Shelf A', capacity: 4 });
+      const rackEdit = await edit();
+
+      rackEdit.addShelf(areas()[0], 4);
+      expect(shelvesOf()).toEqual(['Top', 'Shelf A', 'New shelf']);
+    });
+  });
+
   describe('the smaller edits', () => {
     it('refuses a shelf name that is only whitespace', async () => {
       const { shelf } = rack('R1 · Garage');

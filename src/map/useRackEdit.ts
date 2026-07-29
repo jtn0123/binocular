@@ -9,6 +9,7 @@ import {
   rackCodeOf,
   rackLabelOf,
   type MapArea,
+  type MapRow,
 } from '@/db/mapView';
 import {
   createBin,
@@ -26,11 +27,46 @@ import {
 } from '@/db/queries';
 import { logEvent } from '@/diagnostics/events';
 import { plural } from '@/lib/text';
+import { isShelfLadder, shelfLadder } from '@/map/shelfNames';
 
 /** A fresh rack is four shelves tall, top to bottom, like the ones on the wall. */
-const NEW_RACK_SHELVES = ['Top', 'Upper', 'Lower', 'Bottom'];
+const NEW_RACK_HEIGHT = 4;
 /** What a rack is as wide as when there is nothing to copy it from. */
 const DEFAULT_COLUMNS = 4;
+
+/**
+ * The names a rack should carry once it is `height` shelves tall — or null to
+ * leave the ones it has.
+ *
+ * The ROWS stepper changes how tall a rack is, and on an untouched rack the
+ * shelf names are a description of that height (see `shelfNames`): going from
+ * four shelves to three should leave Top / Middle / Bottom, not Top / Upper /
+ * Lower with the word for the missing rung still in the middle of it.
+ *
+ * Two conditions, and both are about not overwriting something someone meant.
+ * The names must still be the ladder they were given — one hand-typed name and
+ * the rack has names, not positions. And every shelf must be empty: a shelf
+ * with bins on it is a shelf someone has filed things against, its name is on
+ * every breadcrumb that points at them, and a stepper is not where anyone
+ * expects that to be rewritten. So this is really the "fresh rack, still being
+ * set up" case, which is the one where it matters.
+ */
+function ladderFor(rows: readonly MapRow[], height: number): string[] | null {
+  if (rows.some((row) => row.bins.length > 0)) return null;
+  if (!isShelfLadder(rows.map((row) => row.name))) return null;
+  return shelfLadder(height);
+}
+
+/** Writes a ladder across shelves that are already in top-to-bottom order. */
+function relabel(db: DbAdapter, rows: readonly MapRow[], names: readonly string[]): boolean {
+  let changed = false;
+  rows.forEach((row, index) => {
+    if (!row.shelfId || row.name === names[index]) return;
+    renameShelf(db, row.shelfId, names[index]);
+    changed = true;
+  });
+  return changed;
+}
 
 /**
  * Editing the shape of the wall (v3): racks, shelves, and how wide they are.
@@ -103,7 +139,7 @@ export function useRackEdit({
         name: composeRackName(nextRackCode(existing.map((l) => l.name)), 'New rack'),
       });
       const width = Math.max(1, columns || DEFAULT_COLUMNS);
-      for (const name of NEW_RACK_SHELVES) {
+      for (const name of shelfLadder(NEW_RACK_HEIGHT)) {
         createShelf(db, { locationId: location.id, name, capacity: width });
       }
       logEvent(db, { kind: 'organize', name: 'rack_added', detail: { columns: width } });
@@ -176,11 +212,16 @@ export function useRackEdit({
   const addShelf = useCallback(
     (area: MapArea, columns: number) => {
       if (!area.locationId) return;
+      const shelves = area.rows.filter((row) => row.shelfId !== null);
+      // Read at the height the rack is *about* to be, so the shelf being made
+      // is named as part of the ladder rather than added to the bottom of one.
+      const ladder = ladderFor(shelves, shelves.length + 1);
       createShelf(db, {
         locationId: area.locationId,
-        name: 'New shelf',
+        name: ladder ? ladder[shelves.length] : 'New shelf',
         capacity: Math.max(1, columns || DEFAULT_COLUMNS),
       });
+      if (ladder) relabel(db, shelves, ladder);
       onChange();
     },
     [db, onChange],
@@ -200,9 +241,16 @@ export function useRackEdit({
         notify('Empty a shelf before removing it.');
         return;
       }
+      const shelves = area.rows.filter((row) => row.shelfId !== null);
+      const staying = shelves.filter((row) => row.shelfId !== gone.shelfId);
+      const ladder = ladderFor(shelves, staying.length);
       deleteShelf(db, gone.shelfId);
+      const renamed = ladder ? relabel(db, staying, ladder) : false;
       onChange();
-      notify(`${gone.name} removed`);
+      // Said rather than left to be noticed: on a rack still being set up this
+      // press changes the name of every shelf on it, and a stepper that
+      // quietly rewrites three labels is alarming even when it is right.
+      notify(renamed ? `${gone.name} removed — now ${ladder?.join(', ')}` : `${gone.name} removed`);
     },
     [db, notify, onChange],
   );

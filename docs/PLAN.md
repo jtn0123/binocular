@@ -597,6 +597,29 @@ strip along the bottom is the whole run of shelving.
       keeps the rack you are on in view, and while editing it keeps the button
       with it, so adding a rack never leaves you looking at the rack you just
       made and no way back to make another.
+- [x] **Shelf names that describe the rack they are on.** A fresh rack is
+      built Top / Upper / Lower / Bottom, and the ROWS stepper used to change
+      how many shelves there were without changing what they were called: down
+      to three left Top / Upper / Lower, naming a rung that no longer had
+      anything between it and the top, and up to five appended "New shelf".
+      The names are positions, not names, so they are now re-read at the new
+      height — Top / Middle / Bottom at three, Top / Upper / Middle / Lower /
+      Bottom at five, Top alone at one. The words run out at five; past that
+      the ends keep theirs and the rungs are numbered from the top.
+
+      Two conditions, and both are about not overwriting something someone
+      meant. The names must still be the exact ladder they were given — one
+      typed name and the rack has names, not positions, and nothing may touch
+      them again. And every shelf must be empty, which is the narrower of the
+      two and the one that was asked for: a shelf with bins on it has its name
+      on every breadcrumb pointing at them, and a stepper is not where anyone
+      expects that to be rewritten. So this is the "fresh rack, still being
+      set up" case. A rack already sitting on a half-renamed ladder from
+      before this existed is left alone, since it is not a ladder any height
+      would have produced.
+
+      The removal says what it did — "Bottom removed — now Top, Middle,
+      Bottom" — because one press otherwise silently rewrites three labels.
 - [x] Verified live again for both: swipe pages the wall in each direction,
       refuses at both ends with the damped give, ignores a 33pt nudge and a
       vertical drag, and — the regression that mattered — a 400 ms hold still
