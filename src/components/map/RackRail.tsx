@@ -1,6 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
 import type { RackEdge, WindowFrame } from '@/map/useMapDrag';
 import { colors, mono, sp } from '@/theme';
@@ -19,6 +26,26 @@ import { colors, mono, sp } from '@/theme';
  * gesture speaks: `onLayout` would only give a position relative to whichever
  * nested view happens to be its parent.
  */
+/**
+ * How the rail is drawn: which edge it hugs, and which of its three states.
+ *
+ * Every one of these has a left and a right form, because the rail rounds and
+ * opens towards the middle of the screen. Read as one array of six
+ * conditionals it was the bulk of this component's branching for something
+ * that is really two questions asked three times.
+ */
+function railStyle(side: RackEdge, carrying: boolean, hot: boolean): StyleProp<ViewStyle> {
+  const near = side === 'prev';
+  return [
+    styles.rail,
+    near ? styles.prev : styles.next,
+    carrying && styles.armed,
+    carrying && (near ? styles.armedPrev : styles.armedNext),
+    hot && styles.hot,
+    hot && (near ? styles.hotPrev : styles.hotNext),
+  ];
+}
+
 /** Lit under the finger, armed with a bin in hand, or resting. */
 function chevronColour(hot: boolean, carrying: boolean): string {
   if (hot) return colors.amberInkOn;
@@ -81,14 +108,7 @@ export function RackRail({
       ref={ref}
       onLayout={report}
       onPress={onPress}
-      style={[
-        styles.rail,
-        side === 'prev' ? styles.prev : styles.next,
-        carrying && styles.armed,
-        carrying && (side === 'prev' ? styles.armedPrev : styles.armedNext),
-        hot && styles.hot,
-        hot && (side === 'prev' ? styles.hotPrev : styles.hotNext),
-      ]}
+      style={railStyle(side, carrying, hot)}
       accessibilityRole="button"
       accessibilityLabel={spokenLabel}
       testID={`map-rail-${side}`}
