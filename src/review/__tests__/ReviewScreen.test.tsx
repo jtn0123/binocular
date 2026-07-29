@@ -10,6 +10,7 @@ import {
   insertItem,
   insertScan,
   itemsForBin,
+  listDeletedItems,
   recordScanUsage,
   updateScanStatus,
   type BinRow,
@@ -184,6 +185,47 @@ describe('ReviewScreen (blueprint §6.3 + §8.1)', () => {
         .map((i) => i.name)
         .sort();
       expect(names).toEqual(['Phillips screwdriver', 'Tape measure']);
+    });
+
+    /**
+     * D17 says a deleted item is snapshotted and restorable for 30 days, and
+     * these were the only deletions in the app that were not — the largest
+     * ones, at that. A save could wipe a bin's entire contents with no way
+     * back, while deleting one item from bin detail was fully recoverable.
+     */
+    describe('deletions are recoverable (D17)', () => {
+      it('an item removed by a "not seen" tap lands in Recently deleted', async () => {
+        const hammer = insertItem(db, { binId: bin.id, name: 'Hammer', category: 'hand_tool' });
+        const { screen } = await renderScreen(makeScan());
+        await fireEvent.press(screen.getByTestId(`existing-${hammer.id}`));
+        await fireEvent.press(screen.getByTestId('save'));
+
+        expect(itemsForBin(db, bin.id).map((i) => i.name)).not.toContain('Hammer');
+        expect(listDeletedItems(db).map((i) => i.name)).toContain('Hammer');
+      });
+
+      it('replace mode snapshots everything it wipes', async () => {
+        insertItem(db, { binId: bin.id, name: 'Hammer', category: 'hand_tool' });
+        insertItem(db, { binId: bin.id, name: 'Chisel', category: 'hand_tool' });
+        const { screen } = await renderScreen(makeScan());
+        await fireEvent.press(screen.getByTestId('mode-replace'));
+        await fireEvent.press(screen.getByTestId('save'));
+
+        const recoverable = listDeletedItems(db).map((i) => i.name);
+        expect(recoverable).toContain('Hammer');
+        expect(recoverable).toContain('Chisel');
+      });
+
+      it('a deselected "still here" chip is recoverable too', async () => {
+        insertItem(db, { binId: bin.id, name: 'Phillips screwdriver', category: 'hand_tool' });
+        const { screen } = await renderScreen(makeScan());
+        // The chip matched an existing item, so it sits in "Still here" and
+        // unticking it means delete — not "don't add".
+        await fireEvent.press(screen.getByTestId('chip-detected-0'));
+        await fireEvent.press(screen.getByTestId('save'));
+
+        expect(listDeletedItems(db).map((i) => i.name)).toContain('Phillips screwdriver');
+      });
     });
   });
 

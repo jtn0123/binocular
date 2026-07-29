@@ -652,11 +652,16 @@ export default function MapScreen() {
       />
 
       <GestureDetector gesture={gesture}>
-        <View style={styles.mapArea} onLayout={(e) => frames.setViewport(e.nativeEvent.layout)}>
+        <View
+          style={styles.mapArea}
+          testID="map-viewport"
+          onLayout={(e) => frames.setViewport(e.nativeEvent.layout)}
+        >
           {rack ? (
             <Animated.View
               key={rack.locationId ?? 'rack'}
               style={[styles.area, panelStyle]}
+              testID={`map-area-${frames.areaKeyOf(areas.indexOf(rack), rack.locationId)}`}
               onLayout={(e) =>
                 frames.setAreaFrame(
                   frames.areaKeyOf(areas.indexOf(rack), rack.locationId),
@@ -672,8 +677,11 @@ export default function MapScreen() {
                 because a board's layout is reported relative to this, not to
                 the area — the drag sums the whole chain.
               */}
+              {/* In v3 the well *is* the scroller, so it answers to both
+                  handles the drag tests reach for. */}
               <ScrollView
                 ref={frames.scrollRef}
+                testID="map-scroll"
                 style={styles.well}
                 contentContainerStyle={styles.wellBody}
                 scrollEnabled={dragging === null}

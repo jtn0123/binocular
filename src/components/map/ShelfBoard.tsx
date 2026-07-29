@@ -81,7 +81,12 @@ export function ShelfBoard(props: ShelfBoardProps) {
     <View style={styles.board} onLayout={props.onLayout} testID={`map-board-${key}`}>
       {lit ? <View pointerEvents="none" style={styles.glow} /> : null}
 
-      <View style={styles.strip} onLayout={props.onRowLayout}>
+      {/*
+        A plain row, not a scroller (v3): slots share the plank's width and a
+        shelf you have to scroll is a shelf whose contents you cannot count.
+        It keeps the `map-strip` handle so the drag tests can still find it.
+      */}
+      <View style={styles.strip} testID={`map-strip-${key}`} onLayout={props.onRowLayout}>
         {cells.length > 0 ? cells : <Text style={styles.emptyRow}>no bins yet</Text>}
       </View>
 

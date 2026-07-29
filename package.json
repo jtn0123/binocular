@@ -8,6 +8,10 @@
     "testTimeout": 20000,
     "transformIgnorePatterns": [
       "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg)"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/__tests__/helpers/"
     ]
   },
   "scripts": {
@@ -20,7 +24,8 @@
     "test": "jest",
     "seed": "tsx scripts/seed.ts",
     "eval": "tsx scripts/eval.ts",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "audit:worklets": "node scripts/ci/audit-worklet-closures.mjs app src"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.5",

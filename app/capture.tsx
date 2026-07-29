@@ -5,6 +5,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { CameraGate } from '@/components/CameraGate';
 import { useDb } from '@/db/DbProvider';
 import { getBin, type ScanMode } from '@/db/queries';
 import { logEvent } from '@/diagnostics/events';
@@ -72,6 +73,25 @@ export default function CaptureScreen() {
     getProviderChoice().then(setEngine, () => setEngine(null));
   }, []);
 
+  /**
+   * Set once the user has walked away from this camera.
+   *
+   * Recognition cannot be called off — the request is in flight and the photo
+   * is already durable — but the *navigation* absolutely can. Pressing Cancel
+   * (or hardware back) during "Recognizing…" used to leave `processScan`
+   * running, and its `router.replace` then fired seconds later, dragging the
+   * user into a review screen for a scan they had abandoned. The scan still
+   * lands in the queue and is reviewable from there; it just no longer
+   * hijacks whatever they moved on to.
+   */
+  const abandoned = useRef(false);
+  useEffect(
+    () => () => {
+      abandoned.current = true;
+    },
+    [],
+  );
+
   useEffect(() => {
     let cancelled = false;
     loadCapturePrefs().then((prefs) => {
@@ -100,13 +120,14 @@ export default function CaptureScreen() {
   if (!permission) return <View style={styles.container} />;
   if (!permission.granted) {
     return (
-      <View style={styles.center}>
+      <>
         <Stack.Screen options={{ title: 'Camera' }} />
-        <Text style={styles.permissionText}>Binocular needs the camera to photograph bins.</Text>
-        <Pressable style={styles.shutterAlt} onPress={requestPermission}>
-          <Text style={styles.shutterAltLabel}>Grant camera access</Text>
-        </Pressable>
-      </View>
+        <CameraGate
+          reason="to photograph bins"
+          canAskAgain={permission.canAskAgain}
+          onRequest={() => void requestPermission()}
+        />
+      </>
     );
   }
 
@@ -117,6 +138,11 @@ export default function CaptureScreen() {
     hapticShutter();
     try {
       const photo = await cameraRef.current.takePictureAsync();
+      // Walked away while the shutter was still working. Everything after
+      // this point either persists the photo or navigates on the strength of
+      // it, so the guards further in are too late — `submit` has already
+      // started by then. A cancelled capture must leave nothing behind.
+      if (abandoned.current) return;
       const shot = { uri: photo.uri, width: photo.width, height: photo.height };
       if (confirmBeforeSending) {
         // A blurry frame on a cloud engine costs real money and a round trip
@@ -128,11 +154,12 @@ export default function CaptureScreen() {
       }
       await submit(shot);
     } catch (err) {
+      if (abandoned.current) return;
       Alert.alert('Capture failed', err instanceof Error ? err.message : String(err), [
         { text: 'OK', onPress: () => setBusy('idle') },
       ]);
     } finally {
-      setBusy((b) => (b === 'capturing' ? 'idle' : b));
+      if (!abandoned.current) setBusy((b) => (b === 'capturing' ? 'idle' : b));
     }
   }
 
@@ -168,6 +195,9 @@ export default function CaptureScreen() {
 
       setBusy('recognizing');
       const result = await processScan(db, scanId);
+      // Walked away while it was thinking: the scan is saved and reviewable
+      // from the queue, but nothing here gets to move them.
+      if (abandoned.current) return;
       const target =
         mode === 'find_it'
           ? ({ pathname: '/find/[scanId]', params: { scanId } } as const)
@@ -178,11 +208,17 @@ export default function CaptureScreen() {
       }
       if (result.outcome === 'queued') {
         if (mode === 'find_it') {
-          Alert.alert(
-            'Search needs a connection',
-            'Photo lookup requires the cloud engine — try text search instead.',
-            [{ text: 'OK', onPress: () => router.back() }],
-          );
+          // Straight to the find screen, NOT back to the mode list.
+          //
+          // That screen already has the graceful degradation §8.3 asks for:
+          // it matches the photo against the items catalogued on this phone
+          // and offers "Not recognized — but this looks like…". Bouncing the
+          // user back here meant that branch could not be reached by ANY
+          // route, so the whole D20 cost — the downloaded encoder, the
+          // embeddings table, the backfill — bought nothing on the one screen
+          // that justified it. Its own copy explains the situation better
+          // than an alert could, and it is not a dead end.
+          router.replace(target);
           return;
         }
         Alert.alert(
@@ -196,12 +232,17 @@ export default function CaptureScreen() {
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (err) {
+      // Same reasoning as the abandoned check above, for the unhappy path:
+      // recognition that *fails* seconds after you walked away has no more
+      // right to interrupt you than recognition that succeeds. The scan is
+      // durable either way and the queue screen still has it.
+      if (abandoned.current) return;
       Alert.alert('Scan failed', err instanceof Error ? err.message : String(err), [
         { text: 'OK', onPress: () => setBusy('idle') },
       ]);
       return;
     } finally {
-      setBusy((b) => (b === 'capturing' ? 'idle' : b));
+      if (!abandoned.current) setBusy((b) => (b === 'capturing' ? 'idle' : b));
     }
   }
 
@@ -378,7 +419,16 @@ export default function CaptureScreen() {
               <Text style={styles.nextBinLabel}>Next bin →</Text>
             </Pressable>
           ) : null}
-          <Pressable style={styles.cancel} onPress={() => router.back()}>
+          <Pressable
+            style={styles.cancel}
+            onPress={() => {
+              abandoned.current = true;
+              router.back();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={shotCount > 0 ? 'Done photographing' : 'Cancel'}
+            testID="capture-cancel"
+          >
             <Text style={styles.cancelLabel}>{shotCount > 0 ? 'Done' : 'Cancel'}</Text>
           </Pressable>
         </View>

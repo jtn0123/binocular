@@ -81,7 +81,11 @@ describe('typed query helpers', () => {
 
   it('walks a scan through its status lifecycle', () => {
     const bin = createBin(db, { name: 'Bits', shortCode: 'B-001' });
-    const scan = insertScan(db, { mode: 'bin_audit', photoUri: 'file:///photo.jpg', binId: bin.id });
+    const scan = insertScan(db, {
+      mode: 'bin_audit',
+      photoUri: 'file:///photo.jpg',
+      binId: bin.id,
+    });
     expect(getScan(db, scan.id)?.status).toBe('queued');
 
     updateScanStatus(db, scan.id, 'processing');
@@ -96,6 +100,28 @@ describe('typed query helpers', () => {
     expect(done?.resolved_at).toBe('2026-01-02T00:00:00Z');
     // earlier raw_response is preserved by the COALESCE update
     expect(done?.raw_response).toBe('{"items":[]}');
+  });
+
+  /**
+   * Discarding is final.
+   *
+   * Recognition is already in flight when a scan is thrown away, and it ends
+   * by writing its own status — which put the scan straight back into the
+   * queue the user had just cleared it from. The guard lives in the query
+   * rather than at the call sites so it covers every caller, including ones
+   * written later.
+   */
+  it('will not write a status over a discarded scan', () => {
+    const scan = insertScan(db, { mode: 'bin_audit', photoUri: 'file:///gone.jpg' });
+    updateScanStatus(db, scan.id, 'discarded');
+
+    // The in-flight recognition landing after the discard.
+    updateScanStatus(db, scan.id, 'review', { rawResponse: '{"items":[]}' });
+
+    const after = getScan(db, scan.id);
+    expect(after?.status).toBe('discarded');
+    // And it does not smuggle the response in either — the row is untouched.
+    expect(after?.raw_response).toBeNull();
   });
 
   it('splits waiting scans by what the user can do about them', () => {
@@ -159,7 +185,12 @@ describe('typed query helpers', () => {
     // Ordered by spend, biggest first.
     const totals = listSpendTotals(db);
     expect(totals).toHaveLength(2);
-    expect(totals[0]).toMatchObject({ engine: 'openai', scans: 2, input_tokens: 5000, output_tokens: 1100 });
+    expect(totals[0]).toMatchObject({
+      engine: 'openai',
+      scans: 2,
+      input_tokens: 5000,
+      output_tokens: 1100,
+    });
     expect(totals[0].cost_usd).toBeCloseTo(0.05, 9);
     expect(totals[1]).toMatchObject({ engine: 'claude', scans: 1 });
     expect(totals[1].cost_usd).toBeCloseTo(0.04, 9);

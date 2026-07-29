@@ -333,6 +333,25 @@ of D21 — arranging the wall on the picture of it — was built.
       finalize in the same task as its last update, and reading state there
       commits the previous slot — which is what made an earlier version land
       one slot short, but only sometimes.
+- [x] End-to-end tests for the drag (`src/map/__tests__/mapDrag.test.tsx`).
+      The two existing suites sat on either side of the thing that matters:
+      `dragGeometry` is unit-tested against hand-written measurements, and
+      `MapScreen` drives taps with the gesture mocked away by a chain that
+      discards every handler. Nothing exercised the join — above all
+      `useMapFrames.measureRows`, which sums area → well → board → strip
+      minus the scroll and warns in its own comment that "dropping any link
+      silently lands a bin on the wrong shelf". The new suite records the
+      real handlers and drives a layout pass with phone-shaped geometry
+      (`helpers/wall.tsx`), so a drag from one card to another is checked
+      against the database. Every link was verified by deleting it from
+      `measureRow` and confirming a test fails; the tests for a release near
+      a shelf's edge, and a few points from a card's mid-line, exist because
+      the first cut of the suite passed with two links deleted.
+- [ ] Confirmed on the field-test phone that a drag moves the bin you aimed
+      at. The suite proves that *if* the gesture fires the right thing
+      happens; it cannot prove RNGH activates the pan or that the worklets
+      survive the UI runtime, which is the half that killed the process last
+      time.
 
 ### Map as a tab, and the shelf-board redesign
 - [x] `app/map.tsx` → `app/(tabs)/map.tsx`. `/map?highlight=…` is unchanged
@@ -613,6 +632,17 @@ strip along the bottom is the whole run of shelving.
       undo restoring a bin to the *tray* it was dragged out of. Break that and
       the screen test still passes, which is how a one-way trip for a loose
       bin would have shipped.
+- [ ] **Re-point `src/map/__tests__/helpers/wall.tsx` at the v3 wall**, and
+      un-skip the 22 drag tests it drives. The harness sums the layout chain
+      independently of `useMapFrames`, which is the whole reason it catches
+      anything; v3 inverts that chain — one scroller containing every rack
+      becomes a rack containing its own scroller — and gives cells a shared
+      width instead of a fixed one. Re-deriving the offsets against the new
+      implementation is quick and self-defeating, because the same hand would
+      then be writing both sides of the check, so this wants the eyes that
+      wrote it. Until then the same chain is covered from below, by
+      `mapFrames.test.ts` link by link and `mapDrag.test.ts` gesture by
+      gesture.
 - [ ] Confirmed on the field-test phone that paging, the rails, the swipe and
       the tray behave with gloves on. The swipe is the new unknown here: it is
       the first thing on this screen a mitten can trigger by accident.
