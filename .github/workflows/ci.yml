@@ -9,13 +9,20 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     env:
-      # Read once here so the scan step can ask whether it exists. A step
-      # cannot branch on `secrets` directly, and on a pull request from a fork
-      # it is empty — which should skip the scan, not fail the build.
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      # Only whether the token exists, never the token. A step cannot branch on
+      # `secrets` directly, so something has to be readable at job scope — but
+      # the secret itself at job scope is handed to `npm ci`, to every lint and
+      # test process, and to any install script any dependency ships. The scan
+      # is the only step that needs it, so it is the only step that gets it.
+      HAS_SONAR_TOKEN: ${{ secrets.SONAR_TOKEN != '' }}
     steps:
-      - uses: actions/checkout@v4
+      # Pinned like the scan action below, and for the same reason. v4:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          # The token is only needed to clone. Left persisted it stays in the
+          # local git config for every later step in the job, which is a
+          # standing credential none of them asked for.
+          persist-credentials: false
           # Sonar dates "new code" from the git history; a shallow clone makes
           # every line look new and the new-code gate meaningless.
           fetch-depth: 0
@@ -51,7 +58,9 @@ jobs:
       # Coverage is the whole reason this moved off Automatic Analysis, which
       # only ever sees the repository and so reported 0.0% forever.
       - name: SonarQube Cloud scan
-        if: env.SONAR_TOKEN != ''
+        if: env.HAS_SONAR_TOKEN == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         # Pinned to a commit, not a tag. A tag is a moving pointer its owner
         # can repoint, and this step runs in a job that has SONAR_TOKEN in its
         # environment — so "whatever v8 means today" is a decision handed to

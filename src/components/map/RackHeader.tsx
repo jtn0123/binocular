@@ -12,6 +12,12 @@ import { colors, mono, radius, sp } from '@/theme';
  * "By the door" must not renumber the wall. Only shown in edit mode — at rest
  * the scrubber already says which rack this is, and a second header saying it
  * again would cost a shelf's worth of screen.
+ *
+ * It is drawn in edit mode even when there is no rack to describe, because it
+ * carries Done: without it, someone who turned editing on with an empty wall
+ * had no way to turn it off. `onRename` is null in that case — there is
+ * nothing to rename — and the label says so instead of offering a field that
+ * writes nowhere.
  */
 export function RackHeader({
   code,
@@ -25,42 +31,48 @@ export function RackHeader({
   label: string;
   /** "7/16" — bins filed against slots declared, across the whole rack. */
   fill: string;
-  onRename: (label: string) => void;
+  /** Null when there is no rack to name; the label then reads as plain text. */
+  onRename: ((label: string) => void) | null;
   onOpenSettings: () => void;
   onDone: () => void;
 }>) {
   const [draft, setDraft] = useState<string | null>(null);
 
+  // Return fires onSubmitEditing and then blurs the field, so both handlers
+  // ran and the rename was written twice.
+  const commit = () => {
+    if (draft === null || !onRename) return;
+    onRename(draft);
+    setDraft(null);
+  };
+
   return (
     <View style={styles.row}>
       <Text style={styles.code}>{code}</Text>
 
-      {draft === null ? (
+      {draft === null || !onRename ? (
         <Pressable
-          onPress={() => setDraft(label)}
-          accessibilityRole="button"
-          accessibilityLabel={`Rename this rack, currently ${label}`}
+          onPress={() => onRename && setDraft(label)}
+          disabled={!onRename}
+          accessibilityRole={onRename ? 'button' : 'text'}
+          accessibilityLabel={onRename ? `Rename this rack, currently ${label}` : label}
           style={styles.labelWrap}
           testID="rack-rename"
         >
           <Text style={styles.label} numberOfLines={1}>
             {label}
           </Text>
-          <Ionicons name="pencil" size={11} color={colors.chipSelectedBorder} />
+          {onRename ? (
+            <Ionicons name="pencil" size={11} color={colors.chipSelectedBorder} />
+          ) : null}
         </Pressable>
       ) : (
         <TextInput
           style={styles.input}
           value={draft}
           onChangeText={setDraft}
-          onBlur={() => {
-            onRename(draft);
-            setDraft(null);
-          }}
-          onSubmitEditing={() => {
-            onRename(draft);
-            setDraft(null);
-          }}
+          onBlur={commit}
+          onSubmitEditing={commit}
           autoFocus
           accessibilityLabel="Rack name"
           testID="rack-rename-input"

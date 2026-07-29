@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 
 import type { MapCell } from '@/db/mapView';
+import { plural } from '@/lib/text';
 import { colors, mono, sp } from '@/theme';
 
 import { CARD_H, SLOT_MAX_W } from './metrics';
@@ -47,7 +48,7 @@ export function DragGhost({
           {cell.name}
         </Text>
         <Text style={styles.count} numberOfLines={1}>
-          {cell.items === 0 ? 'empty' : `${cell.items} item${cell.items === 1 ? '' : 's'}`}
+          {cell.items === 0 ? 'empty' : plural(cell.items, 'item')}
         </Text>
       </View>
     </Animated.View>

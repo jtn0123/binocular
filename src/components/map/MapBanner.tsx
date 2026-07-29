@@ -161,7 +161,7 @@ function PickBar({
           style={styles.moveThem}
           onPress={onMovePicked}
           accessibilityRole="button"
-          accessibilityLabel={`Move the ${pickedCount} picked bin${pickedCount === 1 ? '' : 's'}`}
+          accessibilityLabel={`Move the ${plural(pickedCount, 'picked bin')}`}
           testID="map-move-picked"
         >
           <Text style={styles.moveThemLabel}>Move them</Text>

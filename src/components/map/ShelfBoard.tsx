@@ -355,19 +355,27 @@ function ShelfName({
       </Pressable>
     );
   }
+  /**
+   * One commit per edit, whichever way it ends.
+   *
+   * Pressing return fires `onSubmitEditing` and then blurs the field, firing
+   * `onBlur` — so both ran and the same name was written twice. Each write is
+   * a database round trip *and* a full map redraw, so it was not the harmless
+   * no-op it looks like.
+   */
+  const commit = () => {
+    if (draft === null) return;
+    onRename(draft);
+    setDraft(null);
+  };
+
   return (
     <TextInput
       style={styles.nameInput}
       value={draft}
       onChangeText={setDraft}
-      onBlur={() => {
-        onRename(draft);
-        setDraft(null);
-      }}
-      onSubmitEditing={() => {
-        onRename(draft);
-        setDraft(null);
-      }}
+      onBlur={commit}
+      onSubmitEditing={commit}
       autoFocus
       accessibilityLabel="Shelf name"
       testID={`${testID}-input`}

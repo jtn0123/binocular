@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 import type { MapCell, MapRow } from '@/db/mapView';
@@ -7,6 +7,7 @@ import type { WindowFrame } from '@/map/useMapDrag';
 import { colors, mono, sp } from '@/theme';
 
 import { BinCard, type BinCardState } from './BinCard';
+import { plural } from '@/lib/text';
 
 /**
  * Bins that are not on a shelf, as a drawer under the wall (v3).
@@ -77,11 +78,11 @@ export function UnshelvedTray({
    * about the current arrangement rather than a guarantee, and cheap to stop
    * depending on.
    */
-  useEffect(() => {
-    head.current?.measureInWindow((x, y, width, height) =>
-      onFrame({ x, y, width, height }),
-    );
-  }, [open, count, onFrame]);
+  const measure = useCallback(() => {
+    head.current?.measureInWindow((x, y, width, height) => onFrame({ x, y, width, height }));
+  }, [onFrame]);
+
+  useEffect(measure, [open, count, measure]);
 
   return (
     <View style={styles.wrap}>
@@ -132,15 +133,11 @@ export function UnshelvedTray({
       <Pressable
         ref={head}
         style={styles.head}
-        onLayout={() =>
-          head.current?.measureInWindow((x, y, width, height) =>
-            onFrame({ x, y, width, height }),
-          )
-        }
+        onLayout={measure}
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`Bins not on a shelf, ${count}. ${open ? 'Collapse' : 'Expand'}`}
+        accessibilityLabel={`${plural(count, 'bin')} not on a shelf. ${open ? 'Collapse' : 'Expand'}`}
         testID="map-tray-toggle"
       >
         {lit ? <View pointerEvents="none" style={styles.glow} /> : null}

@@ -608,12 +608,12 @@ export default function MapScreen() {
       {/* The design gives the map no title bar: the panel is a picture of a
           wall, and 54pt of chrome above it is half a shelf. */}
       <ScreenTop />
-      {editing && rack ? (
+      {editing ? (
         <RackHeader
-          code={rackCodeOf(rack.name, rackAt)}
-          label={rackLabelOf(rack.name)}
-          fill={`${areaFill(rack).filled}/${areaFill(rack).slots}`}
-          onRename={(label) => edit.renameRack(rack, rackAt, label)}
+          code={rack ? rackCodeOf(rack.name, rackAt) : ''}
+          label={rack ? rackLabelOf(rack.name) : 'No racks on the wall yet'}
+          fill={rack ? `${areaFill(rack).filled}/${areaFill(rack).slots}` : ''}
+          onRename={rack ? (label) => edit.renameRack(rack, rackAt, label) : null}
           onOpenSettings={() => setPrefsOpen(true)}
           onDone={() => setEditing(false)}
         />
@@ -643,7 +643,7 @@ export default function MapScreen() {
           if (!rack) return;
           edit.setColumns(rack, Math.max(1, Math.min(MAX_COLUMNS, next)));
         }}
-        canShrinkColumns={columns > 1}
+        canShrinkColumns={!!rack && columns > 1}
         rows={rack?.rows.length ?? 0}
         onAddRow={() => rack && edit.addShelf(rack, columns)}
         onRemoveRow={() => rack && edit.removeLastShelf(rack)}

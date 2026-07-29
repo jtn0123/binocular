@@ -48,6 +48,18 @@ export function WallSheet({
   const [renaming, setRenaming] = useState<number | null>(null);
   const [draft, setDraft] = useState('');
 
+  /**
+   * One commit per edit, whichever way it ends: pressing return fires
+   * `onSubmitEditing` and then blurs the field, so both handlers ran and the
+   * same name was written twice — a database round trip and a full map redraw
+   * each time.
+   */
+  const commitRename = () => {
+    if (renaming === null) return;
+    onRename(renaming, draft);
+    setRenaming(null);
+  };
+
   return (
     <Modal visible transparent={false} animationType="fade" onRequestClose={onClose}>
       <View style={styles.screen}>
@@ -138,14 +150,8 @@ export function WallSheet({
                               style={styles.nameInput}
                               value={draft}
                               onChangeText={setDraft}
-                              onBlur={() => {
-                                onRename(index, draft);
-                                setRenaming(null);
-                              }}
-                              onSubmitEditing={() => {
-                                onRename(index, draft);
-                                setRenaming(null);
-                              }}
+                              onBlur={commitRename}
+                              onSubmitEditing={commitRename}
                               autoFocus
                               accessibilityLabel={`Name of rack ${code}`}
                               testID={`wall-rename-input-${code}`}

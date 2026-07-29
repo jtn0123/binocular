@@ -10,6 +10,7 @@ import {
   getBin,
   insertItem,
   listBinsForShelf,
+  deleteLocation,
   listLocations,
   listShelves,
   setShelfCapacity,
@@ -745,6 +746,21 @@ describe('the map screen, driven by presses', () => {
 
       expect(listLocations(db).map((l) => l.name)).toEqual(['R2 · Shed', 'Garage']);
     });
+  });
+
+  it('can leave edit mode on a wall with no racks', async () => {
+    // Done lives in the rack header, which only drew when there was a rack —
+    // so turning editing on with an empty wall was a room with no door.
+    // Taking the only rack off the wall sends its bins to the tray, so the
+    // map still has content to draw and simply nowhere to draw it.
+    deleteLocation(db, listLocations(db)[0].id);
+
+    const screen = await renderMap();
+    await fireEvent.press(screen.getByTestId('map-edit-toggle'));
+    expect(screen.getByTestId('map-edit-done')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('map-edit-done'));
+    expect(screen.queryByTestId('map-edit-done')).toBeNull();
   });
 
   it('says there is nothing to draw before any bin exists', async () => {

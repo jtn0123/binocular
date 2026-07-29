@@ -402,13 +402,9 @@ export function planDrop(
   if (!destination) return null;
 
   const without = destination.row.bins.map((c) => c.binId).filter((id) => id !== binId);
-  const at =
-    target.index !== undefined
-      ? Math.max(0, Math.min(Math.trunc(target.index), without.length))
-      : target.beforeBinId
-        ? // A bin that is no longer there (a stale tap) means the end, not slot 0.
-          indexOrEnd(without, target.beforeBinId)
-        : without.length;
+  // The same rule as a group move, asked with a stack of one. This had drifted
+  // already: only the multi-drop copy handled a target that is itself carried.
+  const at = landingIndex(target, without, new Set([binId]));
   const orderedIds = [...without];
   orderedIds.splice(at, 0, binId);
 

@@ -50,7 +50,7 @@ export function HitsBar({
           style={styles.chip}
           onPress={() => onGo(hit.index)}
           accessibilityRole="button"
-          accessibilityLabel={`${hit.count} match${hit.count === 1 ? '' : 'es'} on rack ${hit.code}. Go there`}
+          accessibilityLabel={`${plural(hit.count, 'match', 'matches')} on rack ${hit.code}. Go there`}
           testID={`map-hit-${hit.code}`}
         >
           <Text style={styles.chipText}>
