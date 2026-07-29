@@ -62,8 +62,19 @@ jest.mock('react-native-reanimated', () => {
     withTiming: pass,
     withRepeat: pass,
     withSequence: pass,
+    withDelay: (_ms: number, animation: unknown) => animation,
     cancelAnimation: () => undefined,
-    Easing: { inOut: () => undefined, ease: undefined },
+    // Called, not merely read: the wall's paging animation builds its curves
+    // at module load, so a stub missing `Easing.in` fails the import of the
+    // map screen rather than going quietly unused.
+    Easing: {
+      in: (fn: unknown) => fn,
+      out: (fn: unknown) => fn,
+      inOut: (fn: unknown) => fn,
+      quad: undefined,
+      cubic: undefined,
+      ease: undefined,
+    },
   };
 });
 

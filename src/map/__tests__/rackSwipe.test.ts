@@ -1,10 +1,16 @@
 import { renderHook } from '@testing-library/react-native';
+// Namespaced: a bare `react-native` import shares a babel binding with
+// `@testing-library/react-native` and the two quietly overwrite each other.
+import * as RN from 'react-native';
 
 import { followOffset, swipeVerdict, useRackSwipe } from '../useRackSwipe';
 
+/** The travel the panel is given to clear the screen: one screen's worth. */
+const SCREEN = RN.Dimensions.get('window').width;
+
 /** Captured pan config and handlers; `mock`-prefixed for jest's factory. */
 const mockPans: {
-  handlers: Record<string, (e?: unknown) => void>;
+  handlers: Record<string, (e?: unknown, success?: boolean) => void>;
   config: Record<string, unknown>;
 }[] = [];
 
@@ -34,10 +40,41 @@ jest.mock('react-native-gesture-handler', () => ({
   },
 }));
 
+/**
+ * Animation callbacks, waiting to be run.
+ *
+ * The transition is three moves and the last two only happen when the first
+ * one lands, so a mock that drops the callback would test a third of it — and
+ * the two it dropped are the two that were wrong. `settle()` is the frame
+ * where the slide finishes.
+ */
+const mockLanding: ((finished: boolean) => void)[] = [];
+
 jest.mock('react-native-reanimated', () => ({
-  useSharedValue: (initial: number) => ({ value: initial }),
+  // Records everything assigned to it. What went wrong before was not where
+  // the panel ended up — that was always 0 — but the route it took to get
+  // there, so the route is what these tests read.
+  useSharedValue: (initial: number) => {
+    const trail: number[] = [];
+    let current = initial;
+    return {
+      get value() {
+        return current;
+      },
+      set value(next: number) {
+        current = next;
+        trail.push(next);
+      },
+      trail,
+    };
+  },
   runOnJS: (fn: unknown) => fn,
-  withTiming: (value: unknown) => value,
+  withDelay: (_ms: number, animation: unknown) => animation,
+  withTiming: (value: unknown, _config?: unknown, landed?: (finished: boolean) => void) => {
+    if (landed) mockLanding.push(landed);
+    return value;
+  },
+  Easing: { in: (fn: unknown) => fn, out: (fn: unknown) => fn, quad: 'quad', cubic: 'cubic' },
 }));
 
 /**
@@ -58,17 +95,29 @@ describe('the swipe that pages the wall', () => {
     over: { enabled?: boolean; canPrev?: boolean; canNext?: boolean } = {},
   ) => {
     mockPans.length = 0;
+    mockLanding.length = 0;
     const { result } = await renderHook(() =>
       useRackSwipe({ enabled: true, canPrev: true, canNext: true, onPage, ...over }),
     );
     const pan = mockPans[0];
+    const offset = result.current.offset as unknown as { value: number; trail: number[] };
+    const end = (dx: number, vx: number, success: boolean) =>
+      pan.handlers.onEnd?.({ translationX: dx, translationY: 0, velocityX: vx }, success);
     return {
       config: pan.config,
-      offset: () => result.current.offset.value,
+      offset: () => offset.value,
+      /** Every position the panel was sent to, in order. */
+      trail: () => offset.trail,
       move: (dx: number) => pan.handlers.onUpdate?.({ translationX: dx, translationY: 0 }),
-      release: (dx: number, vx = 0) =>
-        pan.handlers.onEnd?.({ translationX: dx, translationY: 0, velocityX: vx }),
+      release: (dx: number, vx = 0) => end(dx, vx, true),
+      /** Ended without being let go of — taken over, or cancelled outright. */
+      interrupt: (dx: number, vx = 0) => end(dx, vx, false),
       abandon: () => pan.handlers.onFinalize?.(),
+      /** The slide reaches the edge of the screen. */
+      settle: (finished = true) => {
+        const queued = mockLanding.splice(0);
+        for (const landed of queued) landed(finished);
+      },
     };
   };
 
@@ -121,44 +170,110 @@ describe('the swipe that pages the wall', () => {
   });
 
   describe('on release', () => {
+    /** Push the panel there, let go, and let the slide land. */
+    const page = async (dx: number, vx = 0, over = {}) => {
+      const gesture = await swipe(over);
+      gesture.move(dx);
+      gesture.release(dx, vx);
+      gesture.settle();
+      return gesture;
+    };
+
     it('walks right when the finger dragged the panel far enough left', async () => {
-      (await swipe()).release(-90);
+      await page(-90);
       expect(onPage).toHaveBeenCalledWith(1);
     });
 
     it('walks left on the mirror of that', async () => {
-      (await swipe()).release(90);
+      await page(90);
       expect(onPage).toHaveBeenCalledWith(-1);
     });
 
     it('takes a flick that never travelled the distance', async () => {
-      (await swipe()).release(-20, -1400);
+      await page(-20, -1400);
       expect(onPage).toHaveBeenCalledWith(1);
     });
 
     it('stays put on a nudge', async () => {
-      (await swipe()).release(-30);
+      await page(-30);
       expect(onPage).not.toHaveBeenCalled();
     });
 
     it('refuses to walk off either end of the wall', async () => {
-      (await swipe({ canNext: false })).release(-200, -3000);
-      (await swipe({ canPrev: false })).release(200, 3000);
+      await page(-200, -3000, { canNext: false });
+      await page(200, 3000, { canPrev: false });
+      expect(onPage).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * The half that was missing.
+   *
+   * The panel used to slide *back* to the middle from wherever the finger had
+   * left it, which put the incoming rack on the side the outgoing one had just
+   * been pushed towards: swipe left for the next rack and the wall appeared to
+   * shove you back the way you came. Every assertion the old version had still
+   * passed, because they all read the final position — which was 0 then and is
+   * 0 now. So these read the route.
+   */
+  describe('the way the wall moves between racks', () => {
+    it('carries on the way the finger pushed it, then comes back from the far side', async () => {
+      const gesture = await swipe();
+      gesture.move(-100);
+      gesture.release(-90);
+
+      // Still going left, and far enough that none of it is on the screen —
+      // which is what makes swapping the rack invisible rather than merely
+      // quick.
+      expect(gesture.offset()).toBe(-SCREEN);
+      expect(onPage).not.toHaveBeenCalled();
+
+      gesture.settle();
+      expect(onPage).toHaveBeenCalledWith(1);
+      // Off the right-hand edge, then in to the middle. The sign flip is the
+      // whole fix: the rack you walked towards arrives from the direction you
+      // walked.
+      expect(gesture.trail().slice(-3)).toEqual([-SCREEN, SCREEN, 0]);
+    });
+
+    it('mirrors exactly when the wall is walked the other way', async () => {
+      const gesture = await swipe();
+      gesture.move(100);
+      gesture.release(90);
+      gesture.settle();
+
+      expect(onPage).toHaveBeenCalledWith(-1);
+      expect(gesture.trail().slice(-3)).toEqual([SCREEN, -SCREEN, 0]);
+    });
+
+    it('swaps the rack only once the panel is off the screen', async () => {
+      // The other order is what the fix is *for*: paging first and sliding
+      // afterwards is what drew the new rack coming in from the wrong side.
+      const gesture = await swipe();
+      gesture.release(-90);
+      expect(onPage).not.toHaveBeenCalled();
+      gesture.settle();
+      expect(onPage).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not page when the slide never got there', async () => {
+      // A second swipe took the panel over mid-transition. That gesture owns
+      // where the wall ends up; finishing this one too would page twice off
+      // one flick.
+      const gesture = await swipe();
+      gesture.release(-90);
+      gesture.settle(false);
       expect(onPage).not.toHaveBeenCalled();
     });
 
-    it('brings the panel home whether or not it paged', async () => {
-      // On a commit the rack underneath has changed, so sliding back *is* the
-      // new rack arriving; on a refusal it is the wall saying no.
-      const paged = await swipe();
-      paged.move(-100);
-      paged.release(-90);
-      expect(paged.offset()).toBe(0);
+    it('falls back into place when the swipe did not go far enough', async () => {
+      const gesture = await swipe();
+      gesture.move(-40);
+      gesture.release(-30);
 
-      const refused = await swipe();
-      refused.move(-40);
-      refused.release(-30);
-      expect(refused.offset()).toBe(0);
+      expect(gesture.offset()).toBe(0);
+      // Straight back, with no excursion off the screen on the way.
+      expect(gesture.trail()).not.toContain(-SCREEN);
     });
 
     it('brings it home even when the gesture is cancelled mid-swipe', async () => {
@@ -170,6 +285,36 @@ describe('the swipe that pages the wall', () => {
 
       expect(gesture.offset()).toBe(0);
       expect(onPage).not.toHaveBeenCalled();
+    });
+
+    it('does not undo its own transition when the gesture ends', async () => {
+      // `onFinalize` runs immediately after `onEnd`, and its job is to rescue
+      // a panel left stranded. Without knowing a page is under way it would
+      // rescue this one — cancelling the slide a frame after it started, so
+      // the wall twitched and stayed on the rack you had just left.
+      const gesture = await swipe();
+      gesture.move(-100);
+      gesture.release(-90);
+      gesture.abandon();
+
+      expect(gesture.offset()).toBe(-SCREEN);
+      gesture.settle();
+      expect(onPage).toHaveBeenCalledWith(1);
+      expect(gesture.offset()).toBe(0);
+    });
+
+    it('ignores a gesture that was taken over rather than let go of', async () => {
+      // `onEnd` fires for a cancellation too. The finger never said "next", so
+      // whatever translation it had reached must not be read as if it had.
+      const gesture = await swipe();
+      gesture.move(-100);
+      gesture.interrupt(-200, -3000);
+      gesture.settle();
+
+      expect(onPage).not.toHaveBeenCalled();
+      // And the rescue in onFinalize still runs, because nothing claimed it.
+      gesture.abandon();
+      expect(gesture.offset()).toBe(0);
     });
   });
 });
