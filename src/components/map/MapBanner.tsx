@@ -62,7 +62,11 @@ function DragBar({
   targetSlot,
   viaWall,
   edgeHint,
-}: MapCarryBarProps & { dragged: MapCell }) {
+}: Readonly<
+  Pick<MapCarryBarProps, 'targetName' | 'targetSlot' | 'viaWall' | 'edgeHint'> & {
+    dragged: MapCell;
+  }
+>) {
   return (
     // Untouchable on purpose: it hangs over the shelves mid-drag, and a bar
     // that swallowed the finger would cancel the move it is describing.
@@ -90,7 +94,12 @@ function DragBar({
   );
 }
 
-function HeldBar({ heldLabel, heldHint, onCancelHold, onSelectMore }: MapCarryBarProps) {
+function HeldBar({
+  heldLabel,
+  heldHint,
+  onCancelHold,
+  onSelectMore,
+}: Readonly<Pick<MapCarryBarProps, 'heldLabel' | 'heldHint' | 'onCancelHold' | 'onSelectMore'>>) {
   return (
     <View style={[styles.floating, styles.carry]} accessibilityLiveRegion="polite">
       <Ionicons name="move" size={18} color={colors.amber} />
@@ -132,7 +141,11 @@ function HeldBar({ heldLabel, heldHint, onCancelHold, onSelectMore }: MapCarryBa
  * and saying so is what makes the second tap on a bin read as "also this one"
  * rather than "put it here".
  */
-function PickBar({ pickedCount, onMovePicked, onClearPicked }: MapCarryBarProps) {
+function PickBar({
+  pickedCount,
+  onMovePicked,
+  onClearPicked,
+}: Readonly<Pick<MapCarryBarProps, 'pickedCount' | 'onMovePicked' | 'onClearPicked'>>) {
   return (
     <View
       style={[styles.floating, styles.picking]}

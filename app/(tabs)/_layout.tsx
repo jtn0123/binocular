@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import type { ColorValue } from 'react-native';
 import { Tabs } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +18,28 @@ import { colors } from '@/theme';
  * The bar itself is the design's: 56pt, an icon over a small label, amber for
  * where you are and a dim grey for where you are not.
  */
+/**
+ * The tab icons, declared once at module scope.
+ *
+ * Written inline in `options` they are a fresh component type on every render
+ * of the navigator, which makes React unmount and remount the icon rather than
+ * update it. Naming them costs four lines and stops that.
+ */
+const ICON_SIZE = 21;
+/** Home *is* search — the glass fills in when you are standing on it. */
+function HomeIcon({ color, focused }: Readonly<{ color: ColorValue; focused: boolean }>) {
+  return <Ionicons name={focused ? 'search' : 'search-outline'} size={ICON_SIZE} color={color as string} />;
+}
+function ScanIcon({ color }: Readonly<{ color: ColorValue }>) {
+  return <Ionicons name="camera" size={ICON_SIZE} color={color as string} />;
+}
+function BrowseIcon({ color }: Readonly<{ color: ColorValue }>) {
+  return <Ionicons name="file-tray-stacked" size={ICON_SIZE} color={color as string} />;
+}
+function MapIcon({ color }: Readonly<{ color: ColorValue }>) {
+  return <Ionicons name="map" size={ICON_SIZE} color={color as string} />;
+}
+
 export default function TabsLayout() {
   const db = useDb();
   const insets = useSafeAreaInsets();
@@ -53,17 +76,14 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Home',
-          // Home *is* search — the icon fills in when you are standing on it.
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'search' : 'search-outline'} size={21} color={color} />
-          ),
+          tabBarIcon: HomeIcon,
         }}
       />
       <Tabs.Screen
         name="scan"
         options={{
           title: 'Scan',
-          tabBarIcon: ({ color }) => <Ionicons name="camera" size={21} color={color} />,
+          tabBarIcon: ScanIcon,
           tabBarBadge: pending > 0 ? pending : undefined,
           tabBarBadgeStyle: { backgroundColor: colors.amber, color: colors.amberInkOn },
         }}
@@ -72,9 +92,7 @@ export default function TabsLayout() {
         name="browse"
         options={{
           title: 'Browse',
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="file-tray-stacked" size={21} color={color} />
-          ),
+          tabBarIcon: BrowseIcon,
         }}
       />
       {/*
@@ -88,7 +106,7 @@ export default function TabsLayout() {
         name="map"
         options={{
           title: 'Map',
-          tabBarIcon: ({ color }) => <Ionicons name="map" size={21} color={color} />,
+          tabBarIcon: MapIcon,
         }}
       />
     </Tabs>

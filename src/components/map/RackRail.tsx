@@ -19,6 +19,12 @@ import { colors, mono, sp } from '@/theme';
  * gesture speaks: `onLayout` would only give a position relative to whichever
  * nested view happens to be its parent.
  */
+/** Lit under the finger, armed with a bin in hand, or resting. */
+function chevronColour(hot: boolean, carrying: boolean): string {
+  if (hot) return colors.amberInkOn;
+  return carrying ? colors.amber : colors.textDim;
+}
+
 export function RackRail({
   side,
   code,
@@ -61,12 +67,13 @@ export function RackRail({
 
   const label = more ? `${code}+` : code;
 
-  // Named rather than inlined: what the chevron is doing and what it will do
-  // are two different questions, and reading them as one nested expression
-  // was the thing that made this rail hard to change.
-  const chevronTone = hot ? colors.amberInkOn : carrying ? colors.amber : colors.textDim;
+  // What the chevron is doing and what releasing here would do are two
+  // separate questions, and reading them as one expression is what made this
+  // rail hard to change.
+  const chevronTone = chevronColour(hot, carrying);
+  const further = more ? ' or further along' : '';
   const spokenLabel = carrying
-    ? `Send this bin to rack ${code}${more ? ' or further along' : ''}`
+    ? `Send this bin to rack ${code}${further}`
     : `Go to rack ${code}`;
 
   return (

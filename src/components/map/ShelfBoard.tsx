@@ -148,7 +148,13 @@ export function ShelfBoard(props: Readonly<ShelfBoardProps>) {
             </Pressable>
           ) : null}
 
-          <ShelfControl {...props} shelfKey={key} />
+          <ShelfControl
+            row={row}
+            editing={editing}
+            onWidth={props.onWidth}
+            onEditShelf={props.onEditShelf}
+            shelfKey={key}
+          />
         </View>
       </View>
     </View>
@@ -160,15 +166,22 @@ export function ShelfBoard(props: Readonly<ShelfBoardProps>) {
  * rack is being edited, otherwise the pencil that opens the shelf sheet, and
  * nothing at all on a row that offers neither — the tray, for one.
  */
-function ShelfControl(props: ShelfBoardProps & { shelfKey: string }) {
-  const { row, editing, shelfKey } = props;
-  if (editing && props.onWidth) {
-    return <WidthStepper row={row} onWidth={props.onWidth} keyId={shelfKey} />;
+function ShelfControl({
+  row,
+  editing,
+  onWidth,
+  onEditShelf,
+  shelfKey,
+}: Readonly<
+  Pick<ShelfBoardProps, 'row' | 'editing' | 'onWidth' | 'onEditShelf'> & { shelfKey: string }
+>) {
+  if (editing && onWidth) {
+    return <WidthStepper row={row} onWidth={onWidth} keyId={shelfKey} />;
   }
-  if (!props.onEditShelf) return null;
+  if (!onEditShelf) return null;
   return (
     <Pressable
-      onPress={props.onEditShelf}
+      onPress={onEditShelf}
       hitSlop={12}
       accessibilityRole="button"
       accessibilityLabel={`Edit ${row.name}`}

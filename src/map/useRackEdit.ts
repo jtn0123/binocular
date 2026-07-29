@@ -59,6 +59,13 @@ export interface RackEdit {
   addBin: (shelfId: string) => void;
 }
 
+/** What taking a rack off the wall would do to the bins standing on it. */
+function movedWarning(bins: number): string {
+  if (bins === 0) return 'This rack is empty.';
+  const verb = bins === 1 ? 'moves' : 'move';
+  return `${plural(bins, 'bin')} ${verb} to the unshelved tray. Nothing is thrown away.`;
+}
+
 export function useRackEdit({
   db,
   onChange,
@@ -118,9 +125,7 @@ export function useRackEdit({
       const bins = areaFill(area).filled;
       Alert.alert(
         `Take ${code} off the wall?`,
-        bins > 0
-          ? `${plural(bins, 'bin')} ${bins === 1 ? 'moves' : 'move'} to the unshelved tray. Nothing is thrown away.`
-          : 'This rack is empty.',
+        movedWarning(bins),
         [
           { text: 'Cancel', style: 'cancel' },
           {

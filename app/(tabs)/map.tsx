@@ -112,6 +112,20 @@ import { colors, shelf as shelfTheme, sp, type } from '@/theme';
  */
 export { MapErrorBoundary as ErrorBoundary } from '@/components/map/MapErrorBoundary';
 
+/**
+ * The bins drawn as chosen: the picking set while picking, otherwise a carried
+ * stack — but never a single carried bin, which is already drawn as the one in
+ * hand and would then read as selected twice.
+ */
+function pickHighlighted(
+  picking: boolean,
+  picked: readonly string[],
+  carried: readonly string[],
+): readonly string[] {
+  if (picking) return picked;
+  return carried.length > 1 ? carried : [];
+}
+
 /** Everything in hand, whether that is a picked stack or one lifted bin. */
 function pickCarried(stack: readonly string[], held: string | null): string[] {
   if (stack.length > 0) return [...stack];
@@ -428,12 +442,7 @@ export default function MapScreen() {
   const panelStyle = useAnimatedStyle(() => ({ transform: [{ translateX: swipeOffset.value }] }));
   /** Everything currently being carried, whether that is a stack or one bin. */
   const carriedNow = pickCarried(carried, moves.held);
-  /**
-   * The bins drawn as chosen: the picking set while picking, otherwise a
-   * carried stack — but never a single carried bin, which is already drawn as
-   * the one in hand and would read as selected twice.
-   */
-  const highlighted = picking ? picked : carried.length > 1 ? carried : [];
+  const highlighted = pickHighlighted(picking, picked, carried);
 
   /**
    * Resting on a rail pages the wall under you with the bin still in hand —
