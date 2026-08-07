@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # Every action reference in .github/workflows is pinned to a commit SHA, which
+  # means none of them pick up a patch on their own. This is what closes that
+  # loop: dependabot rewrites the SHA and the trailing version comment together.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -31,6 +31,10 @@ yarn-error.*
 *.pem
 
 # local env files
+# Plain `.env` as well as the `.env*.local` variants: the Expo/RN template ships
+# only the latter, so a plain .env — the file most tooling actually reads — was
+# not covered.
+.env
 .env*.local
 
 # typescript

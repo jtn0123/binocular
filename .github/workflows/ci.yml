@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege, the same default release.yml already sets. Nothing here
+# writes to the repository: the checks read the code, and the Sonar scan
+# reports outward. Without this the job would inherit whatever the repository
+# default is, which on a same-repo push is writable.
+permissions:
+  contents: read
+
 jobs:
   checks:
     runs-on: ubuntu-latest
@@ -26,7 +33,7 @@ jobs:
           # Sonar dates "new code" from the git history; a shallow clone makes
           # every line look new and the new-code gate meaningless.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -38,7 +45,7 @@ jobs:
       # a timed test — and ReviewScreen's first test blew jest's 5s default
       # while taking 323ms locally against a warm cache. Keyed on the lockfile
       # because that is what decides the transform output.
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/jest
           key: jest-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
