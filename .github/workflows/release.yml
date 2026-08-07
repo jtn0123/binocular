@@ -99,7 +99,7 @@ jobs:
 
       # PSR's build_command is `node scripts/ci/set-version.mjs`, which keeps
       # VERSION and app.json in step with the number PSR has just decided.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 
@@ -207,7 +207,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 
@@ -336,7 +336,7 @@ jobs:
           after=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
           echo "Free disk: ${before}G -> ${after}G"
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
