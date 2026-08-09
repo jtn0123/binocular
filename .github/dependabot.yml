@@ -12,3 +12,14 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # These pairs enforce matching peer versions, so bumping one alone can never
+    # pass npm ci. Group them so dependabot updates each pair in one PR.
+    groups:
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+      reanimated:
+        patterns:
+          - "react-native-reanimated"
+          - "react-native-worklets"
