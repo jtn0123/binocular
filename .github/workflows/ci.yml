@@ -24,7 +24,7 @@ jobs:
       HAS_SONAR_TOKEN: ${{ secrets.SONAR_TOKEN != '' }}
     steps:
       # Pinned like the scan action below, and for the same reason. v4:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           # The token is only needed to clone. Left persisted it stays in the
           # local git config for every later step in the job, which is a
