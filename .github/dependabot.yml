@@ -31,3 +31,16 @@ updates:
         patterns:
           - "react-native-reanimated"
           - "react-native-worklets"
+    # Expo SDK 57 pins these, and the newer majors/minors are not supported yet:
+    # TypeScript 7 breaks the lint parser, ESLint 10 breaks an Expo lint plugin,
+    # and reanimated/worklets must match what the SDK ships. Revisit on the next
+    # Expo SDK upgrade.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-native-reanimated"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-native-worklets"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
