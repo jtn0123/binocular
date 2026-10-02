@@ -42,7 +42,7 @@
     "@expo/vector-icons": "^15.0.2",
     "@react-native-community/netinfo": "12.0.1",
     "@react-native-ml-kit/image-labeling": "^2.0.0",
-    "expo": "~57.0.7",
+    "expo": "~57.0.26",
     "expo-asset": "~57.0.6",
     "expo-camera": "~57.0.3",
     "expo-clipboard": "~57.0.1",
