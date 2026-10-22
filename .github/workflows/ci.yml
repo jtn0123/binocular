@@ -72,4 +72,4 @@ jobs:
         # can repoint, and this is the one step the token is handed to — so
         # "whatever v8 means today" would be a standing decision, made by
         # someone else, about code that can read it. v8.2.1:
-        uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9
