@@ -1,0 +1,26 @@
+# Reviewed false positives. Format: <commit>:<file>:<rule-id>:<line>
+# A fingerprint suppresses exactly one finding; anything new still fires.
+#
+# The scheduled Secret Scan walks all history (PR and push scans only see
+# new commits) and failed every week on these. Each was read at its commit
+# on 2026-11-08; none is a credential. bare-credential-assignment keys on
+# a credential-ish NAME followed by an assignment, whatever the value is.
+
+# Test helpers named `pass`: an identity function, (value) returns value.
+a23af5ee7e89691bd251de232aa426e52f40cce0:src/components/map/__tests__/mapChrome.test.tsx:bare-credential-assignment:19
+9c07feaf4ea933e0efcda71bec6643fc6bf4188e:src/map/__tests__/mapDrag.test.tsx:bare-credential-assignment:50
+f6dd098ab07681f5275d65ff681e2d130fb8113b:src/db/__tests__/MapScreen.test.tsx:bare-credential-assignment:27
+
+# The GitHub-token plumbing in settings: GITHUB_TOKEN is the secure-store
+# KEY name the token is saved under (the token itself is typed in on the
+# device and never committed), plus its getter/setter and the settings
+# screen's hasToken/onTokenChange props.
+33714d11b68e795cf4e17dce2ef7e1d6d7134b20:src/settings/settings.ts:bare-credential-assignment:18
+33714d11b68e795cf4e17dce2ef7e1d6d7134b20:src/settings/settings.ts:bare-credential-assignment:45
+33714d11b68e795cf4e17dce2ef7e1d6d7134b20:src/settings/settings.ts:bare-credential-assignment:46
+33714d11b68e795cf4e17dce2ef7e1d6d7134b20:app/settings.tsx:bare-credential-assignment:377
+
+# A workflow `if:` comparing an env flag to 'true', and the vision cost
+# model's CLAUDE_PX_PER_TOKEN constant (750 pixels per token).
+1029233dff583c9a6a314308f1ba8d13f8f7be0e:.github/workflows/ci.yml:bare-credential-assignment:61
+19f7712c7f0a662120668fdf362894602a32ce63:src/vision/cost.ts:bare-credential-assignment:76
